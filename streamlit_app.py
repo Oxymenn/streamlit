@@ -9,7 +9,7 @@ st.sidebar.title("Navigation")
 # Utilisation de boutons au lieu d'une liste déroulante
 if st.sidebar.button("Audit de maillage interne"):
     run_audit_maillage_interne()
-elif st.sidebar.button("Audit Sémantique"):
+elif st.sidebar.button("Audit de Proximité Sémantique des URL"):
     analyze_similarity()
 
 # Ajout du copyright en bas de la sidebar
