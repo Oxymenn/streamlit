@@ -4,4 +4,3 @@ numpy
 sentence-transformers
 openpyxl
 plotly
-scikit
