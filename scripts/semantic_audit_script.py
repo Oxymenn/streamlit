@@ -16,22 +16,18 @@ def load_excel_file(uploaded_file):
         return None, None
 
 def select_sheets_and_columns(xls, sheet_names):
-    selected_sheet1 = st.selectbox("Sélectionner la feuille pour les URLs source", sheet_names)
-    selected_sheet2 = st.selectbox("Sélectionner la feuille pour les URLs destination", sheet_names)
-    selected_sheet3 = st.selectbox("Sélectionner la feuille pour les URLs résultats", sheet_names)
-    selected_sheet4 = st.selectbox("Sélectionner la feuille pour les embeddings", sheet_names)
+    selected_sheet1 = st.selectbox("Sélectionner la feuille pour les URLs source et destination", sheet_names)
+    selected_sheet2 = st.selectbox("Sélectionner la feuille pour les URLs résultats et embeddings", sheet_names)
 
-    df_source = pd.read_excel(xls, sheet_name=selected_sheet1)
-    df_destination = pd.read_excel(xls, sheet_name=selected_sheet2)
-    df_results = pd.read_excel(xls, sheet_name=selected_sheet3)
-    df_embeddings = pd.read_excel(xls, sheet_name=selected_sheet4)
+    df_source_destination = pd.read_excel(xls, sheet_name=selected_sheet1)
+    df_results_embeddings = pd.read_excel(xls, sheet_name=selected_sheet2)
 
-    col_source = st.selectbox("Sélectionner la colonne pour les URLs source", df_source.columns)
-    col_destination = st.selectbox("Sélectionner la colonne pour les URLs destination", df_destination.columns)
-    col_results = st.selectbox("Sélectionner la colonne pour les URLs résultats", df_results.columns)
-    col_embeddings = st.selectbox("Sélectionner la colonne pour les embeddings", df_embeddings.columns)
+    col_source = st.selectbox("Sélectionner la colonne pour les URLs source", df_source_destination.columns)
+    col_destination = st.selectbox("Sélectionner la colonne pour les URLs destination", df_source_destination.columns)
+    col_results = st.selectbox("Sélectionner la colonne pour les URLs résultats", df_results_embeddings.columns)
+    col_embeddings = st.selectbox("Sélectionner la colonne pour les embeddings", df_results_embeddings.columns)
 
-    return df_source[col_source], df_destination[col_destination], df_results[col_results], df_embeddings[col_embeddings]
+    return df_source_destination[col_source], df_source_destination[col_destination], df_results_embeddings[col_results], df_results_embeddings[col_embeddings]
 
 def perform_audit(urls_source, urls_destination, urls_results, embeddings):
     try:
