@@ -10,8 +10,8 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def get_embeddings(text, model="text-embedding-ada-002"):
     response = openai.Embedding.create(
-        input=text,
-        model=model
+        model=model,
+        input=text
     )
     return response['data'][0]['embedding']
 
@@ -31,7 +31,7 @@ def calcul_similarite_urls():
             embeddings = []
             with st.spinner("Génération des embeddings..."):
                 for url in urls:
-                    embedding = get_embeddings(url)
+                    embedding = get_embeddings(url, model="text-embedding-ada-002")
                     embeddings.append(embedding)
             embeddings = np.array(embeddings)
             with st.spinner("Calcul de la similarité cosinus..."):
@@ -49,4 +49,5 @@ def calcul_similarite_urls():
                 mime='text/csv',
             )
 
-# Assurez-vous de l'appeler correctement dans main.py
+if __name__ == "__main__":
+    calcul_similarite_urls()
