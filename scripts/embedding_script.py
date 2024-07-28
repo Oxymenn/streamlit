@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 import re
 import os
 
@@ -100,19 +99,15 @@ def clean_text(text):
     return ' '.join(words)
 
 # Charger le modèle Sentence-BERT
-model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')  # modèle multilingue adapté aux tâches sémantiques
+model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
 
 def generate_embeddings(texts):
     cleaned_texts = [clean_text(text) for text in texts]
     embeddings = model.encode(cleaned_texts)
-    return embeddings
-
-def calculate_cosine_similarity(embeddings):
-    similarity_matrix = cosine_similarity(embeddings)
-    return similarity_matrix
+    return embeddings.tolist()
 
 def app():
-    st.title("Génération des Embeddings et Similarité Cosinus pour un site E-commerce")
+    st.title("Génération des Embeddings pour un site E-commerce")
 
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
     
@@ -120,32 +115,58 @@ def app():
         file_type = uploaded_file.name.split('.')[-1]
         
         if file_type == 'xlsx':
-            df = pd.read_excel(uploaded_file, engine='openpyxl')
+            df = pd.read_excel(uploaded_file, sheet_name=None)
+            sheet_names = list(df.keys())
+            
+            st.write("Aperçu des données :")
+            st.write(df[sheet_names[0]].head())
+            
+            sheet1 = st.selectbox("Choisissez la feuille contenant les données principales", sheet_names)
+            sheet2 = st.selectbox("Choisissez la feuille contenant les données secondaires", sheet_names)
+            
+            df1 = df[sheet1]
+            df2 = df[sheet2]
+            
+            url_column_df1 = st.selectbox("Sélectionnez la colonne des URL de départ", df1.columns)
+            url_column_df2 = st.selectbox("Sélectionnez la colonne des URL de destination", df2.columns)
+            embedding_column = st.selectbox("Sélectionnez la colonne des Embeddings", df1.columns)
+            link_anchor_column = st.selectbox("Sélectionnez la colonne des ancres de lien", df2.columns)
+
+            if st.button("Générer les Embeddings"):
+                with st.spinner("Génération des embeddings en cours..."):
+                    texts = df1[url_column_df1].tolist()
+                    embeddings = generate_embeddings(texts)
+                    
+                    df1[embedding_column] = embeddings
+                    st.write("Embeddings générés avec succès !")
+                    st.write(df1.head())
+
+                st.download_button(label="Télécharger le fichier avec Embeddings",
+                                   data=df1.to_csv(index=False).encode('utf-8'),
+                                   file_name='embeddings_output.csv',
+                                   mime='text/csv')
+        
         elif file_type == 'csv':
             df = pd.read_csv(uploaded_file)
-        
-        st.write("Aperçu des données :")
-        st.write(df.head())
-        
-        url_column = st.selectbox("Sélectionnez la colonne des URL", df.columns)
-        embedding_column = st.selectbox("Sélectionnez la colonne pour les Embeddings", df.columns)
+            st.write("Aperçu des données :")
+            st.write(df.head())
+            
+            url_column = st.selectbox("Sélectionnez la colonne des URL", df.columns)
+            embedding_column = st.selectbox("Sélectionnez la colonne pour les Embeddings", df.columns)
 
-        if st.button("Générer les Embeddings et Calculer la Similarité Cosinus"):
-            with st.spinner("Génération des embeddings et calcul de la similarité cosinus en cours..."):
-                texts = df[url_column].tolist()
-                embeddings = generate_embeddings(texts)
-                
-                df[embedding_column] = embeddings.tolist()
-                similarity_matrix = calculate_cosine_similarity(embeddings)
-                
-                st.write("Embeddings et matrice de similarité cosinus générés avec succès !")
-                st.write("Aperçu de la matrice de similarité cosinus :")
-                st.write(pd.DataFrame(similarity_matrix, columns=df[url_column], index=df[url_column]))
+            if st.button("Générer les Embeddings"):
+                with st.spinner("Génération des embeddings en cours..."):
+                    texts = df[url_column].tolist()
+                    embeddings = generate_embeddings(texts)
+                    
+                    df[embedding_column] = embeddings
+                    st.write("Embeddings générés avec succès !")
+                    st.write(df.head())
 
-            st.download_button(label="Télécharger le fichier avec Embeddings",
-                               data=df.to_csv(index=False).encode('utf-8'),
-                               file_name='embeddings_output.csv',
-                               mime='text/csv')
+                st.download_button(label="Télécharger le fichier avec Embeddings",
+                                   data=df.to_csv(index=False).encode('utf-8'),
+                                   file_name='embeddings_output.csv',
+                                   mime='text/csv')
 
 if __name__ == "__main__":
     app()
