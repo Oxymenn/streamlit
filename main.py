@@ -18,17 +18,17 @@ st.sidebar.title("Scripts de Pirates")
 
 # Sous-titre et choix des scripts de maillage interne
 st.sidebar.subheader("Maillage interne")
-selection_maillage = st.sidebar.radio("Choisissez un script", list(PAGES_MAILLAGE.keys()))
+selection_maillage = st.sidebar.radio("", list(PAGES_MAILLAGE.keys()), key="maillage")
 
 # Sous-titre et choix des scripts d'analyse SERP
 st.sidebar.subheader("Analyse SERP")
-selection_serp = st.sidebar.radio("Choisissez un script", list(PAGES_SERP.keys()), key="serp")
+selection_serp = st.sidebar.radio("", list(PAGES_SERP.keys()), key="serp")
 
 # Affichage du script sélectionné
-if selection_maillage:
+if selection_maillage and not selection_serp:
     page = PAGES_MAILLAGE[selection_maillage]
     page.app()
-elif selection_serp:
+elif selection_serp and not selection_maillage:
     page = PAGES_SERP[selection_serp]
     page.app()
 
