@@ -36,11 +36,13 @@ if uploaded_file is not None:
     main_df = sheets[main_sheet]
     secondary_df = sheets[secondary_sheet]
 
-    columns = list(main_df.columns)
-    start_url_column = st.selectbox("Colonne des URL de départ", columns)
-    destination_url_column = st.selectbox("Colonne des URL de destination", columns)
-    embeddings_column = st.selectbox("Colonne des embeddings", columns)
-    anchor_links_column = st.selectbox("Colonne des ancre de liens", columns)
+    main_columns = list(main_df.columns)
+    secondary_columns = list(secondary_df.columns)
+
+    start_url_column = st.selectbox("Colonne des URL de départ", main_columns)
+    destination_url_column = st.selectbox("Colonne des URL de destination", main_columns)
+    embeddings_column = st.selectbox("Colonne des embeddings", secondary_columns)
+    anchor_links_column = st.selectbox("Colonne des ancre de liens", secondary_columns)
 
     # Nombre minimum de liens pour une URL de destination
     min_links = st.number_input("Nombre minimum de liens pour une URL de destination", min_value=1, value=5)
@@ -66,3 +68,6 @@ if uploaded_file is not None:
     # Graphique 2: Pourcentage de liens à remplacer et/ou à ajouter
     st.write("Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 liens internes minimum)")
     st.line_chart(report['Nombre_de_liens_à_remplacer'] / report['Nombre_de_liens_existants'])
+
+if __name__ == "__main__":
+    app()
