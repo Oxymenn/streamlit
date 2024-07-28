@@ -7,7 +7,7 @@ import openai
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 def generate_embeddings(texts, model="text-embedding-ada-002"):
-    response = openai.Embedding.create(input=texts, model=model)
+    response = openai.Embedding.create(model=model, input=texts)
     embeddings = [item['embedding'] for item in response['data']]
     return embeddings
 
