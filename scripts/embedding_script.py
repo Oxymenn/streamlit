@@ -4,7 +4,7 @@ import numpy as np
 import openai
 
 # Assurez-vous d'ajouter votre clé API OpenAI
-openai.api_key = 'YOUR_OPENAI_API_KEY'
+openai.api_key = 'sk-None-7EgMS9ZdmmwOc0UxHyN6T3BlbkFJOsK0N9Ec8hbJ1E5ealEO'
 
 def generate_embeddings(texts, model="text-embedding-ada-002"):
     response = openai.Embedding.create(input=texts, model=model)
