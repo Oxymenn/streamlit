@@ -6,8 +6,18 @@ from sklearn.metrics.pairwise import cosine_similarity
 def load_excel_file():
     uploaded_file = st.file_uploader("Choisissez un fichier Excel", type="xlsx")
     if uploaded_file is not None:
-        return pd.read_excel(uploaded_file, sheet_name=None)
+        try:
+            return pd.read_excel(uploaded_file, sheet_name=None)
+        except Exception as e:
+            st.error(f"Erreur lors de la lecture du fichier Excel : {e}")
     return None
+
+def safe_convert_embedding(embedding_str):
+    try:
+        return np.fromstring(embedding_str.strip('[]'), sep=',')
+    except:
+        st.warning(f"Impossible de convertir l'embedding : {embedding_str}")
+        return np.array([])
 
 def main():
     st.title("Audit de maillage interne sémantique")
@@ -15,16 +25,14 @@ def main():
     excel_data = load_excel_file()
 
     if excel_data is not None:
-        # Sélection des feuilles
         st.subheader("Choisissez les feuilles contenant les données")
         main_sheet = st.selectbox("Choisissez la feuille contenant les données principales", options=list(excel_data.keys()))
         secondary_sheet = st.selectbox("Choisissez la feuille contenant les données secondaires", options=list(excel_data.keys()))
 
-        # Sélection des colonnes
-        st.subheader("Associez les colonnes")
         main_df = excel_data[main_sheet]
         secondary_df = excel_data[secondary_sheet]
 
+        st.subheader("Associez les colonnes")
         col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
@@ -38,31 +46,35 @@ def main():
         with col5:
             embedding_col = st.selectbox("Colonne des embeddings", options=secondary_df.columns)
 
-        # Nombre minimum de liens
         min_links = st.number_input("Nombre minimum de liens pour une URL de destination", min_value=1, value=5)
 
         if st.button("Valider"):
-            # Créer un dictionnaire d'embeddings
-            embedding_dict = dict(zip(secondary_df[url_col], secondary_df[embedding_col]))
-
-            # Convertir les embeddings en liste de floats
-            embedding_dict = {k: np.fromstring(v.strip('[]'), sep=',') for k, v in embedding_dict.items()}
-
-            # Analyse du maillage interne
-            results = analyze_internal_linking(main_df, embedding_dict, source_url_col, dest_url_col, anchor_col, min_links)
-
-            # Afficher les résultats
-            st.subheader("Résultats de l'audit de maillage interne")
-            st.write(results)
+            try:
+                embedding_dict = dict(zip(secondary_df[url_col], secondary_df[embedding_col]))
+                embedding_dict = {k: safe_convert_embedding(v) for k, v in embedding_dict.items()}
+                
+                results = analyze_internal_linking(main_df, embedding_dict, source_url_col, dest_url_col, anchor_col, min_links)
+                
+                st.subheader("Résultats de l'audit de maillage interne")
+                st.write(results)
+            except Exception as e:
+                st.error(f"Une erreur s'est produite lors de l'analyse : {e}")
 
 def analyze_internal_linking(df, embedding_dict, source_col, dest_col, anchor_col, min_links):
-    # Calculer la similarité cosinus entre toutes les URLs
     urls = list(set(df[source_col].unique()) | set(df[dest_col].unique()))
-    embeddings = np.array([embedding_dict.get(url, np.zeros_like(next(iter(embedding_dict.values())))) for url in urls])
+    
+    # Vérifier si tous les URLs ont des embeddings
+    missing_embeddings = [url for url in urls if url not in embedding_dict]
+    if missing_embeddings:
+        st.warning(f"Embeddings manquants pour les URLs : {', '.join(missing_embeddings)}")
+    
+    # Utiliser un embedding par défaut pour les URLs manquantes
+    default_embedding = np.zeros_like(next(iter(embedding_dict.values())))
+    embeddings = np.array([embedding_dict.get(url, default_embedding) for url in urls])
+    
     similarity_matrix = cosine_similarity(embeddings)
     url_to_index = {url: i for i, url in enumerate(urls)}
 
-    # Analyse du maillage interne
     results = []
     for dest_url in df[dest_col].unique():
         existing_links = df[df[dest_col] == dest_url]
