@@ -7,7 +7,7 @@ PAGES = {
     "Audit Sémantique": semantic_audit_script
 }
 
-st.sidebar.title("Navigation")
+st.sidebar.title("Scripts de Pirates")
 selection = st.sidebar.radio("Maillage interne", list(PAGES.keys()))
 
 page = PAGES[selection]
