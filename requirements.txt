@@ -4,3 +4,7 @@ numpy
 sentence-transformers
 openpyxl
 scikit-learn
+requests
+beautifulsoup4
+tqdm
+unidecode
