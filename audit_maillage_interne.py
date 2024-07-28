@@ -22,8 +22,9 @@ st.markdown("""
 
 1. Uploadez votre fichier Excel contenant les URLs et les embeddings.
 2. Sélectionnez les colonnes correspondant aux URLs et aux embeddings.
-3. Visualisez la matrice de similarité cosinus pour toutes les URLs.
-4. Utilisez le filtre pour sélectionner une URL spécifique et voir les URLs les plus proches sémantiquement.
+3. Cliquez sur "Calculer la similarité" pour générer la matrice de similarité cosinus.
+4. Visualisez la matrice de similarité cosinus pour toutes les URLs.
+5. Utilisez le filtre pour sélectionner une URL spécifique et voir les URLs les plus proches sémantiquement.
 
 La similarité cosinus est utilisée pour mesurer la proximité sémantique entre les embeddings. 
 Une valeur proche de 1 indique une forte similarité, tandis qu'une valeur proche de 0 indique une faible similarité.
@@ -44,10 +45,18 @@ if uploaded_file is not None:
             similarity_matrix = calculate_cosine_similarity(embeddings_array)
             similarity_df = pd.DataFrame(similarity_matrix, columns=df[url_column], index=df[url_column])
         
+        st.session_state['similarity_df'] = similarity_df
+        st.session_state['calculated'] = True
+        
         st.subheader("Matrice de similarité cosinus")
         st.dataframe(similarity_df)
+    
+    if 'calculated' in st.session_state and st.session_state['calculated']:
+        similarity_df = st.session_state['similarity_df']
         
-        selected_url = st.selectbox("Sélectionnez une URL spécifique", df[url_column])
+        # Sélectionner la première URL par défaut
+        default_url = df[url_column].iloc[0]
+        selected_url = st.selectbox("Sélectionnez une URL spécifique", df[url_column], index=0)
         
         if selected_url:
             similarities = similarity_df[selected_url].sort_values(ascending=False)
