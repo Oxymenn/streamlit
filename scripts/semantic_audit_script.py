@@ -26,27 +26,40 @@ def app():
         url_column = st.selectbox("Sélectionnez la colonne des URL", df.columns)
         embedding_column = st.selectbox("Sélectionnez la colonne pour les Embeddings", df.columns)
 
-        if st.button("Calculer la Proximité Sémantique"):
-            with st.spinner("Calcul des similarités cosinus en cours..."):
-                embeddings = np.stack(df[embedding_column].apply(eval).values)
-                similarity_matrix = calculate_cosine_similarity(embeddings)
-                
-                df_similarity = pd.DataFrame(similarity_matrix, index=df[url_column], columns=df[url_column])
-                st.write("Matrice de Similarité Cosinus :")
-                st.write(df_similarity)
+        if 'similarity_matrix' not in st.session_state:
+            if st.button("Calculer la Proximité Sémantique"):
+                with st.spinner("Calcul des similarités cosinus en cours..."):
+                    embeddings = np.stack(df[embedding_column].apply(eval).values)
+                    similarity_matrix = calculate_cosine_similarity(embeddings)
+                    
+                    df_similarity = pd.DataFrame(similarity_matrix, index=df[url_column], columns=df[url_column])
+                    
+                    # Stocker les résultats dans st.session_state
+                    st.session_state['similarity_matrix'] = similarity_matrix
+                    st.session_state['df_similarity'] = df_similarity
+                    st.session_state['df'] = df
+                    st.session_state['url_column'] = url_column
 
-                selected_url = st.selectbox("Sélectionnez une URL pour voir les URL les plus proches", df[url_column])
-                selected_index = df[df[url_column] == selected_url].index[0]
-                similarities = similarity_matrix[selected_index]
+        if 'similarity_matrix' in st.session_state:
+            df_similarity = st.session_state['df_similarity']
+            df = st.session_state['df']
+            url_column = st.session_state['url_column']
+            
+            st.write("Matrice de Similarité Cosinus :")
+            st.write(df_similarity)
 
-                sorted_indices = np.argsort(-similarities)
-                top_n = st.slider("Nombre de résultats à afficher", 1, len(df), 5)
+            selected_url = st.selectbox("Sélectionnez une URL pour voir les URL les plus proches", df[url_column])
+            selected_index = df[df[url_column] == selected_url].index[0]
+            similarities = st.session_state['similarity_matrix'][selected_index]
 
-                st.write(f"Top {top_n} URL proches sémantiquement de {selected_url}:")
-                top_urls = df[url_column].iloc[sorted_indices[:top_n]]
-                top_similarities = similarities[sorted_indices[:top_n]]
-                results = pd.DataFrame({'URL': top_urls, 'Similarité': top_similarities})
-                st.write(results)
+            sorted_indices = np.argsort(-similarities)
+            top_n = st.slider("Nombre de résultats à afficher", 1, len(df), 5)
+
+            st.write(f"Top {top_n} URL proches sémantiquement de {selected_url}:")
+            top_urls = df[url_column].iloc[sorted_indices[:top_n]]
+            top_similarities = similarities[sorted_indices[:top_n]]
+            results = pd.DataFrame({'URL': top_urls, 'Similarité': top_similarities})
+            st.write(results)
 
 if __name__ == "__main__":
     app()
