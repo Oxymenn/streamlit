@@ -2,6 +2,7 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import streamlit as st
+import ast
 
 def load_excel_file(uploaded_file):
     try:
@@ -29,9 +30,17 @@ def select_sheets_and_columns(xls, sheet_names):
 
     return df_source_destination[col_source], df_source_destination[col_destination], df_results_embeddings[col_results], df_results_embeddings[col_embeddings]
 
+def convert_embeddings(embeddings):
+    try:
+        return embeddings.apply(ast.literal_eval)
+    except Exception as e:
+        st.error(f"Erreur lors de la conversion des embeddings : {e}")
+        return embeddings
+
 def perform_audit(urls_source, urls_destination, urls_results, embeddings):
     try:
         # Convertir les embeddings en matrices
+        embeddings = convert_embeddings(embeddings)
         embeddings_matrix = np.array(embeddings.tolist())
 
         # Calculer la similarité cosinus entre les embeddings
