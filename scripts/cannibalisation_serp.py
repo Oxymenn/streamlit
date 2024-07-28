@@ -103,7 +103,7 @@ def process_keywords(df, serp_similarity_threshold=0.4, delay=3):
             serp_similarity = calculate_serp_similarity(google_results.get(kw1, []), google_results.get(kw2, []))
             keyword_similarity = are_keywords_similar(kw1, kw2)
 
-            if serp_similarity > serp_similarity_threshold or keyword_similarity:
+            if serp_similarity > serp_similarity_threshold ou keyword_similarity:
                 group.append(j)
 
         similar_groups.append(group)
@@ -136,33 +136,34 @@ def process_keywords(df, serp_similarity_threshold=0.4, delay=3):
 
     return df
 
-st.title("Analyse de cannibalisation de mots-clés SERP")
+def app():
+    st.title("Analyse de cannibalisation de mots-clés SERP")
 
-uploaded_file = st.file_uploader("Importer un fichier Excel ou CSV", type=["xlsx", "csv"])
-serp_similarity_threshold = st.slider("Taux de similarité SERP", 0.0, 1.0, 0.4)
-delay = st.slider("Délai des requêtes Google (en secondes)", 1, 10, 3)
+    uploaded_file = st.file_uploader("Importer un fichier Excel ou CSV", type=["xlsx", "csv"])
+    serp_similarity_threshold = st.slider("Taux de similarité SERP", 0.0, 1.0, 0.4)
+    delay = st.slider("Délai des requêtes Google (en secondes)", 1, 10, 3)
 
-if uploaded_file is not None:
-    if uploaded_file.name.endswith('.xlsx'):
-        df = pd.read_excel(uploaded_file)
-    elif uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
-    else:
-        st.error("Type de fichier non supporté!")
-        st.stop()
+    if uploaded_file is not None:
+        if uploaded_file.name.endswith('.xlsx'):
+            df = pd.read_excel(uploaded_file)
+        elif uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            st.error("Type de fichier non supporté!")
+            st.stop()
 
-    st.write("Aperçu du fichier importé:")
-    st.dataframe(df.head())
+        st.write("Aperçu du fichier importé:")
+        st.dataframe(df.head())
 
-    if st.button("Exécuter l'analyse"):
-        result_df = process_keywords(df, serp_similarity_threshold, delay)
-        
-        st.write("Résultats de l'analyse:")
-        st.dataframe(result_df)
+        if st.button("Exécuter l'analyse"):
+            result_df = process_keywords(df, serp_similarity_threshold, delay)
+            
+            st.write("Résultats de l'analyse:")
+            st.dataframe(result_df)
 
-        st.download_button(
-            label="Télécharger le fichier de résultats",
-            data=result_df.to_excel(index=False, engine='openpyxl'),
-            file_name="resultat_similarite.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+            st.download_button(
+                label="Télécharger le fichier de résultats",
+                data=result_df.to_excel(index=False, engine='openpyxl'),
+                file_name="resultat_similarite.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
