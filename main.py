@@ -1,7 +1,8 @@
 import streamlit as st
-from calcul_similarite_urls import calcul_similarite_urls
 from audit_maillage_interne import audit_maillage_interne
+from calcul_similarite_urls import calcul_similarite_urls
 
+# Fonction principale de l'application
 def main():
     st.sidebar.title("Navigation")
     app_mode = st.sidebar.radio("Choisissez une application",
@@ -13,6 +14,7 @@ def main():
     elif app_mode == "Calcul de similarité des URLs":
         calcul_similarite_urls()
 
+    # Ajouter un trait et le texte en bas de page
     st.write("---")
     st.write("© 2024 | By PirateSEO")
 
