@@ -1,0 +1,9 @@
+from nltk.corpus import stopwords
+
+# Charger les stopwords français
+stopwords_fr = set(stopwords.words('french'))
+
+# Sauvegarder les stopwords dans un fichier
+with open('stopwords_fr.txt', 'w', encoding='utf-8') as f:
+    for word in stopwords_fr:
+        f.write(f"{word}\n")
