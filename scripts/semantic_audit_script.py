@@ -11,7 +11,7 @@ uploaded_file = st.file_uploader("Charger le fichier Excel", type="xlsx")
 if uploaded_file is not None:
     # Lire le fichier Excel
     xls = pd.ExcelFile(uploaded_file)
-    sheet_names = xls.sheet_names
+    sheet_names = xls.TEST1
 
     # Sélection des feuilles
     selected_sheet1 = st.selectbox("Sélectionner la feuille pour les URLs source", sheet_names)
