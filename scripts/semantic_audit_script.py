@@ -1,89 +1,91 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
+from sklearn.metrics.pairwise import cosine_similarity
 
-# Fonction pour charger le fichier Excel
-def load_excel(file):
-    return pd.read_excel(file, sheet_name=None)
-
-# Fonction pour générer le rapport
-def generate_report(df, start_url_column, destination_url_column, min_links=5):
-    # Exemple de logique pour générer le rapport
-    report = df.groupby(destination_url_column).agg(
-        Nombre_de_liens_existants=(start_url_column, 'count'),
-        Nombre_de_liens_à_conserver=(start_url_column, lambda x: len(x)),
-        Nombre_de_liens_à_retirer=(start_url_column, lambda x: 0),
-        Nombre_de_liens_à_remplacer=(start_url_column, lambda x: max(0, min_links - len(x)))
-    ).reset_index()
-    return report
-
-# Interface utilisateur
-def app():
-    st.title("Audit Sémantique")
-
-    # Téléchargement du fichier Excel
+def load_excel_file():
     uploaded_file = st.file_uploader("Choisissez un fichier Excel", type="xlsx")
-
     if uploaded_file is not None:
-        # Chargement du fichier Excel
-        sheets = load_excel(uploaded_file)
+        return pd.read_excel(uploaded_file, sheet_name=None)
+    return None
 
+def main():
+    st.title("Audit de maillage interne sémantique")
+
+    excel_data = load_excel_file()
+
+    if excel_data is not None:
         # Sélection des feuilles
-        sheet_names = list(sheets.keys())
-        main_sheet = st.selectbox("Choisissez la feuille contenant les données principales", sheet_names)
-        secondary_sheet = st.selectbox("Choisissez la feuille contenant les données secondaires", sheet_names)
+        st.subheader("Choisissez les feuilles contenant les données")
+        main_sheet = st.selectbox("Choisissez la feuille contenant les données principales", options=list(excel_data.keys()))
+        secondary_sheet = st.selectbox("Choisissez la feuille contenant les données secondaires", options=list(excel_data.keys()))
 
         # Sélection des colonnes
-        main_df = sheets[main_sheet]
-        secondary_df = sheets[secondary_sheet]
+        st.subheader("Associez les colonnes")
+        main_df = excel_data[main_sheet]
+        secondary_df = excel_data[secondary_sheet]
 
-        all_columns = list(main_df.columns) + list(secondary_df.columns)
-        start_url_column = st.selectbox("Colonne des URL de départ", all_columns)
-        destination_url_column = st.selectbox("Colonne des URL de destination", all_columns)
-        embeddings_column = st.selectbox("Colonne des embeddings", all_columns)
-        anchor_links_column = st.selectbox("Colonne des ancre de liens", all_columns)
+        col1, col2, col3, col4, col5 = st.columns(5)
 
-        # Nombre minimum de liens pour une URL de destination
+        with col1:
+            source_url_col = st.selectbox("Colonne des URL de départ", options=main_df.columns)
+        with col2:
+            dest_url_col = st.selectbox("Colonne des URL de destination", options=main_df.columns)
+        with col3:
+            anchor_col = st.selectbox("Colonne des ancres de liens", options=main_df.columns)
+        with col4:
+            url_col = st.selectbox("Colonne des URL", options=secondary_df.columns)
+        with col5:
+            embedding_col = st.selectbox("Colonne des embeddings", options=secondary_df.columns)
+
+        # Nombre minimum de liens
         min_links = st.number_input("Nombre minimum de liens pour une URL de destination", min_value=1, value=5)
 
-        # Génération du rapport
-        report = generate_report(main_df, start_url_column, destination_url_column, min_links)
+        if st.button("Valider"):
+            # Créer un dictionnaire d'embeddings
+            embedding_dict = dict(zip(secondary_df[url_col], secondary_df[embedding_col]))
 
-        # Affichage du rapport
-        st.write("### Rapport 1")
-        st.write(report)
+            # Convertir les embeddings en liste de floats
+            embedding_dict = {k: np.fromstring(v.strip('[]'), sep=',') for k, v in embedding_dict.items()}
 
-        # Filtrage pour les graphiques
-        start_urls = st.multiselect("Sélectionnez des URLs de départ", main_df[start_url_column].unique())
-        destination_urls = st.multiselect("Sélectionnez des URLs de destination", main_df[destination_url_column].unique())
+            # Analyse du maillage interne
+            results = analyze_internal_linking(main_df, embedding_dict, source_url_col, dest_url_col, anchor_col, min_links)
 
-        # Génération des graphiques
-        st.write("### Rapport 2")
+            # Afficher les résultats
+            st.subheader("Résultats de l'audit de maillage interne")
+            st.write(results)
 
-        # Graphique 1: Score moyen de maillage interne
-        st.write("Score moyen de maillage interne (sur une base de 5 liens internes minimum)")
-        fig1 = px.bar(
-            report,
-            x=destination_url_column,
-            y='Nombre_de_liens_à_conserver',
-            labels={'Nombre_de_liens_à_conserver': 'Score moyen de maillage interne'},
-            title='Score moyen de maillage interne',
-            color_discrete_sequence=['blue']
-        )
-        fig1.update_yaxes(range=[0, 100])
-        st.plotly_chart(fig1)
+def analyze_internal_linking(df, embedding_dict, source_col, dest_col, anchor_col, min_links):
+    # Calculer la similarité cosinus entre toutes les URLs
+    urls = list(set(df[source_col].unique()) | set(df[dest_col].unique()))
+    embeddings = np.array([embedding_dict.get(url, np.zeros_like(next(iter(embedding_dict.values())))) for url in urls])
+    similarity_matrix = cosine_similarity(embeddings)
+    url_to_index = {url: i for i, url in enumerate(urls)}
 
-        # Graphique 2: Pourcentage de liens à remplacer et/ou à ajouter
-        st.write("Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 liens internes minimum)")
-        report['Pourcentage_de_liens_à_remplacer'] = (report['Nombre_de_liens_à_remplacer'] / report['Nombre_de_liens_existants']) * 100
-        fig2 = px.bar(
-            report,
-            x=destination_url_column,
-            y='Pourcentage_de_liens_à_remplacer',
-            labels={'Pourcentage_de_liens_à_remplacer': 'Pourcentage de liens à remplacer et/ou à ajouter'},
-            title='Pourcentage de liens à remplacer et/ou à ajouter',
-            color_discrete_sequence=['red']
-        )
-        fig2.update_yaxes(range=[0, 100])
-        st.plotly_chart(fig2)
+    # Analyse du maillage interne
+    results = []
+    for dest_url in df[dest_col].unique():
+        existing_links = df[df[dest_col] == dest_url]
+        num_links = len(existing_links)
+        
+        dest_index = url_to_index[dest_url]
+        semantic_scores = similarity_matrix[dest_index]
+        
+        top_similar_urls = [urls[i] for i in semantic_scores.argsort()[::-1] if urls[i] != dest_url][:min_links]
+        
+        existing_source_urls = set(existing_links[source_col])
+        links_to_add = [url for url in top_similar_urls if url not in existing_source_urls]
+        links_to_remove = [url for url in existing_source_urls if url not in top_similar_urls]
+
+        results.append({
+            "URL de destination": dest_url,
+            "Nombre de liens existants": num_links,
+            "Liens à ajouter": links_to_add,
+            "Liens à supprimer": links_to_remove,
+            "Score de maillage interne": (len(set(existing_source_urls) & set(top_similar_urls)) / min_links) * 100
+        })
+
+    return pd.DataFrame(results)
+
+if __name__ == "__main__":
+    main()
