@@ -5,3 +5,5 @@ sentence-transformers
 openpyxl
 plotly
 scikit-learn
+matplotlib
+ast
