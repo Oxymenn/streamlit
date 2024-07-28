@@ -71,12 +71,12 @@ def are_keywords_similar(kw1, kw2):
 
     return jaccard_similarity > 0.8
 
-def process_keywords(df, serp_similarity_threshold=0.4, delay=3):
+def process_keywords(df, keyword_column, volume_column, serp_similarity_threshold=0.4, delay=3):
     start_time = time.time()
     st.write("\n🕒 Début du traitement...")
 
-    keywords = df['Mots-clés'].tolist()
-    volumes = df['Volumes'].tolist()
+    keywords = df[keyword_column].tolist()
+    volumes = df[volume_column].tolist()
 
     st.write("\n📊 Récupération des résultats Google...")
     google_results = {}
@@ -115,17 +115,17 @@ def process_keywords(df, serp_similarity_threshold=0.4, delay=3):
         max_volume_index = max(group, key=lambda x: volumes[x])
         unique_keywords[keywords[max_volume_index]] = volumes[max_volume_index]
 
-    df['Mots clés uniques'] = ''
-    df['Volume'] = ''
+    df['mots-clés uniques'] = ''
+    df['volumes'] = ''
 
     for kw, vol in unique_keywords.items():
-        mask = df['Mots-clés'] == kw
-        df.loc[mask, 'Mots clés uniques'] = kw
-        df.loc[mask, 'Volume'] = vol
+        mask = df[keyword_column] == kw
+        df.loc[mask, 'mots-clés uniques'] = kw
+        df.loc[mask, 'volumes'] = vol
 
-    df['Volume_sort'] = pd.to_numeric(df['Volume'].fillna(0), errors='coerce').fillna(0).astype(int)
-    df = df.sort_values('Volume_sort', ascending=False)
-    df = df.drop('Volume_sort', axis=1)
+    df['volumes_sort'] = pd.to_numeric(df['volumes'].fillna(0), errors='coerce').fillna(0).astype(int)
+    df = df.sort_values('volumes_sort', ascending=False)
+    df = df.drop('volumes_sort', axis=1)
 
     end_time = time.time()
     total_time = end_time - start_time
@@ -152,18 +152,21 @@ def app():
             st.error("Type de fichier non supporté!")
             st.stop()
 
+        keyword_column = st.selectbox("Sélectionner la colonne des mots-clés", df.columns)
+        volume_column = st.selectbox("Sélectionner la colonne des volumes", df.columns)
+
         st.write("Aperçu du fichier importé:")
         st.dataframe(df.head())
 
         if st.button("Exécuter l'analyse"):
-            result_df = process_keywords(df, serp_similarity_threshold, delay)
+            result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, delay)
             
             st.write("Résultats de l'analyse:")
             st.dataframe(result_df)
 
             st.download_button(
                 label="Télécharger le fichier de résultats",
-                data=result_df.to_excel(index=False, engine='openpyxl'),
-                file_name="resultat_similarite.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                data=result_df.to_csv(index=False).encode('utf-8'),
+                file_name="resultat_similarite.csv",
+                mime="text/csv"
             )
