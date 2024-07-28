@@ -93,12 +93,10 @@ def app():
         st.write("Aperçu des données secondaires :")
         st.write(df_secondary.head())
         
-        columns = df_primary.columns.tolist() + df_secondary.columns.tolist()
-        
-        url_column_primary = st.selectbox("Colonne des URL de départ", columns)
-        url_column_secondary = st.selectbox("Colonne des URL de destination", columns)
-        embedding_column = st.selectbox("Colonne des embeddings", columns)
-        anchor_column = st.selectbox("Colonne des ancres de liens", columns)
+        url_column_primary = st.selectbox("Colonne des URL de départ", df_primary.columns)
+        url_column_secondary = st.selectbox("Colonne des URL de destination", df_secondary.columns)
+        embedding_column = st.selectbox("Colonne des embeddings", df_secondary.columns)
+        anchor_column = st.selectbox("Colonne des ancres de liens", df_secondary.columns)
 
         min_links = st.number_input("Nombre minimum de liens pour une URL de destination (nécessaire pour le calcul des métriques de maillage interne)", min_value=1, value=5)
 
@@ -153,7 +151,6 @@ def app():
             st.write(df_report)
 
             st.write("Rapport 2 : Graphiques de scores et pourcentages")
-            
             col1, col2 = st.columns(2)
             with col1:
                 url_depart = st.selectbox("Sélectionnez des URL de départ", ["Sélectionnez une URL"] + df_primary[url_column_primary].tolist())
