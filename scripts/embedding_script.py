@@ -99,7 +99,7 @@ def clean_text(text):
     return ' '.join(words)
 
 # Charger le modèle Sentence-BERT
-model = SentenceTransformer('sentence-transformers/LaBSE')  # modèle multilingue adapté aux tâches sémantiques
+model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')  # modèle multilingue adapté aux tâches sémantiques
 
 def generate_embeddings(texts):
     cleaned_texts = [clean_text(text) for text in texts]
