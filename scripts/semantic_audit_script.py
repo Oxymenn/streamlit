@@ -105,10 +105,13 @@ def app():
         if 'similarity_matrix' not in st.session_state:
             if st.button("Calculer la Proximité Sémantique"):
                 with st.spinner("Calcul des similarités cosinus en cours..."):
-                    embeddings = np.stack(df_secondary[embedding_column].apply(eval).values)
+                    embeddings = np.stack(df_secondary[embedding_column].apply(eval).values) if embedding_column in df_secondary.columns else np.stack(df_primary[embedding_column].apply(eval).values)
+                    
                     similarity_matrix = calculate_cosine_similarity(embeddings)
                     
-                    df_similarity = pd.DataFrame(similarity_matrix, index=df_secondary[url_column_secondary], columns=df_secondary[url_column_secondary])
+                    url_secondary_data = df_secondary[url_column_secondary] if url_column_secondary in df_secondary.columns else df_primary[url_column_secondary]
+                    
+                    df_similarity = pd.DataFrame(similarity_matrix, index=url_secondary_data, columns=url_secondary_data)
                     
                     st.session_state['similarity_matrix'] = similarity_matrix
                     st.session_state['df_similarity'] = df_similarity
@@ -143,12 +146,19 @@ def app():
 
             # Afficher les rapports
             st.write("Rapport 1 : Métriques de maillage interne")
+            st.write("Veuillez sélectionner les colonnes pour chaque métrique :")
+            col_url = st.selectbox("Colonne des URL de destination", all_columns, index=0)
+            col_existing_links = st.selectbox("Colonne du nombre de liens existants", all_columns, index=0)
+            col_links_to_keep = st.selectbox("Colonne du nombre de liens à conserver", all_columns, index=0)
+            col_links_to_remove = st.selectbox("Colonne du nombre de liens à retirer", all_columns, index=0)
+            col_links_to_replace = st.selectbox("Colonne du nombre de liens à remplacer", all_columns, index=0)
+
             df_report = pd.DataFrame({
-                'URL de destination': df_secondary[url_column_secondary],
-                'Nombre de liens existants': np.random.randint(1, 100, len(df_secondary)),
-                'Nombre de liens à conserver': np.random.randint(1, 50, len(df_secondary)),
-                'Nombre de liens à retirer': np.random.randint(0, 10, len(df_secondary)),
-                'Nombre de liens à remplacer': np.random.randint(0, 10, len(df_secondary))
+                'URL de destination': df_secondary[col_url] if col_url in df_secondary.columns else df_primary[col_url],
+                'Nombre de liens existants': df_secondary[col_existing_links] if col_existing_links in df_secondary.columns else df_primary[col_existing_links],
+                'Nombre de liens à conserver': df_secondary[col_links_to_keep] if col_links_to_keep in df_secondary.columns else df_primary[col_links_to_keep],
+                'Nombre de liens à retirer': df_secondary[col_links_to_remove] if col_links_to_remove in df_secondary.columns else df_primary[col_links_to_remove],
+                'Nombre de liens à remplacer': df_secondary[col_links_to_replace] if col_links_to_replace in df_secondary.columns else df_primary[col_links_to_replace]
             })
             st.write(df_report)
 
