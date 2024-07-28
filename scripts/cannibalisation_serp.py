@@ -9,6 +9,7 @@ import re
 import time
 import random
 from tqdm import tqdm
+import streamlit.components.v1 as components
 
 STOPWORDS = set(['de', 'à', 'pour', 'du', 'le', 'la', 'les', 'un', 'une', 'des', 'en', 'et'])
 
@@ -17,7 +18,7 @@ def preprocess_keyword(keyword):
     keyword = re.sub(r'[^\w\s]', '', keyword)
     return ' '.join([word for word in keyword.split() if word not in STOPWORDS])
 
-def get_google_results(keyword, num_results=10, delay=3):
+def get_google_results(keyword, num_results=10, delay_min=3, delay_max=5):
     url = f"https://www.google.fr/search?q={keyword}&num={num_results}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -40,7 +41,7 @@ def get_google_results(keyword, num_results=10, delay=3):
                 break
 
         # Augmentation du délai entre les requêtes
-        time.sleep(random.uniform(delay - 1, delay + 1))
+        time.sleep(random.uniform(delay_min, delay_max))
 
         return results[:num_results]
 
@@ -71,21 +72,32 @@ def are_keywords_similar(kw1, kw2):
 
     return jaccard_similarity > 0.8
 
-def process_keywords(df, keyword_column, volume_column, serp_similarity_threshold=0.4, delay=3):
+def process_keywords(df, keyword_column, volume_column, serp_similarity_threshold=0.4, delay_min=3, delay_max=5):
     start_time = time.time()
     st.write("\n🕒 Début du traitement...")
 
     keywords = df[keyword_column].tolist()
     volumes = df[volume_column].tolist()
+    total_keywords = len(keywords)
+    
+    placeholder = st.empty()
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
 
     st.write("\n📊 Récupération des résultats Google...")
     google_results = {}
-    for kw in tqdm(keywords, desc="Traitement des mots-clés"):
-        results = get_google_results(kw, delay=delay)
+    for i, kw in enumerate(tqdm(keywords, desc="Traitement des mots-clés")):
+        results = get_google_results(kw, delay_min=delay_min, delay_max=delay_max)
         if results:
             google_results[kw] = results
         else:
             st.write(f"Skipping keyword '{kw}' due to no results")
+
+        elapsed_time = time.time() - start_time
+        estimated_time_remaining = (elapsed_time / (i + 1)) * (total_keywords - (i + 1))
+        
+        progress_bar.progress((i + 1) / total_keywords)
+        progress_text.text(f"Requêtes restantes: {total_keywords - (i + 1)}, Temps estimé restant: {int(estimated_time_remaining // 60)}m {int(estimated_time_remaining % 60)}s")
 
     st.write("\n🔍 Analyse de similarité...")
     similar_groups = []
@@ -140,8 +152,15 @@ def app():
     st.title("Analyse de cannibalisation de mots-clés SERP")
 
     uploaded_file = st.file_uploader("Importer un fichier Excel ou CSV", type=["xlsx", "csv"])
-    serp_similarity_threshold = st.slider("Taux de similarité SERP", 0.0, 1.0, 0.4)
-    delay = st.slider("Délai des requêtes Google (en secondes)", 1, 10, 3)
+    serp_similarity_threshold = st.select_slider(
+        "Taux de similarité SERP", 
+        options=[i/100 for i in range(10, 101, 10)],
+        format_func=lambda x: f"{int(x*100)}%"
+    )
+    delay_range = st.slider(
+        "Plage de délai des requêtes Google (en secondes)", 
+        1, 30, (3, 5)
+    )
 
     if uploaded_file is not None:
         if uploaded_file.name.endswith('.xlsx'):
@@ -159,7 +178,7 @@ def app():
         st.dataframe(df.head())
 
         if st.button("Exécuter l'analyse"):
-            result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, delay)
+            result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, delay_range[0], delay_range[1])
             
             st.write("Résultats de l'analyse:")
             st.dataframe(result_df)
