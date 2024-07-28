@@ -1,12 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import openai
+from sentence_transformers import SentenceTransformer
 import re
 import os
-
-# Récupérer la clé API OpenAI depuis les secrets Streamlit
-openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # Charger les stopwords français depuis le fichier local
 stopwords_path = os.path.join(os.path.dirname(__file__), '../stopwords_fr.txt')
@@ -22,18 +19,13 @@ def clean_text(text):
     words = [word for word in words if word not in stopwords_fr]
     return ' '.join(words)
 
-def get_embedding(text, model="text-embedding-3-small"):
-    response = openai.Embedding.create(input=text, model=model)
-    embedding = response['data'][0]['embedding']
-    return embedding
+# Charger le modèle Sentence-BERT
+model = SentenceTransformer('sentence-transformers/LaBSE')  # modèle multilingue adapté aux tâches sémantiques
 
 def generate_embeddings(texts):
     cleaned_texts = [clean_text(text) for text in texts]
-    embeddings = []
-    for text in cleaned_texts:
-        embedding = get_embedding(text)
-        embeddings.append(embedding)
-    return embeddings
+    embeddings = model.encode(cleaned_texts)
+    return embeddings.tolist()
 
 def app():
     st.title("Génération des Embeddings pour un site E-commerce")
