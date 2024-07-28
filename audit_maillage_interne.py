@@ -16,9 +16,30 @@ def convert_embeddings(embedding_str):
 
 def run_audit_maillage_interne():
     st.title("Audit de maillage interne")
-    # Ajoutez ici le code pour l'audit de maillage interne
     st.write("Fonctionnalité d'audit de maillage interne en cours de développement.")
-    # Vous pouvez ajouter ici le code existant pour cette fonctionnalité 
+    
+    uploaded_file = st.file_uploader("Choisissez votre fichier CSV ou Excel", type=["csv", "xlsx"])
+    
+    if uploaded_file is not None:
+        try:
+            # Lecture du fichier
+            if uploaded_file.name.endswith('.csv'):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            
+            # Affichage des données
+            st.subheader("Aperçu des données importées")
+            st.dataframe(df.head())
+            
+            st.success(f"Fichier importé avec succès. {len(df)} lignes chargées.")
+            
+            # Ici, vous pouvez ajouter d'autres traitements sur les données importées
+            
+        except Exception as e:
+            st.error(f"Une erreur s'est produite lors de l'importation du fichier : {str(e)}")
+    else:
+        st.info("Veuillez uploader un fichier CSV ou Excel pour commencer l'analyse.")
 
 def run_audit_semantique():
     st.title("Audit Sémantique via Word Embedding")
