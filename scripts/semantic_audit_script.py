@@ -10,10 +10,16 @@ def calculate_cosine_similarity(embeddings):
 def app():
     st.title("Audit Sémantique des URL")
 
-    uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xlsx"])
+    uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
     
     if uploaded_file:
-        df = pd.read_excel(uploaded_file, engine='openpyxl')
+        file_type = uploaded_file.name.split('.')[-1]
+        
+        if file_type == 'xlsx':
+            df = pd.read_excel(uploaded_file, engine='openpyxl')
+        elif file_type == 'csv':
+            df = pd.read_csv(uploaded_file)
+        
         st.write("Aperçu des données :")
         st.write(df.head())
         
