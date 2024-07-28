@@ -99,7 +99,7 @@ def clean_text(text):
     return ' '.join(words)
 
 # Charger le modèle Sentence-BERT
-model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+model = SentenceTransformer('sentence-transformers/LaBSE')  # modèle multilingue adapté aux tâches sémantiques
 
 def generate_embeddings(texts):
     cleaned_texts = [clean_text(text) for text in texts]
@@ -115,58 +115,43 @@ def app():
         file_type = uploaded_file.name.split('.')[-1]
         
         if file_type == 'xlsx':
-            df = pd.read_excel(uploaded_file, sheet_name=None)
-            sheet_names = list(df.keys())
+            sheets = pd.ExcelFile(uploaded_file).sheet_names
+            main_sheet = st.selectbox("Choisissez la feuille contenant les données principales", sheets)
+            secondary_sheet = st.selectbox("Choisissez la feuille contenant les données secondaires", sheets)
             
-            st.write("Aperçu des données :")
-            st.write(df[sheet_names[0]].head())
-            
-            sheet1 = st.selectbox("Choisissez la feuille contenant les données principales", sheet_names)
-            sheet2 = st.selectbox("Choisissez la feuille contenant les données secondaires", sheet_names)
-            
-            df1 = df[sheet1]
-            df2 = df[sheet2]
-            
-            url_column_df1 = st.selectbox("Sélectionnez la colonne des URL de départ", df1.columns)
-            url_column_df2 = st.selectbox("Sélectionnez la colonne des URL de destination", df2.columns)
-            embedding_column = st.selectbox("Sélectionnez la colonne des Embeddings", df1.columns)
-            link_anchor_column = st.selectbox("Sélectionnez la colonne des ancres de lien", df2.columns)
-
-            if st.button("Générer les Embeddings"):
-                with st.spinner("Génération des embeddings en cours..."):
-                    texts = df1[url_column_df1].tolist()
-                    embeddings = generate_embeddings(texts)
-                    
-                    df1[embedding_column] = embeddings
-                    st.write("Embeddings générés avec succès !")
-                    st.write(df1.head())
-
-                st.download_button(label="Télécharger le fichier avec Embeddings",
-                                   data=df1.to_csv(index=False).encode('utf-8'),
-                                   file_name='embeddings_output.csv',
-                                   mime='text/csv')
+            df_main = pd.read_excel(uploaded_file, sheet_name=main_sheet, engine='openpyxl')
+            df_secondary = pd.read_excel(uploaded_file, sheet_name=secondary_sheet, engine='openpyxl')
         
         elif file_type == 'csv':
-            df = pd.read_csv(uploaded_file)
-            st.write("Aperçu des données :")
-            st.write(df.head())
-            
-            url_column = st.selectbox("Sélectionnez la colonne des URL", df.columns)
-            embedding_column = st.selectbox("Sélectionnez la colonne pour les Embeddings", df.columns)
+            df_main = pd.read_csv(uploaded_file)
+            df_secondary = pd.read_csv(uploaded_file)
+        
+        st.write("Données principales chargées avec succès :")
+        st.write(df_main.head())
+        
+        st.write("Données secondaires chargées avec succès :")
+        st.write(df_secondary.head())
+        
+        url_column_main = st.selectbox("Sélectionnez la colonne des URL de départ", df_main.columns)
+        url_column_secondary = st.selectbox("Sélectionnez la colonne des URL de destination", df_secondary.columns)
+        embedding_column = st.selectbox("Sélectionnez la colonne pour les Embeddings", df_secondary.columns)
+        anchor_column = st.selectbox("Sélectionnez la colonne des ancres de liens", df_secondary.columns)
 
-            if st.button("Générer les Embeddings"):
-                with st.spinner("Génération des embeddings en cours..."):
-                    texts = df[url_column].tolist()
-                    embeddings = generate_embeddings(texts)
-                    
-                    df[embedding_column] = embeddings
-                    st.write("Embeddings générés avec succès !")
-                    st.write(df.head())
+        min_links = st.number_input("Nombre minimum de liens pour une URL de destination", min_value=1, value=5)
 
-                st.download_button(label="Télécharger le fichier avec Embeddings",
-                                   data=df.to_csv(index=False).encode('utf-8'),
-                                   file_name='embeddings_output.csv',
-                                   mime='text/csv')
+        if st.button("Générer les Embeddings"):
+            with st.spinner("Génération des embeddings en cours..."):
+                texts = df_main[url_column_main].tolist()
+                embeddings = generate_embeddings(texts)
+                
+                df_secondary[embedding_column] = embeddings
+                st.write("Embeddings générés avec succès !")
+                st.write(df_secondary.head())
+
+            st.download_button(label="Télécharger le fichier avec Embeddings",
+                               data=df_secondary.to_csv(index=False).encode('utf-8'),
+                               file_name='embeddings_output.csv',
+                               mime='text/csv')
 
 if __name__ == "__main__":
     app()
