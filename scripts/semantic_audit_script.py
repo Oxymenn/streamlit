@@ -30,6 +30,10 @@ def select_sheets_and_columns(xls, sheet_names):
 
     return df_source_destination[col_source], df_source_destination[col_destination], df_results_embeddings[col_results], df_results_embeddings[col_embeddings]
 
+def align_dataframes(df1, df2, df3, df4):
+    min_length = min(len(df1), len(df2), len(df3), len(df4))
+    return df1[:min_length], df2[:min_length], df3[:min_length], df4[:min_length]
+
 def convert_embeddings(embeddings):
     try:
         return embeddings.apply(ast.literal_eval)
@@ -39,6 +43,9 @@ def convert_embeddings(embeddings):
 
 def perform_audit(urls_source, urls_destination, urls_results, embeddings):
     try:
+        # Aligner les DataFrames pour qu'ils aient le même nombre de lignes
+        urls_source, urls_destination, urls_results, embeddings = align_dataframes(urls_source, urls_destination, urls_results, embeddings)
+
         # Convertir les embeddings en matrices
         embeddings = convert_embeddings(embeddings)
         embeddings_matrix = np.array(embeddings.tolist())
