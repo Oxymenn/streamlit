@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import re
+import os
 
 # Liste des stopwords français
 stopwords_fr = [
@@ -98,7 +99,7 @@ def clean_text(text):
     return ' '.join(words)
 
 # Charger le modèle Sentence-BERT
-model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+model = SentenceTransformer('sentence-transformers/LaBSE')  # modèle multilingue adapté aux tâches sémantiques
 
 def generate_embeddings(texts):
     cleaned_texts = [clean_text(text) for text in texts]
@@ -106,99 +107,37 @@ def generate_embeddings(texts):
     return embeddings.tolist()
 
 def app():
-    st.title("Audit de Maillage Interne")
+    st.title("Génération des Embeddings pour un site E-commerce")
 
-    uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xlsx"])
+    uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
     
     if uploaded_file:
-        df = pd.read_excel(uploaded_file, sheet_name=None, engine='openpyxl')
-        sheet_names = list(df.keys())
+        file_type = uploaded_file.name.split('.')[-1]
         
-        st.write("Aperçu des feuilles :")
-        st.write(sheet_names)
+        if file_type == 'xlsx':
+            df = pd.read_excel(uploaded_file, engine='openpyxl')
+        elif file_type == 'csv':
+            df = pd.read_csv(uploaded_file)
         
-        main_sheet = st.selectbox("Choisissez la feuille contenant les données principales", sheet_names)
-        secondary_sheet = st.selectbox("Choisissez la feuille contenant les données secondaires", sheet_names)
+        st.write("Aperçu des données :")
+        st.write(df.head())
         
-        if main_sheet and secondary_sheet:
-            main_df = df[main_sheet]
-            secondary_df = df[secondary_sheet]
-            
-            st.write("Aperçu des données principales :")
-            st.write(main_df.head())
-            
-            st.write("Aperçu des données secondaires :")
-            st.write(secondary_df.head())
-            
-            url_column_main = st.selectbox("Colonne des URL de départ", main_df.columns)
-            url_column_secondary = st.selectbox("Colonne des URL de destination", secondary_df.columns)
-            embedding_column = st.selectbox("Colonne des embeddings", secondary_df.columns)
-            anchor_column = st.selectbox("Colonne des ancres de liens", secondary_df.columns)
-            min_links = st.number_input("Nombre minimum de liens pour une URL de destination (nécessaire pour le calcul des métriques de maillage interne)", min_value=1, value=5)
-            
-            if st.button("Générer les Embeddings et Rapports"):
-                with st.spinner("Génération des embeddings en cours..."):
-                    texts = main_df[url_column_main].tolist()
-                    embeddings = generate_embeddings(texts)
-                    
-                    secondary_df[embedding_column] = embeddings
-                    
-                    # Calcul des métriques de maillage interne
-                    metrics = calculate_internal_link_metrics(main_df, secondary_df, url_column_main, url_column_secondary, min_links)
-                    
-                    st.write("Métriques de maillage interne pour chaque URL de destination :")
-                    st.write(metrics)
-                    
-                    st.download_button(label="Télécharger le fichier avec Embeddings",
-                                       data=secondary_df.to_csv(index=False).encode('utf-8'),
-                                       file_name='embeddings_output.csv',
-                                       mime='text/csv')
-                    
-                    # Visualisation des graphiques
-                    display_gauges(metrics, url_column_main, url_column_secondary)
+        url_column = st.selectbox("Sélectionnez la colonne des URL", df.columns)
+        embedding_column = st.selectbox("Sélectionnez la colonne pour les Embeddings", df.columns)
 
-def calculate_internal_link_metrics(main_df, secondary_df, url_column_main, url_column_secondary, min_links):
-    # Fonction de calcul des métriques de maillage interne
-    # Pour chaque URL de destination, calculer le nombre de liens existants, à conserver, à retirer et à remplacer
-    metrics = pd.DataFrame(columns=["URL de destination", "Nombre de liens existants", "Nombre de liens à conserver", "Nombre de liens à retirer", "Nombre de liens à remplacer"])
-    # Remplir le DataFrame metrics avec les valeurs calculées
-    for url in secondary_df[url_column_secondary].unique():
-        existing_links = len(main_df[main_df[url_column_main] == url])
-        links_to_keep = min(existing_links, min_links)
-        links_to_remove = max(0, existing_links - links_to_keep)
-        links_to_replace = min_links - links_to_keep
-        metrics = metrics.append({"URL de destination": url, "Nombre de liens existants": existing_links, "Nombre de liens à conserver": links_to_keep, "Nombre de liens à retirer": links_to_remove, "Nombre de liens à remplacer": links_to_replace}, ignore_index=True)
-    return metrics
+        if st.button("Générer les Embeddings"):
+            with st.spinner("Génération des embeddings en cours..."):
+                texts = df[url_column].tolist()
+                embeddings = generate_embeddings(texts)
+                
+                df[embedding_column] = embeddings
+                st.write("Embeddings générés avec succès !")
+                st.write(df.head())
 
-def display_gauges(metrics, url_column_main, url_column_secondary):
-    # Fonction d'affichage des graphiques de jauge
-    st.write("Visualisation des scores de maillage interne")
-    
-    selected_start_url = st.selectbox("Sélectionnez des URLs de départ", metrics["URL de destination"].unique())
-    selected_end_url = st.selectbox("Sélectionnez des URLs de destination", metrics["URL de destination"].unique())
-    
-    if selected_start_url and selected_end_url:
-        # Calcul des scores de maillage interne
-        internal_link_score = calculate_internal_link_score(metrics, selected_start_url, selected_end_url)
-        replacement_percentage = calculate_replacement_percentage(metrics, selected_start_url, selected_end_url)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("Score moyen de maillage interne (sur une base de 5 liens internes minimum)")
-            st.write(internal_link_score)
-        
-        with col2:
-            st.write("Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 liens internes minimum)")
-            st.write(replacement_percentage)
-
-def calculate_internal_link_score(metrics, start_url, end_url):
-    # Fonction de calcul du score moyen de maillage interne
-    return metrics[(metrics["URL de destination"] == start_url) & (metrics["URL de destination"] == end_url)]["Nombre de liens à conserver"].mean()
-
-def calculate_replacement_percentage(metrics, start_url, end_url):
-    # Fonction de calcul du pourcentage de liens à remplacer et/ou à ajouter
-    return metrics[(metrics["URL de destination"] == start_url) & (metrics["URL de destination"] == end_url)]["Nombre de liens à remplacer"].mean()
+            st.download_button(label="Télécharger le fichier avec Embeddings",
+                               data=df.to_csv(index=False).encode('utf-8'),
+                               file_name='embeddings_output.csv',
+                               mime='text/csv')
 
 if __name__ == "__main__":
     app()
