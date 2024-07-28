@@ -17,8 +17,8 @@ def generate_report(df, start_url_column, destination_url_column, min_links=5):
     ).reset_index()
     return report
 
+# Interface utilisateur
 def app():
-    # Interface utilisateur
     st.title("Audit Sémantique")
 
     # Téléchargement du fichier Excel
@@ -37,11 +37,11 @@ def app():
         main_df = sheets[main_sheet]
         secondary_df = sheets[secondary_sheet]
 
-        columns = list(main_df.columns)
-        start_url_column = st.selectbox("Colonne des URL de départ", columns)
-        destination_url_column = st.selectbox("Colonne des URL de destination", columns)
-        embeddings_column = st.selectbox("Colonne des embeddings", columns)
-        anchor_links_column = st.selectbox("Colonne des ancre de liens", columns)
+        all_columns = list(main_df.columns) + list(secondary_df.columns)
+        start_url_column = st.selectbox("Colonne des URL de départ", all_columns)
+        destination_url_column = st.selectbox("Colonne des URL de destination", all_columns)
+        embeddings_column = st.selectbox("Colonne des embeddings", all_columns)
+        anchor_links_column = st.selectbox("Colonne des ancre de liens", all_columns)
 
         # Nombre minimum de liens pour une URL de destination
         min_links = st.number_input("Nombre minimum de liens pour une URL de destination", min_value=1, value=5)
