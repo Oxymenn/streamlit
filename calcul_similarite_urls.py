@@ -2,18 +2,20 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-import openai
-import os
+from transformers import CamembertModel, CamembertTokenizer
+import torch
 
-# Charger la clé API OpenAI à partir des variables d'environnement
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Charger le modèle CamemBERT et le tokenizer
+model_name = "camembert-base"
+tokenizer = CamembertTokenizer.from_pretrained(model_name)
+model = CamembertModel.from_pretrained(model_name)
 
-def get_embeddings(text, model="text-embedding-ada-002"):
-    response = openai.Embedding.create(
-        model=model,
-        input=text
-    )
-    return response['data'][0]['embedding']
+@st.cache_data
+def get_embeddings(text):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
+    outputs = model(**inputs)
+    embeddings = outputs.last_hidden_state.mean(dim=1).detach().numpy()
+    return embeddings[0]
 
 def calculate_cosine_similarity(embeddings):
     similarity_matrix = cosine_similarity(embeddings)
@@ -31,7 +33,7 @@ def calcul_similarite_urls():
             embeddings = []
             with st.spinner("Génération des embeddings..."):
                 for url in urls:
-                    embedding = get_embeddings(url, model="text-embedding-ada-002")
+                    embedding = get_embeddings(url)
                     embeddings.append(embedding)
             embeddings = np.array(embeddings)
             with st.spinner("Calcul de la similarité cosinus..."):
