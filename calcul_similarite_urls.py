@@ -48,3 +48,5 @@ def calcul_similarite_urls():
                 file_name='similarity_matrix.csv',
                 mime='text/csv',
             )
+
+# Assurez-vous de l'appeler correctement dans main.py
