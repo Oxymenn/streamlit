@@ -37,21 +37,27 @@ if uploaded_file is not None:
     if url_column and embeddings_column:
         # Extraire les URL et les embeddings
         urls = df[url_column]
-        embeddings = np.vstack(df[embeddings_column].apply(eval).values)
+        embeddings = df[embeddings_column].apply(eval)
 
-        # Calculer la proximité sémantique
-        similarity_matrix = calculate_semantic_proximity(embeddings)
+        # Vérifier que les embeddings sont des listes de nombres
+        if not all(isinstance(emb, list) and all(isinstance(x, (int, float)) for x in emb) for emb in embeddings):
+            st.error("Embeddings must be lists of numbers.")
+        else:
+            embeddings = np.vstack(embeddings.values)
 
-        # Sélection d'une URL spécifique
-        selected_url = st.selectbox("Select a URL to find similar URLs", urls)
+            # Calculer la proximité sémantique
+            similarity_matrix = calculate_semantic_proximity(embeddings)
 
-        # Curseur pour gérer le nombre de liens
-        num_links = st.slider("Number of similar URLs to display", min_value=1, max_value=len(urls), value=5)
+            # Sélection d'une URL spécifique
+            selected_url = st.selectbox("Select a URL to find similar URLs", urls)
 
-        if selected_url:
-            # Trouver les URL les plus proches
-            similar_urls = find_most_similar_urls(selected_url, similarity_matrix, urls, n=num_links)
+            # Curseur pour gérer le nombre de liens
+            num_links = st.slider("Number of similar URLs to display", min_value=1, max_value=len(urls), value=5)
 
-            # Afficher les résultats
-            st.write("Most similar URLs to:", selected_url)
-            st.dataframe(similar_urls)
+            if selected_url:
+                # Trouver les URL les plus proches
+                similar_urls = find_most_similar_urls(selected_url, similarity_matrix, urls, n=num_links)
+
+                # Afficher les résultats
+                st.write("Most similar URLs to:", selected_url)
+                st.dataframe(similar_urls)
