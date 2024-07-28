@@ -9,11 +9,11 @@ def load_excel(file):
 # Fonction pour générer le rapport
 def generate_report(df, min_links=5):
     # Exemple de logique pour générer le rapport
-    report = df.groupby('URL de destination').agg(
-        Nombre_de_liens_existants=('URL de départ', 'count'),
-        Nombre_de_liens_à_conserver=('URL de départ', lambda x: len(x)),
-        Nombre_de_liens_à_retirer=('URL de départ', lambda x: 0),
-        Nombre_de_liens_à_remplacer=('URL de départ', lambda x: max(0, min_links - len(x)))
+    report = df.groupby('Column1').agg(
+        Nombre_de_liens_existants=('Column2', 'count'),
+        Nombre_de_liens_à_conserver=('Column2', lambda x: len(x)),
+        Nombre_de_liens_à_retirer=('Column2', lambda x: 0),
+        Nombre_de_liens_à_remplacer=('Column2', lambda x: max(0, min_links - len(x)))
     ).reset_index()
     return report
 
@@ -36,10 +36,11 @@ if uploaded_file is not None:
     main_df = sheets[main_sheet]
     secondary_df = sheets[secondary_sheet]
 
-    start_url_column = st.selectbox("Colonne des URL de départ", main_df.columns)
-    destination_url_column = st.selectbox("Colonne des URL de destination", main_df.columns)
-    embeddings_column = st.selectbox("Colonne des embeddings", secondary_df.columns)
-    anchor_links_column = st.selectbox("Colonne des ancre de liens", secondary_df.columns)
+    columns = list(main_df.columns)
+    start_url_column = st.selectbox("Colonne des URL de départ", columns)
+    destination_url_column = st.selectbox("Colonne des URL de destination", columns)
+    embeddings_column = st.selectbox("Colonne des embeddings", columns)
+    anchor_links_column = st.selectbox("Colonne des ancre de liens", columns)
 
     # Nombre minimum de liens pour une URL de destination
     min_links = st.number_input("Nombre minimum de liens pour une URL de destination", min_value=1, value=5)
