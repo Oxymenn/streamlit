@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import openai
-import os
 
 # Récupérer la clé API OpenAI depuis les secrets Streamlit
 openai.api_key = st.secrets["OPENAI_API_KEY"]
@@ -18,7 +17,7 @@ def app():
     uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xlsx"])
     
     if uploaded_file:
-        df = pd.read_excel(uploaded_file)
+        df = pd.read_excel(uploaded_file, engine='openpyxl')
         st.write("Aperçu des données :")
         st.write(df.head())
         
