@@ -1,15 +1,14 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import openai
+from sentence_transformers import SentenceTransformer
 
-# Récupérer la clé API OpenAI depuis les secrets Streamlit
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Charger le modèle de Sentence Transformers
+model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
 
-def generate_embeddings(texts, model="text-embedding-ada-002"):
-    response = openai.Embedding.create(model=model, input=texts)
-    embeddings = [item['embedding'] for item in response['data']]
-    return embeddings
+def generate_embeddings(texts):
+    embeddings = model.encode(texts, convert_to_tensor=True)
+    return embeddings.tolist()
 
 def app():
     st.title("Génération des Embeddings pour un site E-commerce")
