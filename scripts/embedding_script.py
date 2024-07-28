@@ -29,7 +29,10 @@ def get_embedding(text, model="text-embedding-3-small"):
 
 def generate_embeddings(texts):
     cleaned_texts = [clean_text(text) for text in texts]
-    embeddings = [get_embedding(text) for text in cleaned_texts]
+    embeddings = []
+    for text in cleaned_texts:
+        embedding = get_embedding(text)
+        embeddings.append(embedding)
     return embeddings
 
 def app():
