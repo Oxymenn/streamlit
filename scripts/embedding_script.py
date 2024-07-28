@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import openai
+import os
 
-# Assurez-vous d'ajouter votre clé API OpenAI
-openai.api_key = 'sk-None-7EgMS9ZdmmwOc0UxHyN6T3BlbkFJOsK0N9Ec8hbJ1E5ealEO'
+# Récupérer la clé API OpenAI depuis les secrets Streamlit
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 def generate_embeddings(texts, model="text-embedding-ada-002"):
     response = openai.Embedding.create(input=texts, model=model)
