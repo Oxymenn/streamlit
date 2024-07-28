@@ -6,4 +6,3 @@ openpyxl
 plotly
 scikit-learn
 matplotlib
-ast
