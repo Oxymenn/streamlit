@@ -103,7 +103,7 @@ def process_keywords(df, serp_similarity_threshold=0.4, delay=3):
             serp_similarity = calculate_serp_similarity(google_results.get(kw1, []), google_results.get(kw2, []))
             keyword_similarity = are_keywords_similar(kw1, kw2)
 
-            if serp_similarity > serp_similarity_threshold ou keyword_similarity:
+            if serp_similarity > serp_similarity_threshold or keyword_similarity:
                 group.append(j)
 
         similar_groups.append(group)
