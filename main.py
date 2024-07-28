@@ -4,18 +4,22 @@ from scripts import semantic_audit_script
 from scripts import cannibalisation_serp
 
 PAGES = {
-    "Scripts de Pirates": {
+    "Maillage interne": {
         "Embedding Script": embedding_script,
-        "Audit Sémantique": semantic_audit_script
+        "Audit Sémantique": semantic_audit_script,
     },
     "Sémantique": {
-        "Cannibalisation SERP": cannibalisation_serp
+        "Cannibalisation SERP": cannibalisation_serp,
     }
 }
 
-st.sidebar.title("Navigation")
-selection_category = st.sidebar.radio("Catégories", list(PAGES.keys()))
-selection_page = st.sidebar.radio("Scripts", list(PAGES[selection_category].keys()))
+st.sidebar.title("Scripts de Pirates")
 
-page = PAGES[selection_category][selection_page]
+# Choix de la catégorie
+category = st.sidebar.radio("Catégories", list(PAGES.keys()))
+
+# Choix du script dans la catégorie sélectionnée
+selection = st.sidebar.radio("Scripts", list(PAGES[category].keys()))
+
+page = PAGES[category][selection]
 page.app()
