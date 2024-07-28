@@ -6,8 +6,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 def preprocess_embeddings(embedding_str):
     try:
         if isinstance(embedding_str, str):
-            embedding_str = embedding_str.strip('[]').replace('\n', ' ')
-        return np.array([float(x) for x in embedding_str.split()])
+            # Remplacer les virgules mal placées et les espaces multiples
+            embedding_str = embedding_str.strip('[]').replace(',', ' ').replace('\n', ' ')
+        return np.array([float(x) for x in embedding_str.split() if x])
     except ValueError as e:
         st.error(f"Error in embedding format: {e}")
         return np.zeros(300)  # Assuming embeddings are of size 300, adjust if needed
