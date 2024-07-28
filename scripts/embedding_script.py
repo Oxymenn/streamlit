@@ -22,8 +22,8 @@ def clean_text(text):
     words = [word for word in words if word not in stopwords_fr]
     return ' '.join(words)
 
-def get_embedding(text, model="text-embedding-3-small"):
-    response = openai.Embedding.create(input=[text], model=model)
+def get_embedding(text, model="text-embedding-ada-002"):
+    response = openai.Embedding.create(input=text, model=model)
     embedding = response['data'][0]['embedding']
     return embedding
 
