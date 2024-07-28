@@ -3,6 +3,4 @@ pandas
 numpy
 sentence-transformers
 openpyxl
-plotly
 scikit-learn
-matplotlib
