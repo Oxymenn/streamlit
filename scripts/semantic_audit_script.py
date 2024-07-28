@@ -55,3 +55,27 @@ def perform_audit(urls_source, urls_destination, urls_results, embeddings):
 
     except Exception as e:
         return f"Erreur lors de l'audit : {e}"
+
+def app():
+    st.title("Audit de Maillage Interne")
+
+    # Upload du fichier Excel
+    uploaded_file = st.file_uploader("Charger le fichier Excel", type="xlsx")
+
+    if uploaded_file is not None:
+        xls, sheet_names = load_excel_file(uploaded_file)
+        if xls is not None and sheet_names is not None:
+            urls_source, urls_destination, urls_results, embeddings = select_sheets_and_columns(xls, sheet_names)
+
+            # Appeler le script d'audit
+            if st.button("Exécuter l'audit"):
+                results = perform_audit(
+                    urls_source,
+                    urls_destination,
+                    urls_results,
+                    embeddings
+                )
+
+                # Afficher les résultats de l'audit
+                st.write("Résultats de l'audit :")
+                st.write(results)
