@@ -4,7 +4,14 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 def preprocess_embeddings(embedding_str):
-    return np.array([float(x) for x in embedding_str.strip('[]').split()])
+    try:
+        # Handling potential issues in embedding format
+        if isinstance(embedding_str, str):
+            embedding_str = embedding_str.strip('[]').replace('\n', ' ')
+        return np.array([float(x) for x in embedding_str.split()])
+    except ValueError as e:
+        st.error(f"Error in embedding format: {e}")
+        return np.zeros(300)  # Assuming embeddings are of size 300, adjust if needed
 
 def calculate_internal_link_score(df, url_column, embedding_column, min_links):
     df[embedding_column] = df[embedding_column].apply(preprocess_embeddings)
