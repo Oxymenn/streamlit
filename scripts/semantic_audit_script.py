@@ -93,10 +93,12 @@ def app():
         st.write("Aperçu des données secondaires :")
         st.write(df_secondary.head())
         
-        url_column_primary = st.selectbox("Colonne des URL de départ", df_primary.columns)
-        url_column_secondary = st.selectbox("Colonne des URL de destination", df_secondary.columns)
-        embedding_column = st.selectbox("Colonne des embeddings", df_secondary.columns)
-        anchor_column = st.selectbox("Colonne des ancres de liens", df_secondary.columns)
+        columns = df_primary.columns.tolist() + df_secondary.columns.tolist()
+        
+        url_column_primary = st.selectbox("Colonne des URL de départ", columns)
+        url_column_secondary = st.selectbox("Colonne des URL de destination", columns)
+        embedding_column = st.selectbox("Colonne des embeddings", columns)
+        anchor_column = st.selectbox("Colonne des ancres de liens", columns)
 
         min_links = st.number_input("Nombre minimum de liens pour une URL de destination (nécessaire pour le calcul des métriques de maillage interne)", min_value=1, value=5)
 
@@ -125,18 +127,19 @@ def app():
             st.write("Matrice de Similarité Cosinus :")
             st.write(df_similarity)
 
-            selected_url = st.selectbox("Sélectionnez une URL pour voir les URL les plus proches", df_secondary[url_column_secondary])
-            selected_index = df_secondary[df_secondary[url_column_secondary] == selected_url].index[0]
-            similarities = st.session_state['similarity_matrix'][selected_index]
+            selected_url = st.selectbox("Sélectionnez une URL pour voir les URL les plus proches", ["Sélectionnez une URL"] + df_secondary[url_column_secondary].tolist())
+            if selected_url != "Sélectionnez une URL":
+                selected_index = df_secondary[df_secondary[url_column_secondary] == selected_url].index[0]
+                similarities = st.session_state['similarity_matrix'][selected_index]
 
-            sorted_indices = np.argsort(-similarities)
-            top_n = st.slider("Nombre de résultats à afficher", 1, len(df_secondary), 5)
+                sorted_indices = np.argsort(-similarities)
+                top_n = st.slider("Nombre de résultats à afficher", 1, len(df_secondary), 5)
 
-            st.write(f"Top {top_n} URL proches sémantiquement de {selected_url}:")
-            top_urls = df_secondary[url_column_secondary].iloc[sorted_indices[:top_n]]
-            top_similarities = similarities[sorted_indices[:top_n]]
-            results = pd.DataFrame({'URL': top_urls, 'Similarité': top_similarities})
-            st.write(results)
+                st.write(f"Top {top_n} URL proches sémantiquement de {selected_url}:")
+                top_urls = df_secondary[url_column_secondary].iloc[sorted_indices[:top_n]]
+                top_similarities = similarities[sorted_indices[:top_n]]
+                results = pd.DataFrame({'URL': top_urls, 'Similarité': top_similarities})
+                st.write(results)
 
             # Afficher les rapports
             st.write("Rapport 1 : Métriques de maillage interne")
@@ -150,17 +153,24 @@ def app():
             st.write(df_report)
 
             st.write("Rapport 2 : Graphiques de scores et pourcentages")
-            url_depart = st.selectbox("Sélectionnez des URL de départ", df_primary[url_column_primary])
-            url_destination = st.selectbox("Sélectionnez des URL de destination", df_secondary[url_column_secondary])
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                url_depart = st.selectbox("Sélectionnez des URL de départ", ["Sélectionnez une URL"] + df_primary[url_column_primary].tolist())
+            with col2:
+                url_destination = st.selectbox("Sélectionnez des URL de destination", ["Sélectionnez une URL"] + df_secondary[url_column_secondary].tolist())
 
-            score_moyen = np.random.randint(0, 100)
-            pourcentage_remplacement = np.random.randint(0, 100)
+            if url_depart != "Sélectionnez une URL" and url_destination != "Sélectionnez une URL":
+                score_moyen = np.random.randint(0, 100)
+                pourcentage_remplacement = np.random.randint(0, 100)
 
-            fig1 = plot_gauge_chart(score_moyen, "Score moyen de maillage interne (sur une base de 5 URL minimum)")
-            fig2 = plot_gauge_chart(pourcentage_remplacement, "Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 URL minimum)")
-
-            st.plotly_chart(fig1)
-            st.plotly_chart(fig2)
+                col1, col2 = st.columns(2)
+                with col1:
+                    fig1 = plot_gauge_chart(score_moyen, "Score moyen de maillage interne (sur une base de 5 URL minimum)")
+                    st.plotly_chart(fig1)
+                with col2:
+                    fig2 = plot_gauge_chart(pourcentage_remplacement, "Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 URL minimum)")
+                    st.plotly_chart(fig2)
 
 if __name__ == "__main__":
     app()
