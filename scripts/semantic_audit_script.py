@@ -6,7 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 def preprocess_embeddings(embedding_str):
     return np.array([float(x) for x in embedding_str.strip('[]').split()])
 
-def calculate_internal_link_score(df, url_column, embedding_column, anchor_column, min_links):
+def calculate_internal_link_score(df, url_column, embedding_column, min_links):
     df[embedding_column] = df[embedding_column].apply(preprocess_embeddings)
     embeddings = np.stack(df[embedding_column].values)
     similarity_matrix = cosine_similarity(embeddings)
@@ -55,13 +55,12 @@ def app():
         # Sélectionner les colonnes
         url_column = st.selectbox("Sélectionner la colonne des URL", df.columns)
         embedding_column = st.selectbox("Sélectionner la colonne des embeddings", df.columns)
-        anchor_column = st.selectbox("Sélectionner la colonne des ancres de liens", df.columns)
 
         # Définir le nombre minimum de liens
         min_links = st.slider("Nombre minimum de liens", min_value=1, max_value=20, value=5)
         
         if st.button("Calculer le score de maillage interne"):
-            result_df = calculate_internal_link_score(df, url_column, embedding_column, anchor_column, min_links)
+            result_df = calculate_internal_link_score(df, url_column, embedding_column, min_links)
             
             st.write("Résultats de l'analyse:")
             st.dataframe(result_df)
