@@ -21,7 +21,7 @@ def find_most_similar_urls(url, similarity_matrix, urls, n=5):
 st.title('Semantic Audit')
 
 # Téléchargement du fichier Excel
-uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
+uploaded_file = st.file_uploader("Choisissez un fichier Excel", type="xlsx")
 
 if uploaded_file is not None:
     try:
@@ -29,11 +29,11 @@ if uploaded_file is not None:
         df = pd.read_excel(uploaded_file)
 
         # Afficher les colonnes disponibles
-        st.write("Available columns:", df.columns)
+        st.write("Colonnes disponibles :", df.columns)
 
         # Sélection des colonnes des URL et des embeddings
-        url_column = st.selectbox("Select the URL column", df.columns)
-        embeddings_column = st.selectbox("Select the embeddings column", df.columns)
+        url_column = st.selectbox("Sélectionnez la colonne des URL", df.columns)
+        embeddings_column = st.selectbox("Sélectionnez la colonne des embeddings", df.columns)
 
         if url_column and embeddings_column:
             try:
@@ -43,7 +43,7 @@ if uploaded_file is not None:
 
                 # Vérifier que les embeddings sont des listes de nombres
                 if not all(isinstance(emb, list) and all(isinstance(x, (int, float)) for x in emb) for emb in embeddings):
-                    st.error("Embeddings must be lists of numbers.")
+                    st.error("Les embeddings doivent être des listes de nombres.")
                 else:
                     embeddings = np.vstack(embeddings.values)
 
@@ -51,19 +51,19 @@ if uploaded_file is not None:
                     similarity_matrix = calculate_semantic_proximity(embeddings)
 
                     # Sélection d'une URL spécifique
-                    selected_url = st.selectbox("Select a URL to find similar URLs", urls)
+                    selected_url = st.selectbox("Sélectionnez une URL pour trouver les URL similaires", urls)
 
                     # Curseur pour gérer le nombre de liens
-                    num_links = st.slider("Number of similar URLs to display", min_value=1, max_value=len(urls), value=5)
+                    num_links = st.slider("Nombre d'URL similaires à afficher", min_value=1, max_value=len(urls), value=5)
 
                     if selected_url:
                         # Trouver les URL les plus proches
                         similar_urls = find_most_similar_urls(selected_url, similarity_matrix, urls, n=num_links)
 
                         # Afficher les résultats
-                        st.write("Most similar URLs to:", selected_url)
+                        st.write("Les URL les plus similaires à :", selected_url)
                         st.dataframe(similar_urls)
             except Exception as e:
-                st.error(f"Error processing data: {e}")
+                st.error(f"Erreur lors du traitement des données : {e}")
     except Exception as e:
-        st.error(f"Error reading file: {e}")
+        st.error(f"Erreur lors de la lecture du fichier : {e}")
