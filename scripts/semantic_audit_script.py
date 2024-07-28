@@ -80,8 +80,8 @@ def app():
         
         if file_type == 'xlsx':
             sheet_names = pd.ExcelFile(uploaded_file).sheet_names
-            sheet_primary = st.selectbox("Choisissez la feuille contenant les données principales", sheet_names)
-            sheet_secondary = st.selectbox("Choisissez la feuille contenant les données secondaires", sheet_names)
+            sheet_primary = st.selectbox("Choisissez la feuille contenant les données principales", ["Screaming Frog", "Embeddings"])
+            sheet_secondary = st.selectbox("Choisissez la feuille contenant les données secondaires", ["Screaming Frog", "Embeddings"])
             df_primary = pd.read_excel(uploaded_file, sheet_name=sheet_primary, engine='openpyxl')
             df_secondary = pd.read_excel(uploaded_file, sheet_name=sheet_secondary, engine='openpyxl')
         elif file_type == 'csv':
@@ -92,11 +92,13 @@ def app():
         st.write(df_primary.head())
         st.write("Aperçu des données secondaires :")
         st.write(df_secondary.head())
+
+        all_columns = list(df_primary.columns) + list(df_secondary.columns)
         
-        url_column_primary = st.selectbox("Colonne des URL de départ", df_primary.columns)
-        url_column_secondary = st.selectbox("Colonne des URL de destination", df_secondary.columns)
-        embedding_column = st.selectbox("Colonne des embeddings", df_secondary.columns)
-        anchor_column = st.selectbox("Colonne des ancres de liens", df_secondary.columns)
+        url_column_primary = st.selectbox("Colonne des URL de départ", all_columns)
+        url_column_secondary = st.selectbox("Colonne des URL de destination", all_columns)
+        embedding_column = st.selectbox("Colonne des embeddings", all_columns)
+        anchor_column = st.selectbox("Colonne des ancres de liens", all_columns)
 
         min_links = st.number_input("Nombre minimum de liens pour une URL de destination (nécessaire pour le calcul des métriques de maillage interne)", min_value=1, value=5)
 
