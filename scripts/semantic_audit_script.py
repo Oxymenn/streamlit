@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
 
 # Fonction pour charger le fichier Excel
 def load_excel(file):
@@ -62,8 +63,27 @@ def app():
 
         # Graphique 1: Score moyen de maillage interne
         st.write("Score moyen de maillage interne (sur une base de 5 liens internes minimum)")
-        st.line_chart(report['Nombre_de_liens_à_conserver'])
+        fig1 = px.bar(
+            report,
+            x=destination_url_column,
+            y='Nombre_de_liens_à_conserver',
+            labels={'Nombre_de_liens_à_conserver': 'Score moyen de maillage interne'},
+            title='Score moyen de maillage interne',
+            color_discrete_sequence=['blue']
+        )
+        fig1.update_yaxes(range=[0, 100])
+        st.plotly_chart(fig1)
 
         # Graphique 2: Pourcentage de liens à remplacer et/ou à ajouter
         st.write("Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 liens internes minimum)")
-        st.line_chart(report['Nombre_de_liens_à_remplacer'] / report['Nombre_de_liens_existants'])
+        report['Pourcentage_de_liens_à_remplacer'] = (report['Nombre_de_liens_à_remplacer'] / report['Nombre_de_liens_existants']) * 100
+        fig2 = px.bar(
+            report,
+            x=destination_url_column,
+            y='Pourcentage_de_liens_à_remplacer',
+            labels={'Pourcentage_de_liens_à_remplacer': 'Pourcentage de liens à remplacer et/ou à ajouter'},
+            title='Pourcentage de liens à remplacer et/ou à ajouter',
+            color_discrete_sequence=['red']
+        )
+        fig2.update_yaxes(range=[0, 100])
+        st.plotly_chart(fig2)
