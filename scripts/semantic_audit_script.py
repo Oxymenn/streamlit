@@ -9,11 +9,11 @@ def load_excel(file):
 # Fonction pour générer le rapport
 def generate_report(df, min_links=5):
     # Exemple de logique pour générer le rapport
-    report = df.groupby('Column1').agg(
-        Nombre_de_liens_existants=('Column2', 'count'),
-        Nombre_de_liens_à_conserver=('Column2', lambda x: len(x)),
-        Nombre_de_liens_à_retirer=('Column2', lambda x: 0),
-        Nombre_de_liens_à_remplacer=('Column2', lambda x: max(0, min_links - len(x)))
+    report = df.groupby('URL de destination').agg(
+        Nombre_de_liens_existants=('URL de départ', 'count'),
+        Nombre_de_liens_à_conserver=('URL de départ', lambda x: len(x)),
+        Nombre_de_liens_à_retirer=('URL de départ', lambda x: 0),
+        Nombre_de_liens_à_remplacer=('URL de départ', lambda x: max(0, min_links - len(x)))
     ).reset_index()
     return report
 
