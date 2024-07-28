@@ -5,10 +5,29 @@ from sentence_transformers import SentenceTransformer
 import re
 import os
 
-# Charger les stopwords français depuis le fichier local
-stopwords_path = os.path.join(os.path.dirname(__file__), '../stopwords_fr.txt')
-with open(stopwords_path, 'r', encoding='utf-8') as f:
-    stopwords_fr = set(f.read().splitlines())
+# Liste des stopwords français
+stopwords_fr = [
+    'alors', 'au', 'aucuns', 'aussi', 'autre', 'avant', 'avec', 'avoir', 'bon', 
+    'car', 'ce', 'cela', 'ces', 'ceux', 'chaque', 'ci', 'comme', 'comment', 
+    'dans', 'des', 'du', 'dedans', 'dehors', 'depuis', 'devrait', 'doit', 
+    'donc', 'dos', 'droite', 'début', 'elle', 'elles', 'en', 'encore', 'essai', 
+    'est', 'et', 'eu', 'fait', 'faites', 'fois', 'font', 'force', 'haut', 
+    'hors', 'ici', 'il', 'ils', 'je', 'juste', 'la', 'le', 'les', 'leur', 'là', 
+    'ma', 'maintenant', 'mais', 'mes', 'mine', 'moins', 'mon', 'mot', 'même', 
+    'ni', 'nommés', 'notre', 'nous', 'nouveaux', 'ou', 'où', 'par', 'parce', 
+    'parole', 'pas', 'personnes', 'peut', 'peu', 'pièce', 'plupart', 'pour', 
+    'pourquoi', 'quand', 'que', 'quel', 'quelle', 'quelles', 'quels', 'qui', 
+    'sa', 'sans', 'ses', 'seulement', 'si', 'sien', 'son', 'sont', 'sous', 
+    'soyez', 'sujet', 'sur', 'ta', 'tandis', 'tellement', 'tels', 'tes', 
+    'ton', 'tous', 'tout', 'trop', 'très', 'tu', 'valeur', 'voie', 'voient', 
+    'vont', 'votre', 'vous', 'vu', 'ça', 'étaient', 'état', 'étions', 'été', 
+    'être', 'à', 'moi', 'toi', 'si', 'oui', 'non', 'qui', 'quoi', 'où', 'quand', 
+    'comment', 'pourquoi', 'parce', 'que', 'comme', 'lequel', 'laquelle', 
+    'lesquels', 'lesquelles', 'de', 'lorsque', 'sans', 'sous', 'sur', 'vers', 
+    'chez', 'dans', 'entre', 'parmi', 'après', 'avant', 'avec', 'chez', 'contre', 
+    'dans', 'de', 'depuis', 'derrière', 'devant', 'durant', 'en', 'entre', 'envers', 
+    'par', 'pour', 'sans', 'sous', 'vers', 'via'
+]
 
 def clean_text(text):
     # Convertir en minuscules
