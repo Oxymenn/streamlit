@@ -3,15 +3,13 @@ import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import re
-import nltk
-from nltk.corpus import stopwords
 
 # Charger le modèle de Sentence Transformers
 model = SentenceTransformer('camembert-base')
 
-# Télécharger les stopwords français
-nltk.download('stopwords')
-stopwords_fr = set(stopwords.words('french'))
+# Charger les stopwords français depuis le fichier local
+with open('stopwords_fr.txt', 'r', encoding='utf-8') as f:
+    stopwords_fr = set(f.read().splitlines())
 
 def clean_text(text):
     # Convertir en minuscules
@@ -30,10 +28,16 @@ def generate_embeddings(texts):
 def app():
     st.title("Génération des Embeddings pour un site E-commerce")
 
-    uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xlsx"])
+    uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
     
     if uploaded_file:
-        df = pd.read_excel(uploaded_file, engine='openpyxl')
+        file_type = uploaded_file.name.split('.')[-1]
+        
+        if file_type == 'xlsx':
+            df = pd.read_excel(uploaded_file, engine='openpyxl')
+        elif file_type == 'csv':
+            df = pd.read_csv(uploaded_file)
+        
         st.write("Aperçu des données :")
         st.write(df.head())
         
