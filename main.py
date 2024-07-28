@@ -3,7 +3,7 @@ from scripts import embedding_script
 from scripts import semantic_audit_script
 
 PAGES = {
-    "Embedding Script": embedding_script
+    "Embedding Script": embedding_script,
     "Audit Sémantique": semantic_audit_script
 }
 
