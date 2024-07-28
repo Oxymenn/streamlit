@@ -110,7 +110,7 @@ def run_audit_semantique():
     else:
         st.info("Veuillez uploader un fichier Excel pour commencer l'analyse.")
 
-if __name__ == "__main__":
+def audit_maillage_interne():
     st.set_page_config(page_title="Audit SEO", layout="wide")
     
     option = st.sidebar.selectbox(
