@@ -2,12 +2,29 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import re
+import nltk
+from nltk.corpus import stopwords
 
 # Charger le modèle de Sentence Transformers
-model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
+model = SentenceTransformer('camembert-base')
+
+# Télécharger les stopwords français
+nltk.download('stopwords')
+stopwords_fr = set(stopwords.words('french'))
+
+def clean_text(text):
+    # Convertir en minuscules
+    text = text.lower()
+    # Supprimer les caractères spéciaux et diviser en mots
+    words = re.findall(r'\b\w+\b', text)
+    # Filtrer les stopwords
+    words = [word for word in words if word not in stopwords_fr]
+    return ' '.join(words)
 
 def generate_embeddings(texts):
-    embeddings = model.encode(texts, convert_to_tensor=True)
+    cleaned_texts = [clean_text(text) for text in texts]
+    embeddings = model.encode(cleaned_texts, convert_to_tensor=True)
     return embeddings.tolist()
 
 def app():
