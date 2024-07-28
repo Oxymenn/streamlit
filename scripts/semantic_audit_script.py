@@ -7,13 +7,13 @@ def load_excel(file):
     return pd.read_excel(file, sheet_name=None)
 
 # Fonction pour générer le rapport
-def generate_report(df, min_links=5):
+def generate_report(df, start_url_column, destination_url_column, min_links=5):
     # Exemple de logique pour générer le rapport
-    report = df.groupby('URL de destination').agg(
-        Nombre_de_liens_existants=('URL de départ', 'count'),
-        Nombre_de_liens_à_conserver=('URL de départ', lambda x: len(x)),
-        Nombre_de_liens_à_retirer=('URL de départ', lambda x: 0),
-        Nombre_de_liens_à_remplacer=('URL de départ', lambda x: max(0, min_links - len(x)))
+    report = df.groupby(destination_url_column).agg(
+        Nombre_de_liens_existants=(start_url_column, 'count'),
+        Nombre_de_liens_à_conserver=(start_url_column, lambda x: len(x)),
+        Nombre_de_liens_à_retirer=(start_url_column, lambda x: 0),
+        Nombre_de_liens_à_remplacer=(start_url_column, lambda x: max(0, min_links - len(x)))
     ).reset_index()
     return report
 
@@ -46,7 +46,7 @@ if uploaded_file is not None:
     min_links = st.number_input("Nombre minimum de liens pour une URL de destination", min_value=1, value=5)
 
     # Génération du rapport
-    report = generate_report(main_df, min_links)
+    report = generate_report(main_df, start_url_column, destination_url_column, min_links)
 
     # Affichage du rapport
     st.write("### Rapport 1")
