@@ -1,22 +1,12 @@
 import streamlit as st
-from audit_maillage_interne import audit_maillage_interne
-from calcul_similarite_urls import calcul_similarite_urls
+from scripts import embedding_script
 
-# Fonction principale de l'application
-def main():
-    st.sidebar.title("Navigation")
-    app_mode = st.sidebar.radio("Choisissez une application",
-                                ["Audit de maillage interne", 
-                                 "Calcul de similarité des URLs"])
+PAGES = {
+    "Embedding Script": embedding_script
+}
 
-    if app_mode == "Audit de maillage interne":
-        audit_maillage_interne()
-    elif app_mode == "Calcul de similarité des URLs":
-        calcul_similarite_urls()
+st.sidebar.title("Navigation")
+selection = st.sidebar.radio("Go to", list(PAGES.keys()))
 
-    # Ajouter un trait et le texte en bas de page
-    st.write("---")
-    st.write("© 2024 | By PirateSEO")
-
-if __name__ == "__main__":
-    main()
+page = PAGES[selection]
+page.app()
