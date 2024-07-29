@@ -135,7 +135,7 @@ def app():
     try:
         api_key = st.secrets["api_key"]
     except KeyError:
-        st.error("Clé API OpenAI manquante dans les secrets. Veuillez la définir dans le fichier secrets.toml.")
+        st.error("Clé API OpenAI manquante dans les secrets. Veuillez la définir dans les paramètres de votre application Streamlit.")
         return
 
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
@@ -170,4 +170,8 @@ def app():
                                    mime='text/csv')
             else:
                 st.error("Veuillez entrer votre clé API OpenAI")
+
+if __name__ == "__main__":
+    app()
+
 
