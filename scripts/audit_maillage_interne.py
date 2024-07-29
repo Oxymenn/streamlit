@@ -79,11 +79,21 @@ def app():
         st.subheader("Métriques de maillage interne pour chaque URL de destination :")
         st.write(df[[destination_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
 
-        # Filtre pour sélectionner une URL spécifique
-        selected_url = st.selectbox("Sélectionnez une URL de départ pour filtrer les résultats :", ["Choose an option"] + df[url_column].unique().tolist())
+        # Filtre pour sélectionner des URLs spécifiques
+        selected_url_type = st.radio("Sélectionnez le type d'URLs à filtrer :", ["Aucun filtre", "URLs de départ", "URLs de destination"])
+        
+        if selected_url_type == "URLs de départ":
+            selected_urls = st.multiselect("Sélectionnez les URLs de départ :", df[url_column].unique().tolist())
+        elif selected_url_type == "URLs de destination":
+            selected_urls = st.multiselect("Sélectionnez les URLs de destination :", df[destination_column].unique().tolist())
+        else:
+            selected_urls = []
 
-        if selected_url != "Choose an option":
-            filtered_df = df[df[url_column] == selected_url]
+        if selected_urls:
+            if selected_url_type == "URLs de départ":
+                filtered_df = df[df[url_column].isin(selected_urls)]
+            elif selected_url_type == "URLs de destination":
+                filtered_df = df[df[destination_column].isin(selected_urls)]
             st.session_state.filtered_df = filtered_df
 
         st.download_button(label="Télécharger les métriques de maillage interne",
@@ -120,32 +130,32 @@ def app():
         )
         st.altair_chart(anchor_chart, use_container_width=True)
         
-        if selected_url != "Choose an option":
-            st.subheader("Métriques filtrées de maillage interne pour l'URL sélectionnée :")
+        if selected_urls:
+            st.subheader("Métriques filtrées de maillage interne pour les URLs sélectionnées :")
             st.write(filtered_df[[destination_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
             
-            st.write(f"Score moyen de maillage interne pour l'URL sélectionnée : {filtered_df['internal_link_score'].mean():.2f}")
-            st.write(f"Pourcentage de liens à remplacer et/ou à ajouter pour l'URL sélectionnée : {filtered_df['links_to_replace'].sum() / filtered_df['existing_links'].sum() * 100:.2f}")
+            filtered_avg_internal_link_score = filtered_df['internal_link_score'].mean()
+            filtered_replace_or_add_percentage = filtered_df['links_to_replace'].sum() / filtered_df['existing_links'].sum() * 100
             
-            # Mettre à jour les graphiques pour l'URL sélectionnée
-            selected_avg_internal_link_score = filtered_df['internal_link_score'].mean()
-            selected_replace_or_add_percentage = filtered_df['links_to_replace'].sum() / filtered_df['existing_links'].sum() * 100
+            st.write(f"Score moyen de maillage interne pour les URLs sélectionnées : {filtered_avg_internal_link_score:.2f}")
+            st.write(f"Pourcentage de liens à remplacer et/ou à ajouter pour les URLs sélectionnées : {filtered_replace_or_add_percentage:.2f}")
             
-            st.subheader("Graphiques des scores pour l'URL sélectionnée")
-            selected_score_chart = alt.Chart(pd.DataFrame({'score': [selected_avg_internal_link_score]})).mark_arc(innerRadius=50).encode(
+            # Mettre à jour les graphiques pour les URLs sélectionnées
+            st.subheader("Graphiques des scores pour les URLs sélectionnées")
+            selected_score_chart = alt.Chart(pd.DataFrame({'score': [filtered_avg_internal_link_score]})).mark_arc(innerRadius=50).encode(
                 theta=alt.datum('score'),
                 color=alt.value('blue')
             )
             st.altair_chart(selected_score_chart, use_container_width=True)
             
-            selected_percentage_chart = alt.Chart(pd.DataFrame({'percentage': [selected_replace_or_add_percentage]})).mark_arc(innerRadius=50).encode(
+            selected_percentage_chart = alt.Chart(pd.DataFrame({'percentage': [filtered_replace_or_add_percentage]})).mark_arc(innerRadius=50).encode(
                 theta=alt.datum('percentage'),
                 color=alt.value('green')
             )
             st.altair_chart(selected_percentage_chart, use_container_width=True)
             
-            # Statistiques sur les ancres de lien pour l'URL sélectionnée
-            st.subheader("Statistiques sur les ancres de lien pour l'URL sélectionnée")
+            # Statistiques sur les ancres de lien pour les URLs sélectionnées
+            st.subheader("Statistiques sur les ancres de lien pour les URLs sélectionnées")
             selected_anchor_counts = filtered_df[anchor_column].value_counts().reset_index()
             selected_anchor_counts.columns = [anchor_column, 'count']
             
