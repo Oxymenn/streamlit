@@ -24,6 +24,7 @@ def calculate_cosine_similarity(embeddings):
 
 def generate_similarity_table(df, url_column, similarities, num_links):
     similarity_data = []
+    url_to_dest = {url: [] for url in df[url_column]}
     for index, row in df.iterrows():
         similarity_scores = similarities[index]
         similar_indices = np.argsort(similarity_scores)[::-1]
@@ -33,31 +34,32 @@ def generate_similarity_table(df, url_column, similarities, num_links):
             if df[url_column].iloc[idx] != row[url_column] and count < num_links:
                 similar_urls.append(df[url_column].iloc[idx])
                 count += 1
+        url_to_dest[row[url_column]] = similar_urls
         similarity_data.append({
             "URL de départ": row[url_column],
             "URLs de destination": ", ".join(similar_urls)
         })
     similarity_df = pd.DataFrame(similarity_data)
-    return similarity_df
+    return similarity_df, url_to_dest
 
-def close_loop(df, url_column, similarity_df, similarities):
-    for idx, row in similarity_df.iterrows():
-        destination_urls = row["URLs de destination"].split(", ")
-        last_url = destination_urls[-1]
-        last_url_idx = df[df[url_column] == last_url].index[0]
-        last_url_similarities = similarities[last_url_idx]
-        
-        # Vérifier et ajouter l'URL de départ si elle est parmi les plus proches
-        original_url = row["URL de départ"]
-        if original_url not in destination_urls:
-            similar_indices = np.argsort(last_url_similarities)[::-1]
-            for similar_idx in similar_indices:
-                similar_url = df[url_column].iloc[similar_idx]
-                if similar_url == original_url:
-                    destination_urls[-1] = original_url
-                    break
-        similarity_df.at[idx, "URLs de destination"] = ", ".join(destination_urls)
-    return similarity_df
+def close_loop(url_to_dest):
+    # Create a dictionary to count incoming links
+    url_incoming_links = {url: 0 for url in url_to_dest.keys()}
+
+    # Increment the incoming links count
+    for dest_urls in url_to_dest.values():
+        for dest in dest_urls:
+            if dest in url_incoming_links:
+                url_incoming_links[dest] += 1
+
+    # Balance the links to ensure each URL gets the same number of links
+    balanced_dest = {url: [] for url in url_to_dest.keys()}
+    for url, dest_urls in url_to_dest.items():
+        for dest in dest_urls:
+            if len(balanced_dest[dest]) < 4:  # Ensure each URL gets max 4 incoming links
+                balanced_dest[url].append(dest)
+
+    return balanced_dest
 
 def app():
     st.title("Analyse de Similarité Cosinus des URL")
@@ -80,12 +82,22 @@ def app():
                 st.session_state.df = df
                 st.session_state.url_column = url_column
                 st.session_state.embedding_column = embedding_column
-                st.session_state.num_links = min(4, len(df))  # 4 liens au lieu de 5
+                st.session_state.num_links = min(5, len(df))  # 5 liens au lieu de 4
                 
                 st.write("Calcul de la similarité terminé avec succès !")
                 
-                similarity_table = generate_similarity_table(df, url_column, similarities, st.session_state.num_links)
-                similarity_table = close_loop(df, url_column, similarity_table, similarities)
+                similarity_table, url_to_dest = generate_similarity_table(df, url_column, similarities, st.session_state.num_links)
+                balanced_dest = close_loop(url_to_dest)
+
+                # Mettre à jour le tableau des similarités avec les liens équilibrés
+                similarity_data = []
+                for url, dest_urls in balanced_dest.items():
+                    similarity_data.append({
+                        "URL de départ": url,
+                        "URLs de destination": ", ".join(dest_urls)
+                    })
+                similarity_table = pd.DataFrame(similarity_data)
+
                 st.session_state.similarity_table = similarity_table
                 
                 st.write("Tableau des similarités :")
@@ -100,7 +112,7 @@ def app():
         similarities = st.session_state.similarities
         
         # Curseur pour le nombre de liens à analyser
-        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 4))  # 4 liens au lieu de 5
+        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 5))  # 5 liens au lieu de 4
         st.session_state.num_links = num_links
         
         # Sélecteur pour l'URL
