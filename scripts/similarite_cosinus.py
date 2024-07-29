@@ -22,14 +22,25 @@ def calculate_cosine_similarity(embeddings):
     similarities = cosine_similarity(embeddings)
     return similarities
 
+def generate_similarity_table(df, url_column, similarities, num_links):
+    similarity_data = []
+    for index, row in df.iterrows():
+        similarity_scores = similarities[index]
+        similar_indices = np.argsort(similarity_scores)[::-1][1:num_links+1]
+        similar_urls = df[url_column].iloc[similar_indices].tolist()
+        similarity_data.append({
+            "URL de départ": row[url_column],
+            "URLs de destination": ", ".join(similar_urls)
+        })
+    similarity_df = pd.DataFrame(similarity_data)
+    return similarity_df
+
 def app():
     st.title("Analyse de Similarité Cosinus des URL")
-
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
     
     if uploaded_file:
         df = load_file(uploaded_file)
-        
         st.write("Aperçu des données :")
         st.write(df.head())
         
@@ -40,22 +51,33 @@ def app():
             with st.spinner("Calcul de la similarité en cours..."):
                 embeddings = preprocess_embeddings(df, embedding_column)
                 similarities = calculate_cosine_similarity(embeddings)
+                
                 st.session_state.similarities = similarities
                 st.session_state.df = df
                 st.session_state.url_column = url_column
                 st.session_state.embedding_column = embedding_column
                 st.session_state.num_links = min(5, len(df))
+                
                 st.write("Calcul de la similarité terminé avec succès !")
-
+                
+                similarity_table = generate_similarity_table(df, url_column, similarities, st.session_state.num_links)
+                st.session_state.similarity_table = similarity_table
+                
+                st.write("Tableau des similarités :")
+                st.write(similarity_table)
+                
+                csv = similarity_table.to_csv(index=False).encode('utf-8')
+                st.download_button(label="Télécharger le tableau en CSV", data=csv, file_name='similarity_table.csv', mime='text/csv')
+    
     if 'similarities' in st.session_state:
         df = st.session_state.df
         url_column = st.session_state.url_column
         similarities = st.session_state.similarities
-
+        
         # Curseur pour le nombre de liens à analyser
         num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 5))
         st.session_state.num_links = num_links
-
+        
         # Sélecteur pour l'URL
         selected_url = st.selectbox("Sélectionnez l'URL pour voir les liens similaires", df[url_column])
         
