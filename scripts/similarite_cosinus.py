@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+import ast
 
 def load_file(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1]
@@ -11,8 +12,13 @@ def load_file(uploaded_file):
         df = pd.read_csv(uploaded_file)
     return df
 
-def calculate_cosine_similarity(df, url_col, embedding_col):
-    embeddings = np.array(df[embedding_col].tolist())
+def preprocess_embeddings(df, embedding_col):
+    # Convertir les chaînes de caractères en listes de nombres si nécessaire
+    if isinstance(df[embedding_col].iloc[0], str):
+        df[embedding_col] = df[embedding_col].apply(ast.literal_eval)
+    return np.array(df[embedding_col].tolist())
+
+def calculate_cosine_similarity(embeddings):
     similarities = cosine_similarity(embeddings)
     return similarities
 
@@ -32,7 +38,8 @@ def app():
         
         if st.button("Calculer la similarité cosinus"):
             with st.spinner("Calcul de la similarité en cours..."):
-                similarities = calculate_cosine_similarity(df, url_column, embedding_column)
+                embeddings = preprocess_embeddings(df, embedding_column)
+                similarities = calculate_cosine_similarity(embeddings)
                 df['similarities'] = similarities.tolist()
                 st.write("Calcul de la similarité terminé avec succès !")
 
