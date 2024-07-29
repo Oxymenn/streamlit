@@ -25,7 +25,7 @@ def display_gauge_chart(title, value):
                          {'range': [80, 100], 'color': 'green'}]}))
     return fig
 
-@st.experimental_memo
+@st.cache_data
 def load_data(file):
     return pd.read_excel(file, engine='openpyxl')
 
