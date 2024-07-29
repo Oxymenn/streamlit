@@ -35,6 +35,25 @@ def generate_similarity_table(df, url_column, similarities, num_links):
     similarity_df = pd.DataFrame(similarity_data)
     return similarity_df
 
+def close_loop(df, url_column, similarity_df, similarities):
+    for idx, row in similarity_df.iterrows():
+        destination_urls = row["URLs de destination"].split(", ")
+        last_url = destination_urls[-1]
+        last_url_idx = df[df[url_column] == last_url].index[0]
+        last_url_similarities = similarities[last_url_idx]
+        
+        # Vérifier et ajouter l'URL de départ si elle est parmi les plus proches
+        original_url = row["URL de départ"]
+        if original_url not in destination_urls:
+            similar_indices = np.argsort(last_url_similarities)[::-1]
+            for similar_idx in similar_indices:
+                similar_url = df[url_column].iloc[similar_idx]
+                if similar_url == original_url:
+                    destination_urls[-1] = original_url
+                    break
+        similarity_df.at[idx, "URLs de destination"] = ", ".join(destination_urls)
+    return similarity_df
+
 def app():
     st.title("Analyse de Similarité Cosinus des URL")
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
@@ -56,11 +75,12 @@ def app():
                 st.session_state.df = df
                 st.session_state.url_column = url_column
                 st.session_state.embedding_column = embedding_column
-                st.session_state.num_links = min(5, len(df))
+                st.session_state.num_links = min(4, len(df))  # 4 liens au lieu de 5
                 
                 st.write("Calcul de la similarité terminé avec succès !")
                 
                 similarity_table = generate_similarity_table(df, url_column, similarities, st.session_state.num_links)
+                similarity_table = close_loop(df, url_column, similarity_table, similarities)
                 st.session_state.similarity_table = similarity_table
                 
                 st.write("Tableau des similarités :")
@@ -75,7 +95,7 @@ def app():
         similarities = st.session_state.similarities
         
         # Curseur pour le nombre de liens à analyser
-        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 5))
+        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 4))  # 4 liens au lieu de 5
         st.session_state.num_links = num_links
         
         # Sélecteur pour l'URL
