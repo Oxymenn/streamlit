@@ -62,54 +62,69 @@ def app():
         anchor_column = st.session_state.anchor_column
         min_links = st.session_state.min_links
         
-        # Calcul des métriques de maillage interne
-        df['existing_links'] = df.groupby(destination_column)[url_column].transform('count')
-        df['links_to_keep'] = df['existing_links'].apply(lambda x: min(x, min_links))
-        df['links_to_remove'] = df['existing_links'] - df['links_to_keep']
-        df['links_to_add'] = df['links_to_keep'] - df['existing_links']
-        df['links_to_replace'] = df[['links_to_remove', 'links_to_add']].max(axis=1)
+        # Sélection des URLs spécifiques
+        url_options = df[url_column].unique().tolist()
+        selected_url = st.selectbox("Sélectionnez des URLs de départ :", ["Choose an option"] + url_options)
         
-        # Calcul des scores
-        df['internal_link_score'] = df['links_to_keep'] / df['existing_links'] * 100
-        avg_internal_link_score = df['internal_link_score'].mean()
-        replace_or_add_percentage = df['links_to_replace'].sum() / df['existing_links'].sum() * 100
+        destination_options = df[destination_column].unique().tolist()
+        selected_destination = st.selectbox("Sélectionnez des URLs de destination :", ["Choose an option"] + destination_options)
         
-        st.subheader("Métriques de maillage interne pour chaque URL de destination :")
-        st.write(df[[destination_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
+        if selected_url != "Choose an option" and selected_destination != "Choose an option":
+            selected_indices = df[df[url_column] == selected_url].index
+            selected_embeddings = np.array(df.loc[selected_indices, embedding_column].tolist())
+            selected_similarities = calculate_cosine_similarity(selected_embeddings)
+            
+            df_filtered = df.loc[selected_indices].copy()
+            df_filtered['similarities'] = selected_similarities.tolist()
+            
+            # Calcul des métriques de maillage interne pour les URLs sélectionnées
+            df_filtered['existing_links'] = df_filtered.groupby(destination_column)[url_column].transform('count')
+            df_filtered['links_to_keep'] = df_filtered['existing_links'].apply(lambda x: min(x, min_links))
+            df_filtered['links_to_remove'] = df_filtered['existing_links'] - df_filtered['links_to_keep']
+            df_filtered['links_to_add'] = df_filtered['links_to_keep'] - df_filtered['existing_links']
+            df_filtered['links_to_replace'] = df_filtered[['links_to_remove', 'links_to_add']].max(axis=1)
+            
+            # Calcul des scores
+            df_filtered['internal_link_score'] = df_filtered['links_to_keep'] / df_filtered['existing_links'] * 100
+            avg_internal_link_score = df_filtered['internal_link_score'].mean()
+            replace_or_add_percentage = df_filtered['links_to_replace'].sum() / df_filtered['existing_links'].sum() * 100
+            
+            st.subheader("Métriques de maillage interne pour chaque URL de destination :")
+            st.write(df_filtered[[destination_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
 
-        st.download_button(label="Télécharger les métriques de maillage interne",
-                           data=df.to_csv(index=False).encode('utf-8'),
-                           file_name='internal_link_metrics.csv',
-                           mime='text/csv')
-        
-        st.subheader("Scores de maillage interne")
-        st.write(f"Score moyen de maillage interne (sur une base de 5 URL minimum) : {avg_internal_link_score:.2f}")
-        st.write(f"Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 URL minimum) : {replace_or_add_percentage:.2f}")
-        
-        # Graphiques
-        st.subheader("Graphiques des scores")
-        score_chart = alt.Chart(pd.DataFrame({'score': [avg_internal_link_score]})).mark_arc(innerRadius=50).encode(
-            theta=alt.datum('score'),
-            color=alt.value('blue')
-        )
-        st.altair_chart(score_chart, use_container_width=True)
-        
-        percentage_chart = alt.Chart(pd.DataFrame({'percentage': [replace_or_add_percentage]})).mark_arc(innerRadius=50).encode(
-            theta=alt.datum('percentage'),
-            color=alt.value('green')
-        )
-        st.altair_chart(percentage_chart, use_container_width=True)
-        
-        # Statistiques sur les ancres de lien
-        st.subheader("Statistiques sur les ancres de lien")
-        anchor_counts = df[anchor_column].value_counts().reset_index()
-        anchor_counts.columns = [anchor_column, 'count']
-        
-        anchor_chart = alt.Chart(anchor_counts).mark_bar().encode(
-            x=alt.X('count:Q', title='Nombre de fois utilisée'),
-            y=alt.Y(f'{anchor_column}:N', title='Ancre', sort='-x')
-        )
-        st.altair_chart(anchor_chart, use_container_width=True)
+            st.download_button(label="Télécharger les métriques de maillage interne",
+                               data=df_filtered.to_csv(index=False).encode('utf-8'),
+                               file_name='internal_link_metrics_filtered.csv',
+                               mime='text/csv')
+            
+            st.subheader("Scores de maillage interne")
+            st.write(f"Score moyen de maillage interne (sur une base de 5 URL minimum) : {avg_internal_link_score:.2f}")
+            st.write(f"Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 URL minimum) : {replace_or_add_percentage:.2f}")
+            
+            # Graphiques
+            st.subheader("Graphiques des scores")
+            score_chart = alt.Chart(pd.DataFrame({'score': [avg_internal_link_score]})).mark_arc(innerRadius=50).encode(
+                theta=alt.datum('score'),
+                color=alt.value('blue')
+            )
+            st.altair_chart(score_chart, use_container_width=True)
+            
+            percentage_chart = alt.Chart(pd.DataFrame({'percentage': [replace_or_add_percentage]})).mark_arc(innerRadius=50).encode(
+                theta=alt.datum('percentage'),
+                color=alt.value('green')
+            )
+            st.altair_chart(percentage_chart, use_container_width=True)
+            
+            # Statistiques sur les ancres de lien
+            st.subheader("Statistiques sur les ancres de lien")
+            anchor_counts = df_filtered[anchor_column].value_counts().reset_index()
+            anchor_counts.columns = [anchor_column, 'count']
+            
+            anchor_chart = alt.Chart(anchor_counts).mark_bar().encode(
+                x=alt.X('count:Q', title='Nombre de fois utilisée'),
+                y=alt.Y(f'{anchor_column}:N', title='Ancre', sort='-x')
+            )
+            st.altair_chart(anchor_chart, use_container_width=True)
 
 if __name__ == "__main__":
     app()
