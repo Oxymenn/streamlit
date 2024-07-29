@@ -10,3 +10,4 @@ tqdm
 unidecode
 openai
 plotly
+matplotlib
