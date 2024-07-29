@@ -4,6 +4,8 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import re
 import os
+from sklearn.preprocessing import FunctionTransformer
+import requests
 
 # Liste des stopwords français
 stopwords_fr = [
@@ -96,18 +98,40 @@ def clean_text(text):
     words = re.findall(r'\b\w+\b', text)
     # Filtrer les stopwords
     words = [word for word in words if word not in stopwords_fr]
+    # Mettre les mots au singulier
+    words = [word.rstrip('s') for word in words] # Simplified singular form
     return ' '.join(words)
 
-# Charger le modèle Sentence-BERT
-model = SentenceTransformer('sentence-transformers/LaBSE')  # modèle multilingue adapté aux tâches sémantiques
+def get_openai_embeddings(text, api_key):
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "text-embedding-3-small",
+        "input": text,
+        "encoding_format": "float"
+    }
+    response = requests.post('https://api.openai.com/v1/embeddings', headers=headers, json=data)
+    if response.status_code == 200:
+        return response.json()['data'][0]['embedding']
+    else:
+        st.error("Error fetching embeddings from OpenAI API")
+        return None
 
-def generate_embeddings(texts):
-    cleaned_texts = [clean_text(text) for text in texts]
-    embeddings = model.encode(cleaned_texts)
-    return embeddings.tolist()
+def generate_embeddings(texts, api_key):
+    embeddings = []
+    for text in texts:
+        cleaned_text = clean_text(text)
+        embedding = get_openai_embeddings(cleaned_text, api_key)
+        if embedding:
+            embeddings.append(embedding)
+    return embeddings
 
 def app():
     st.title("Génération des Embeddings pour un site E-commerce")
+
+    api_key = st.secrets["openai"]["api_key"]
 
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
     
@@ -126,18 +150,21 @@ def app():
         embedding_column = st.selectbox("Sélectionnez la colonne pour les Embeddings", df.columns)
 
         if st.button("Générer les Embeddings"):
-            with st.spinner("Génération des embeddings en cours..."):
-                texts = df[url_column].tolist()
-                embeddings = generate_embeddings(texts)
-                
-                df[embedding_column] = embeddings
-                st.write("Embeddings générés avec succès !")
-                st.write(df.head())
+            if api_key:
+                with st.spinner("Génération des embeddings en cours..."):
+                    texts = df[url_column].tolist()
+                    embeddings = generate_embeddings(texts, api_key)
+                    
+                    df[embedding_column] = embeddings
+                    st.write("Embeddings générés avec succès !")
+                    st.write(df.head())
 
-            st.download_button(label="Télécharger le fichier avec Embeddings",
-                               data=df.to_csv(index=False).encode('utf-8'),
-                               file_name='embeddings_output.csv',
-                               mime='text/csv')
+                st.download_button(label="Télécharger le fichier avec Embeddings",
+                                   data=df.to_csv(index=False).encode('utf-8'),
+                                   file_name='embeddings_output.csv',
+                                   mime='text/csv')
+            else:
+                st.error("Veuillez entrer votre clé API OpenAI")
 
 if __name__ == "__main__":
     app()
