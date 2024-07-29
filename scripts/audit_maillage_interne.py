@@ -21,11 +21,11 @@ def preprocess_embeddings(df, embedding_col):
 def calculate_cosine_similarity(embeddings):
     return cosine_similarity(embeddings)
 
-def calculate_internal_link_metrics(df, destination_column, min_links):
-    if destination_column not in df.columns:
-        st.error(f"Column {destination_column} not found in DataFrame")
+def calculate_internal_link_metrics(df, url_column, destination_column, min_links):
+    if url_column not in df.columns or destination_column not in df.columns:
+        st.error(f"Columns {url_column} or {destination_column} not found in DataFrame")
         return df
-    df['existing_links'] = df.groupby(destination_column)['URL de départ'].transform('count')
+    df['existing_links'] = df.groupby(destination_column)[url_column].transform('count')
     df['links_to_keep'] = df['existing_links'].apply(lambda x: min(x, min_links))
     df['links_to_remove'] = df['existing_links'] - df['links_to_keep']
     df['links_to_add'] = df['links_to_keep'] - df['existing_links']
@@ -73,7 +73,7 @@ def app():
                 similarities = calculate_cosine_similarity(embeddings)
                 df["similarities"] = similarities.tolist()
                 
-                df = calculate_internal_link_metrics(df, destination_column, min_links)
+                df = calculate_internal_link_metrics(df, url_column, destination_column, min_links)
                 
                 st.session_state.df = df
                 st.session_state.url_column = url_column
