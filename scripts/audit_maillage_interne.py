@@ -21,6 +21,15 @@ def preprocess_embeddings(df, embedding_col):
 def calculate_cosine_similarity(embeddings):
     return cosine_similarity(embeddings)
 
+def calculate_internal_link_metrics(df, destination_column, min_links):
+    df['existing_links'] = df.groupby(destination_column)['URL de départ'].transform('count')
+    df['links_to_keep'] = df['existing_links'].apply(lambda x: min(x, min_links))
+    df['links_to_remove'] = df['existing_links'] - df['links_to_keep']
+    df['links_to_add'] = df['links_to_keep'] - df['existing_links']
+    df['links_to_replace'] = df[['links_to_remove', 'links_to_add']].max(axis=1)
+    df['internal_link_score'] = df['links_to_keep'] / df['existing_links'] * 100
+    return df
+
 def app():
     st.title("Audit de maillage interne")
 
@@ -45,6 +54,9 @@ def app():
                 similarities = calculate_cosine_similarity(embeddings)
                 df["similarities"] = similarities.tolist()
                 
+                # Calcul des métriques de maillage interne
+                df = calculate_internal_link_metrics(df, destination_column, min_links)
+                
                 # Initialisation des variables de session
                 st.session_state.df = df
                 st.session_state.url_column = url_column
@@ -64,21 +76,9 @@ def app():
         min_links = st.session_state.min_links
         filtered_df = st.session_state.filtered_df
         
-        # Calcul des métriques de maillage interne
-        df['existing_links'] = df.groupby(destination_column)[url_column].transform('count')
-        df['links_to_keep'] = df['existing_links'].apply(lambda x: min(x, min_links))
-        df['links_to_remove'] = df['existing_links'] - df['links_to_keep']
-        df['links_to_add'] = df['links_to_keep'] - df['existing_links']
-        df['links_to_replace'] = df[['links_to_remove', 'links_to_add']].max(axis=1)
-        
-        # Calcul des scores
-        df['internal_link_score'] = df['links_to_keep'] / df['existing_links'] * 100
-        avg_internal_link_score = df['internal_link_score'].mean()
-        replace_or_add_percentage = df['links_to_replace'].sum() / df['existing_links'].sum() * 100
-        
         st.subheader("Métriques de maillage interne pour chaque URL de destination :")
         st.write(df[[destination_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
-
+        
         # Filtre pour sélectionner des URLs spécifiques
         selected_url_type = st.radio("Sélectionnez le type d'URLs à filtrer :", ["Aucun filtre", "URLs de départ", "URLs de destination"])
         
@@ -95,11 +95,17 @@ def app():
             elif selected_url_type == "URLs de destination":
                 filtered_df = df[df[destination_column].isin(selected_urls)]
             st.session_state.filtered_df = filtered_df
+        else:
+            st.session_state.filtered_df = df.copy()
 
         st.download_button(label="Télécharger les métriques de maillage interne",
-                           data=df.to_csv(index=False).encode('utf-8'),
+                           data=st.session_state.filtered_df.to_csv(index=False).encode('utf-8'),
                            file_name='internal_link_metrics.csv',
                            mime='text/csv')
+
+        filtered_df = st.session_state.filtered_df
+        avg_internal_link_score = filtered_df['internal_link_score'].mean()
+        replace_or_add_percentage = filtered_df['links_to_replace'].sum() / filtered_df['existing_links'].sum() * 100
         
         st.subheader("Scores de maillage interne")
         st.write(f"Score moyen de maillage interne (sur une base de 5 URL minimum) : {avg_internal_link_score:.2f}")
@@ -121,7 +127,7 @@ def app():
         
         # Statistiques sur les ancres de lien
         st.subheader("Statistiques sur les ancres de lien")
-        anchor_counts = df[anchor_column].value_counts().reset_index()
+        anchor_counts = filtered_df[anchor_column].value_counts().reset_index()
         anchor_counts.columns = [anchor_column, 'count']
         
         anchor_chart = alt.Chart(anchor_counts).mark_bar().encode(
@@ -129,41 +135,6 @@ def app():
             y=alt.Y(f'{anchor_column}:N', title='Ancre', sort='-x')
         )
         st.altair_chart(anchor_chart, use_container_width=True)
-        
-        if selected_urls:
-            st.subheader("Métriques filtrées de maillage interne pour les URLs sélectionnées :")
-            st.write(filtered_df[[destination_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
-            
-            filtered_avg_internal_link_score = filtered_df['internal_link_score'].mean()
-            filtered_replace_or_add_percentage = filtered_df['links_to_replace'].sum() / filtered_df['existing_links'].sum() * 100
-            
-            st.write(f"Score moyen de maillage interne pour les URLs sélectionnées : {filtered_avg_internal_link_score:.2f}")
-            st.write(f"Pourcentage de liens à remplacer et/ou à ajouter pour les URLs sélectionnées : {filtered_replace_or_add_percentage:.2f}")
-            
-            # Mettre à jour les graphiques pour les URLs sélectionnées
-            st.subheader("Graphiques des scores pour les URLs sélectionnées")
-            selected_score_chart = alt.Chart(pd.DataFrame({'score': [filtered_avg_internal_link_score]})).mark_arc(innerRadius=50).encode(
-                theta=alt.datum('score'),
-                color=alt.value('blue')
-            )
-            st.altair_chart(selected_score_chart, use_container_width=True)
-            
-            selected_percentage_chart = alt.Chart(pd.DataFrame({'percentage': [filtered_replace_or_add_percentage]})).mark_arc(innerRadius=50).encode(
-                theta=alt.datum('percentage'),
-                color=alt.value('green')
-            )
-            st.altair_chart(selected_percentage_chart, use_container_width=True)
-            
-            # Statistiques sur les ancres de lien pour les URLs sélectionnées
-            st.subheader("Statistiques sur les ancres de lien pour les URLs sélectionnées")
-            selected_anchor_counts = filtered_df[anchor_column].value_counts().reset_index()
-            selected_anchor_counts.columns = [anchor_column, 'count']
-            
-            selected_anchor_chart = alt.Chart(selected_anchor_counts).mark_bar().encode(
-                x=alt.X('count:Q', title='Nombre de fois utilisée'),
-                y=alt.Y(f'{anchor_column}:N', title='Ancre', sort='-x')
-            )
-            st.altair_chart(selected_anchor_chart, use_container_width=True)
 
 if __name__ == "__main__":
     app()
