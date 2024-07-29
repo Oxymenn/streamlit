@@ -66,6 +66,20 @@ def app():
                 st.subheader("Métriques de maillage interne pour chaque URL de destination :")
                 st.write(df[[url_end_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
                 
+                st.subheader("Filtrer par URL")
+                col7, col8 = st.columns(2)
+                with col7:
+                    url_start_filter = st.selectbox("Sélectionnez des URLs de départ :", options=["Choose an option"] + list(df[url_start_column].unique()))
+                with col8:
+                    url_end_filter = st.selectbox("Sélectionnez des URLs de destination :", options=["Choose an option"] + list(df[url_end_column].unique()))
+
+                if url_start_filter != "Choose an option":
+                    df_filtered = df[df[url_start_column] == url_start_filter]
+                elif url_end_filter != "Choose an option":
+                    df_filtered = df[df[url_end_column] == url_end_filter]
+                else:
+                    df_filtered = df
+
                 col5, col6 = st.columns(2)
                 with col5:
                     st.plotly_chart(display_gauge_chart("Score moyen de maillage interne (sur une base de 5 URL minimum)", 43), use_container_width=True)
@@ -74,10 +88,7 @@ def app():
 
                 st.download_button(label="Télécharger les métriques de maillage interne", data=df.to_csv(index=False).encode('utf-8'), file_name='metrics_maillage_interne.csv', mime='text/csv')
 
-                url_filter = st.selectbox("Filtrer par URL de destination", df[url_end_column].unique())
-                df_filtered = df[df[url_end_column] == url_filter]
-
-                st.subheader(f"Détails des liens à remplacer et des meilleures URLs à inclure pour {url_filter} :")
+                st.subheader(f"Détails des liens à remplacer et des meilleures URLs à inclure :")
                 st.write(df_filtered[[url_end_column, 'links_to_replace']])
 
                 # Affichage du nombre de fois où chaque ancre de lien est utilisée
