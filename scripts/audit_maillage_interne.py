@@ -44,6 +44,8 @@ def app():
                 embeddings = preprocess_embeddings(df, embedding_column)
                 similarities = calculate_cosine_similarity(embeddings)
                 df["similarities"] = similarities.tolist()
+                
+                # Initialisation des variables de session
                 st.session_state.df = df
                 st.session_state.url_column = url_column
                 st.session_state.destination_column = destination_column
