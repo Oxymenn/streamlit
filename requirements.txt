@@ -11,8 +11,3 @@ unidecode
 openai
 plotly
 matplotlib
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-google-api-python-client
-streamlit-auth0
