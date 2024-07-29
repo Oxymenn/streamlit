@@ -131,7 +131,12 @@ def generate_embeddings(texts, api_key):
 def app():
     st.title("Génération des Embeddings pour un site E-commerce")
 
-    api_key = st.secrets["openai"]["api_key"]
+    # Lire la clé API depuis les secrets
+    try:
+        api_key = st.secrets["api_key"]
+    except KeyError:
+        st.error("Clé API OpenAI manquante dans les secrets. Veuillez la définir dans le fichier secrets.toml.")
+        return
 
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
     
@@ -166,5 +171,3 @@ def app():
             else:
                 st.error("Veuillez entrer votre clé API OpenAI")
 
-if __name__ == "__main__":
-    app()
