@@ -2,7 +2,6 @@ import streamlit as st
 from scripts import embedding_script
 from scripts import similarite_cosinus
 from scripts import audit_maillage_interne
-from scripts import semantic_audit_script
 from scripts import cannibalisation_serp
 
 # Configuration des pages
@@ -10,7 +9,6 @@ PAGES = {
     "Embedding Script": embedding_script,
     "Similarité Cosinus": similarite_cosinus,
     "Audit Maillage Interne": audit_maillage_interne,
-    "Audit Sémantique": semantic_audit_script,
     "Cannibalisation SERP": cannibalisation_serp
 }
 
