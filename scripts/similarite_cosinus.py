@@ -40,22 +40,35 @@ def app():
             with st.spinner("Calcul de la similarité en cours..."):
                 embeddings = preprocess_embeddings(df, embedding_column)
                 similarities = calculate_cosine_similarity(embeddings)
-                df['similarities'] = similarities.tolist()
+                st.session_state.similarities = similarities
+                st.session_state.df = df
+                st.session_state.url_column = url_column
+                st.session_state.embedding_column = embedding_column
+                st.session_state.num_links = min(5, len(df))
                 st.write("Calcul de la similarité terminé avec succès !")
 
-            num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=20, value=5)
-            selected_url = st.selectbox("Sélectionnez l'URL pour voir les liens similaires", df[url_column])
+    if 'similarities' in st.session_state:
+        df = st.session_state.df
+        url_column = st.session_state.url_column
+        similarities = st.session_state.similarities
 
-            if selected_url:
-                selected_index = df[df[url_column] == selected_url].index[0]
-                similarity_scores = similarities[selected_index]
-                similar_indices = np.argsort(similarity_scores)[::-1][1:num_links+1]
-                similar_urls = df[url_column].iloc[similar_indices].tolist()
-                similar_scores = similarity_scores[similar_indices]
-                
-                st.write(f"Top {num_links} URLs les plus similaires à {selected_url} :")
-                for url, score in zip(similar_urls, similar_scores):
-                    st.write(f"{url} (Score: {score})")
+        # Curseur pour le nombre de liens à analyser
+        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 5))
+        st.session_state.num_links = num_links
+
+        # Sélecteur pour l'URL
+        selected_url = st.selectbox("Sélectionnez l'URL pour voir les liens similaires", df[url_column])
+        
+        if selected_url:
+            selected_index = df[df[url_column] == selected_url].index[0]
+            similarity_scores = similarities[selected_index]
+            similar_indices = np.argsort(similarity_scores)[::-1][1:num_links+1]
+            similar_urls = df[url_column].iloc[similar_indices].tolist()
+            similar_scores = similarity_scores[similar_indices]
+            
+            st.write(f"Top {num_links} URLs les plus similaires à {selected_url} :")
+            for url, score in zip(similar_urls, similar_scores):
+                st.write(f"{url} (Score: {score})")
 
 if __name__ == "__main__":
     app()
