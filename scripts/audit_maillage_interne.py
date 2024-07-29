@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-import altair as alt
+import plotly.graph_objects as go
 
 def load_file(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1]
@@ -13,7 +13,6 @@ def load_file(uploaded_file):
     return df
 
 def preprocess_embeddings(df, embedding_col):
-    # Convertir les chaînes de caractères en listes de nombres si nécessaire
     if isinstance(df[embedding_col].iloc[0], str):
         df[embedding_col] = df[embedding_col].apply(eval)
     return np.array(df[embedding_col].tolist())
@@ -29,6 +28,22 @@ def calculate_internal_link_metrics(df, destination_column, min_links):
     df['links_to_replace'] = df[['links_to_remove', 'links_to_add']].max(axis=1)
     df['internal_link_score'] = df['links_to_keep'] / df['existing_links'] * 100
     return df
+
+def create_gauge_chart(value, title, min_val=0, max_val=100):
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=value,
+        title={'text': title},
+        gauge={'axis': {'range': [min_val, max_val]},
+               'bar': {'color': "blue"},
+               'steps': [
+                   {'range': [0, 20], 'color': "red"},
+                   {'range': [20, 40], 'color': "orange"},
+                   {'range': [40, 60], 'color': "yellow"},
+                   {'range': [60, 80], 'color': "lightgreen"},
+                   {'range': [80, 100], 'color': "green"}]}))
+    fig.update_layout(width=450, height=300, margin=dict(l=20, r=20, t=40, b=40))
+    return fig
 
 def app():
     st.title("Audit de maillage interne")
@@ -54,10 +69,8 @@ def app():
                 similarities = calculate_cosine_similarity(embeddings)
                 df["similarities"] = similarities.tolist()
                 
-                # Calcul des métriques de maillage interne
                 df = calculate_internal_link_metrics(df, destination_column, min_links)
                 
-                # Initialisation des variables de session
                 st.session_state.df = df
                 st.session_state.url_column = url_column
                 st.session_state.destination_column = destination_column
@@ -79,7 +92,6 @@ def app():
         st.subheader("Métriques de maillage interne pour chaque URL de destination :")
         st.write(df[[destination_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
         
-        # Filtre pour sélectionner des URLs spécifiques
         selected_url_type = st.radio("Sélectionnez le type d'URLs à filtrer :", ["Aucun filtre", "URLs de départ", "URLs de destination"])
         
         if selected_url_type == "URLs de départ":
@@ -108,24 +120,14 @@ def app():
         replace_or_add_percentage = filtered_df['links_to_replace'].sum() / filtered_df['existing_links'].sum() * 100
         
         st.subheader("Scores de maillage interne")
-        st.write(f"Score moyen de maillage interne (sur une base de 5 URL minimum) : {avg_internal_link_score:.2f}")
-        st.write(f"Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 URL minimum) : {replace_or_add_percentage:.2f}")
+        left_col, right_col = st.columns(2)
         
-        # Graphiques
-        st.subheader("Graphiques des scores")
-        score_chart = alt.Chart(pd.DataFrame({'score': [avg_internal_link_score]})).mark_arc(innerRadius=50).encode(
-            theta=alt.datum('score'),
-            color=alt.value('blue')
-        )
-        st.altair_chart(score_chart, use_container_width=True)
+        with left_col:
+            st.plotly_chart(create_gauge_chart(avg_internal_link_score, "Score moyen de maillage interne (sur une base de 5 URL minimum)"), use_container_width=True)
         
-        percentage_chart = alt.Chart(pd.DataFrame({'percentage': [replace_or_add_percentage]})).mark_arc(innerRadius=50).encode(
-            theta=alt.datum('percentage'),
-            color=alt.value('green')
-        )
-        st.altair_chart(percentage_chart, use_container_width=True)
-        
-        # Statistiques sur les ancres de lien
+        with right_col:
+            st.plotly_chart(create_gauge_chart(replace_or_add_percentage, "Pourcentage de liens à remplacer et/ou à ajouter (sur une base de 5 URL minimum)"), use_container_width=True)
+
         st.subheader("Statistiques sur les ancres de lien")
         anchor_counts = filtered_df[anchor_column].value_counts().reset_index()
         anchor_counts.columns = [anchor_column, 'count']
