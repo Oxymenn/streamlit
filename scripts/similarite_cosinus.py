@@ -26,8 +26,13 @@ def generate_similarity_table(df, url_column, similarities, num_links):
     similarity_data = []
     for index, row in df.iterrows():
         similarity_scores = similarities[index]
-        similar_indices = np.argsort(similarity_scores)[::-1][1:num_links+1]
-        similar_urls = df[url_column].iloc[similar_indices].tolist()
+        similar_indices = np.argsort(similarity_scores)[::-1]
+        similar_urls = []
+        count = 0
+        for idx in similar_indices:
+            if df[url_column].iloc[idx] != row[url_column] and count < num_links:
+                similar_urls.append(df[url_column].iloc[idx])
+                count += 1
         similarity_data.append({
             "URL de départ": row[url_column],
             "URLs de destination": ", ".join(similar_urls)
@@ -104,9 +109,14 @@ def app():
         if selected_url:
             selected_index = df[df[url_column] == selected_url].index[0]
             similarity_scores = similarities[selected_index]
-            similar_indices = np.argsort(similarity_scores)[::-1][1:num_links+1]
-            similar_urls = df[url_column].iloc[similar_indices].tolist()
-            similar_scores = similarity_scores[similar_indices]
+            similar_indices = np.argsort(similarity_scores)[::-1]
+            similar_urls = []
+            count = 0
+            for idx in similar_indices:
+                if df[url_column].iloc[idx] != selected_url and count < num_links:
+                    similar_urls.append(df[url_column].iloc[idx])
+                    count += 1
+            similar_scores = similarity_scores[[df[url_column].iloc[idx] != selected_url for idx in similar_indices]][:num_links]
             
             st.write(f"Top {num_links} URLs les plus similaires à {selected_url} :")
             for url, score in zip(similar_urls, similar_scores):
