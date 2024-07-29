@@ -2,13 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
 import plotly.graph_objects as go
 
-def calculate_internal_link_metrics(df, destination_column, min_links):
+def calculate_internal_link_metrics(df, url_start_column, url_end_column, min_links):
     # Calcul des métriques de maillage interne
-    df['existing_links'] = df.groupby(destination_column)['URL de départ'].transform('count')
+    df['existing_links'] = df.groupby(url_end_column)[url_start_column].transform('count')
     df['links_to_keep'] = np.where(df['existing_links'] >= min_links, df['existing_links'], min_links)
     df['links_to_remove'] = np.where(df['existing_links'] > min_links, df['existing_links'] - min_links, 0)
     df['links_to_replace'] = np.where(df['existing_links'] < min_links, min_links - df['existing_links'], 0)
@@ -18,7 +16,7 @@ def display_gauge_chart(title, value):
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=value,
-        title={'text': title},
+        title={'text': title, 'font': {'size': 12}},  # Réduction de la taille de la police
         gauge={'axis': {'range': [None, 100]},
                'bar': {'color': "darkblue"},
                'steps': [{'range': [0, 20], 'color': 'red'},
@@ -35,6 +33,7 @@ def app():
     
     if uploaded_file:
         df = pd.read_excel(uploaded_file, engine='openpyxl')
+        st.write("Noms des colonnes disponibles :", df.columns.tolist())  # Affichage des noms des colonnes
 
         sheets = pd.ExcelFile(uploaded_file).sheet_names
         main_sheet = st.selectbox("Choisissez la feuille contenant les données principales", sheets)
@@ -62,7 +61,7 @@ def app():
         
         if st.button("Valider"):
             with st.spinner("Calcul des métriques de maillage interne..."):
-                df = calculate_internal_link_metrics(df_main, url_end_column, min_links)
+                df = calculate_internal_link_metrics(df_main, url_start_column, url_end_column, min_links)
 
                 st.subheader("Métriques de maillage interne pour chaque URL de destination :")
                 st.write(df[[url_end_column, 'existing_links', 'links_to_keep', 'links_to_remove', 'links_to_replace']])
