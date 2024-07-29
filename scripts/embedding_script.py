@@ -129,15 +129,11 @@ def generate_embeddings(texts, api_key):
     return embeddings
 
 def app():
-    st.title("Génération des Embeddings pour un site E-commerce")
-
-    # Vérifiez le contenu des secrets
-    st.write("Contenu des secrets :", st.secrets)
+    st.title("Transformer le contenu de vos urls en Embeddings")
 
     # Lire la clé API depuis les secrets
     try:
         api_key = st.secrets["api_key"]
-        st.write("Clé API chargée avec succès.")
     except KeyError:
         st.error("Clé API OpenAI manquante dans les secrets. Veuillez la définir dans les paramètres de votre application Streamlit.")
         return
@@ -174,6 +170,9 @@ def app():
                                    mime='text/csv')
             else:
                 st.error("Veuillez entrer votre clé API OpenAI")
+
+if __name__ == "__main__":
+    app()
 
 
 
