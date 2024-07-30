@@ -6,6 +6,8 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 def clean_text(text):
+    if not isinstance(text, str):
+        text = ''
     text = text.lower()
     text = re.sub(r'[^\w\s]', '', text)
     text = re.sub(r'\d+', '', text)
