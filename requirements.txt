@@ -11,4 +11,3 @@ unidecode
 openai
 plotly
 matplotlib
-nltk
