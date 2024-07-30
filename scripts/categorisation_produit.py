@@ -68,9 +68,13 @@ def app():
                 # Obtenir les noms de collections tels quels
                 collections = df_secondary[collection_name_col].dropna().tolist()
 
+                # Nettoyer les titres et descriptions de produits
+                df_primary[product_title_col] = df_primary[product_title_col].apply(clean_text)
+                df_primary[product_desc_col] = df_primary[product_desc_col].apply(clean_text)
+
                 for i, row in df_primary.iterrows():
-                    title = clean_text(row[product_title_col])
-                    description = clean_text(row[product_desc_col])
+                    title = row[product_title_col]
+                    description = row[product_desc_col]
                     combined_text = title + " " + description
 
                     matched_collections = []
