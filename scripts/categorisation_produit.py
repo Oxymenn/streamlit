@@ -1,33 +1,14 @@
 import streamlit as st
 import pandas as pd
 import re
-import unicodedata
 from bs4 import BeautifulSoup
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from nltk.corpus import stopwords
-from nltk.stem import SnowballStemmer
 
-# Charger les stopwords français
-with open('stopwords_fr.txt', 'r', encoding='utf-8') as f:
-    stopwords_fr = set(f.read().splitlines())
-
-# Initialiser le stemmer français
-stemmer = SnowballStemmer("french")
-
-def clean_text(text):
+def remove_html_tags(text):
     if not isinstance(text, str):
-        text = ''
-    text = text.lower()  # Convertir en minuscule
-    text = re.sub(r'<.*?>', '', text)  # Supprimer le format HTML
-    text = ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')  # Supprimer les accents
-    text = re.sub(r'[^\w\s]', '', text)  # Supprimer la ponctuation
-    text = re.sub(r'\d+', '', text)  # Supprimer les chiffres
-    words = text.split()
-    words = [word for word in words if word not in stopwords_fr]  # Supprimer les stopwords
-    words = [stemmer.stem(word) for word in words]  # Mettre au singulier (stemmer)
-    text = ' '.join(words)
-    return text
+        return ''
+    return BeautifulSoup(text, "html.parser").get_text()
 
 def find_similarities(text1, text2):
     vectorizer = CountVectorizer().fit_transform([text1, text2])
@@ -68,9 +49,8 @@ def app():
                 # Obtenir les noms de collections tels quels
                 collections = df_secondary[collection_name_col].dropna().tolist()
 
-                # Nettoyer les titres et descriptions de produits
-                df_primary[product_title_col] = df_primary[product_title_col].apply(clean_text)
-                df_primary[product_desc_col] = df_primary[product_desc_col].apply(clean_text)
+                # Nettoyer la colonne de description
+                df_primary[product_desc_col] = df_primary[product_desc_col].apply(remove_html_tags)
 
                 for i, row in df_primary.iterrows():
                     title = row[product_title_col]
@@ -79,12 +59,18 @@ def app():
 
                     matched_collections = []
                     for collection in collections:
-                        similarity = find_similarities(combined_text, clean_text(collection))
-                        if similarity > 0.1:  # Seuil de similarité (ajustable)
+                        similarity_title = find_similarities(title, collection)
+                        similarity_description = find_similarities(description, collection)
+                        if similarity_title > 0.1 or similarity_description > 0.1:  # Seuil de similarité (ajustable)
                             matched_collections.append(collection)
                     
                     if matched_collections:
                         df_primary.at[i, 'Catégorisation'] = ', '.join(matched_collections)
+                
+                # S'assurer que chaque collection est associée au moins une fois
+                for collection in collections:
+                    if collection not in df_primary['Catégorisation'].str.cat(sep=', '):
+                        st.warning(f"La collection '{collection}' n'a pas été associée à un produit.")
                 
                 st.write("Données après catégorisation :", df_primary.head())
                 
@@ -102,5 +88,4 @@ def app():
                 )
 
 # Assurez-vous d'installer les packages nécessaires :
-# pip install streamlit pandas numpy scikit-learn beautifulsoup4 nltk openpyxl
-# Pour télécharger les stopwords français : nltk.download('stopwords')
+# pip install streamlit pandas scikit-learn beautifulsoup4 openpyxl
