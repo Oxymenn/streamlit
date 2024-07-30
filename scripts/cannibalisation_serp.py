@@ -8,8 +8,6 @@ from unidecode import unidecode
 import re
 import time
 import random
-from tqdm import tqdm
-import streamlit.components.v1 as components
 
 STOPWORDS = set(['de', 'à', 'pour', 'du', 'le', 'la', 'les', 'un', 'une', 'des', 'en', 'et'])
 
@@ -86,7 +84,7 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
 
     st.write("\n📊 Récupération des résultats Google...")
     google_results = {}
-    for i, kw in enumerate(tqdm(keywords, desc="Traitement des mots-clés")):
+    for i, kw in enumerate(keywords):
         results = get_google_results(kw, delay_min=delay_min, delay_max=delay_max)
         if results:
             google_results[kw] = results
@@ -103,7 +101,7 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
     similar_groups = []
     processed = set()
 
-    for i, kw1 in enumerate(tqdm(keywords, desc="Comparaison des mots-clés")):
+    for i, kw1 in enumerate(keywords):
         if i in processed:
             continue
 
