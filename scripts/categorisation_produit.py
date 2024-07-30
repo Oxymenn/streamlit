@@ -1,122 +1,71 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 import re
-import traceback
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-# Téléchargement des ressources NLTK nécessaires
-@st.cache_resource
-def download_nltk_resources():
-    nltk.download('punkt', quiet=True)
-    nltk.download('stopwords', quiet=True)
+# Fonction pour nettoyer le texte
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\d+', '', text)
+    return text
 
-download_nltk_resources()
+# Fonction pour trouver les similarités entre deux textes
+def find_similarities(text1, text2):
+    vectorizer = CountVectorizer().fit_transform([text1, text2])
+    vectors = vectorizer.toarray()
+    cosine_matrix = cosine_similarity(vectors)
+    return cosine_matrix[0][1]
 
-# Fonction pour prétraiter le texte
-def preprocess_text(text):
-    if isinstance(text, str):
-        # Conversion en minuscules
-        text = text.lower()
-        # Suppression des caractères spéciaux
-        text = re.sub(r'[^\w\s]', '', text)
-        # Tokenization
-        tokens = word_tokenize(text)
-        # Suppression des stop words
-        stop_words = set(stopwords.words('french'))
-        tokens = [word for word in tokens if word not in stop_words]
-        return ' '.join(tokens)
-    return ''
+# Titre de l'application
+st.title('Application de Catégorisation de Produits')
 
-# Fonction pour charger et traiter le fichier
-def load_and_process_file(file):
-    try:
-        if file.name.endswith('.csv'):
-            df = pd.read_csv(file)
-        elif file.name.endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(file)
-        else:
-            st.error("Format de fichier non pris en charge. Veuillez utiliser un fichier CSV ou Excel.")
-            return None
-        return df
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier: {str(e)}")
-        return None
+# Importer le fichier Excel ou CSV
+uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
 
-# Fonction pour analyser et catégoriser les produits
-def categorize_products(df, title_col, desc_col, collection_col):
-    try:
-        df['combined_text'] = df[title_col].fillna('') + ' ' + df[desc_col].fillna('')
-        df['processed_text'] = df['combined_text'].apply(preprocess_text)
-        df['processed_collection'] = df[collection_col].fillna('').apply(preprocess_text)
-        
-        tfidf = TfidfVectorizer()
-        tfidf_matrix = tfidf.fit_transform(df['processed_text'])
-        
-        collections = df['processed_collection'].unique()
-        collection_matrix = tfidf.transform(collections)
-        
-        similarity_matrix = cosine_similarity(tfidf_matrix, collection_matrix)
-        
-        threshold = 0.1  # Seuil de similarité, à ajuster selon vos besoins
-        categorization = []
-        
-        for i, row in enumerate(similarity_matrix):
-            categories = [collections[j] for j, sim in enumerate(row) if sim > threshold]
-            categorization.append(', '.join(categories) if categories else 'Non catégorisé')
-        
-        df['Catégorisation'] = categorization
-        
-        return df
-    except Exception as e:
-        st.error(f"Erreur lors de la catégorisation: {str(e)}")
-        return None
+if uploaded_file is not None:
+    # Lire le fichier
+    if uploaded_file.name.endswith('.xlsx'):
+        df = pd.read_excel(uploaded_file)
+    else:
+        df = pd.read_csv(uploaded_file)
+    
+    st.write("Aperçu des données :", df.head())
+    
+    # Sélection des colonnes
+    product_title_col = st.selectbox("Sélectionnez la colonne pour le titre du produit", df.columns)
+    product_desc_col = st.selectbox("Sélectionnez la colonne pour la description du produit", df.columns)
+    collection_name_col = st.selectbox("Sélectionnez la colonne pour le nom de collection", df.columns)
+    
+    if st.button("Catégoriser les produits"):
+        df['Catégorisation'] = ''
 
-# Interface utilisateur Streamlit
-try:
-    st.title("Catégorisation de Produits E-commerce")
-
-    uploaded_file = st.file_uploader("Choisissez un fichier CSV ou Excel", type=["csv", "xlsx", "xls"])
-
-    if uploaded_file is not None:
-        df = load_and_process_file(uploaded_file)
-        
-        if df is not None:
-            st.write("Aperçu des données :")
-            st.write(df.head())
+        # Analyse des similarités et catégorisation
+        for i, row in df.iterrows():
+            title = clean_text(row[product_title_col])
+            description = clean_text(row[product_desc_col])
+            collection_name = clean_text(row[collection_name_col])
             
-            # Sélection des colonnes
-            columns = df.columns.tolist()
-            title_col = st.selectbox("Sélectionnez la colonne pour le titre du produit", columns)
-            desc_col = st.selectbox("Sélectionnez la colonne pour la description du produit", columns)
-            collection_col = st.selectbox("Sélectionnez la colonne pour le nom de la collection", columns)
+            combined_text = title + " " + description
+            similarity = find_similarities(combined_text, collection_name)
             
-            if st.button("Lancer la catégorisation"):
-                with st.spinner("Catégorisation en cours..."):
-                    result_df = categorize_products(df, title_col, desc_col, collection_col)
-                
-                if result_df is not None:
-                    st.success("Catégorisation terminée !")
-                    st.write("Résultats de la catégorisation :")
-                    st.write(result_df)
-                    
-                    # Option pour télécharger le fichier résultant
-                    csv = result_df.to_csv(index=False)
-                    st.download_button(
-                        label="Télécharger les résultats (CSV)",
-                        data=csv,
-                        file_name="produits_categorises.csv",
-                        mime="text/csv",
-                    )
-
-    st.sidebar.header("À propos")
-    st.sidebar.info("Cette application permet de catégoriser automatiquement les produits d'une boutique e-commerce en fonction de leurs titres, descriptions et collections associées.")
-
-except Exception as e:
-    st.error("Une erreur inattendue s'est produite.")
-    st.error(f"Détails de l'erreur : {str(e)}")
-    st.error(traceback.format_exc())
+            if similarity > 0.1:  # Seuil de similarité (ajustable)
+                df.at[i, 'Catégorisation'] = collection_name
+        
+        st.write("Données après catégorisation :", df.head())
+        
+        # Télécharger le fichier modifié
+        @st.cache
+        def convert_df(df):
+            return df.to_csv(index=False).encode('utf-8')
+        
+        csv = convert_df(df)
+        
+        st.download_button(
+            label="Télécharger les données avec catégorisation",
+            data=csv,
+            file_name='produits_categorises.csv',
+            mime='text/csv',
+        )
