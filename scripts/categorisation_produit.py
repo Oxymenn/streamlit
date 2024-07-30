@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import re
 import unicodedata
 from bs4 import BeautifulSoup
@@ -74,16 +73,14 @@ def app():
                     description = clean_text(row[product_desc_col])
                     combined_text = title + " " + description
 
-                    max_similarity = 0
-                    best_match = ''
+                    matched_collections = []
                     for collection in collections:
                         similarity = find_similarities(combined_text, collection)
-                        if similarity > max_similarity:
-                            max_similarity = similarity
-                            best_match = collection
+                        if similarity > 0.1:  # Seuil de similarité (ajustable)
+                            matched_collections.append(collection)
                     
-                    if max_similarity > 0.1:  # Seuil de similarité (ajustable)
-                        df_primary.at[i, 'Catégorisation'] = best_match
+                    if matched_collections:
+                        df_primary.at[i, 'Catégorisation'] = ', '.join(matched_collections)
                 
                 st.write("Données après catégorisation :", df_primary.head())
                 
