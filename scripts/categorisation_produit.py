@@ -2,15 +2,32 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
+import unicodedata
+from bs4 import BeautifulSoup
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from nltk.corpus import stopwords
+from nltk.stem import SnowballStemmer
+
+# Charger les stopwords français
+with open('stopwords_fr.txt', 'r', encoding='utf-8') as f:
+    stopwords_fr = set(f.read().splitlines())
+
+# Initialiser le stemmer français
+stemmer = SnowballStemmer("french")
 
 def clean_text(text):
     if not isinstance(text, str):
         text = ''
-    text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    text = re.sub(r'\d+', '', text)
+    text = text.lower()  # Convertir en minuscule
+    text = re.sub(r'<.*?>', '', text)  # Supprimer le format HTML
+    text = ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')  # Supprimer les accents
+    text = re.sub(r'[^\w\s]', '', text)  # Supprimer la ponctuation
+    text = re.sub(r'\d+', '', text)  # Supprimer les chiffres
+    words = text.split()
+    words = [word for word in words if word not in stopwords_fr]  # Supprimer les stopwords
+    words = [stemmer.stem(word) for word in words]  # Mettre au singulier (stemmer)
+    text = ' '.join(words)
     return text
 
 def find_similarities(text1, text2):
@@ -63,3 +80,7 @@ def app():
                 file_name='produits_categorises.csv',
                 mime='text/csv',
             )
+
+# Assurez-vous d'installer les packages nécessaires :
+# pip install streamlit pandas numpy scikit-learn beautifulsoup4 nltk
+# Pour télécharger les stopwords français : nltk.download('stopwords')
