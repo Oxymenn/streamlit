@@ -65,8 +65,8 @@ def app():
             if st.button("Catégoriser les produits"):
                 df_primary['Catégorisation'] = ''
 
-                # Nettoyer les noms de collection une fois pour toutes
-                collections = df_secondary[collection_name_col].dropna().apply(clean_text).tolist()
+                # Obtenir les noms de collections tels quels
+                collections = df_secondary[collection_name_col].dropna().tolist()
 
                 for i, row in df_primary.iterrows():
                     title = clean_text(row[product_title_col])
@@ -75,7 +75,7 @@ def app():
 
                     matched_collections = []
                     for collection in collections:
-                        similarity = find_similarities(combined_text, collection)
+                        similarity = find_similarities(combined_text, clean_text(collection))
                         if similarity > 0.1:  # Seuil de similarité (ajustable)
                             matched_collections.append(collection)
                     
