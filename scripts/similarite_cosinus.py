@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import ast
+import openpyxl
+from openpyxl.styles import PatternFill
 
 def load_file(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1]
@@ -64,22 +66,34 @@ def close_loop(url_to_dest):
 
     return balanced_dest
 
-def color_similarity(val):
-    try:
-        val = float(val)
-        if 0.9 <= val <= 1:
-            color = '#149414'
-        elif 0.8 <= val < 0.9:
-            color = '#16B84E'
-        elif 0.75 <= val < 0.8:
-            color = '#B0F2B6'
-        elif 0.6 <= val < 0.75:
-            color = '#ff4c4c'
-        else:
-            color = '#e50000'
-    except ValueError:
-        color = ''
-    return f'background-color: {color}'
+def apply_color(sheet, cell, score):
+    if 0.9 <= score <= 1:
+        fill = PatternFill(start_color='149414', end_color='149414', fill_type='solid')
+    elif 0.8 <= score < 0.9:
+        fill = PatternFill(start_color='16B84E', end_color='16B84E', fill_type='solid')
+    elif 0.75 <= score < 0.8:
+        fill = PatternFill(start_color='B0F2B6', end_color='B0F2B6', fill_type='solid')
+    elif 0.6 <= score < 0.75:
+        fill = PatternFill(start_color='ff4c4c', end_color='ff4c4c', fill_type='solid')
+    else:
+        fill = PatternFill(start_color='e50000', end_color='e50000', fill_type='solid')
+    sheet[cell].fill = fill
+
+def save_to_excel(similarity_table):
+    file_name = 'similarity_table.xlsx'
+    similarity_table.to_excel(file_name, index=False, engine='openpyxl')
+    wb = openpyxl.load_workbook(file_name)
+    sheet = wb.active
+
+    for row in range(2, sheet.max_row + 1):
+        scores = sheet.cell(row=row, column=3).value.split(", ")
+        for idx, score in enumerate(scores):
+            score = float(score)
+            cell = f'C{row}'
+            apply_color(sheet, cell, score)
+
+    wb.save(file_name)
+    return file_name
 
 def app():
     st.title("Analyse de Similarité Cosinus des URL")
@@ -123,8 +137,8 @@ def app():
                 st.write("Tableau des similarités :")
                 st.write(similarity_table)
                 
-                csv = similarity_table.to_csv(index=False).encode('utf-8')
-                st.download_button(label="Télécharger le tableau en CSV", data=csv, file_name='similarity_table.csv', mime='text/csv')
+                excel_file = save_to_excel(similarity_table)
+                st.download_button(label="Télécharger le tableau en Excel", data=open(excel_file, 'rb').read(), file_name='similarity_table.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     
     if 'similarities' in st.session_state:
         df = st.session_state.df
@@ -163,11 +177,6 @@ def app():
             report_df = pd.DataFrame(report_data)
             report_csv = report_df.to_csv(index=False).encode('utf-8')
             st.download_button(label="Télécharger le rapport en CSV", data=report_csv, file_name=f'similarity_report_{selected_url}.csv', mime='text/csv')
-            
-            # Appliquer le style de coloration
-            report_df = report_df.sort_values(by="Scores de similarité", ascending=False)
-            styled_df = report_df.style.applymap(color_similarity, subset=["Scores de similarité"])
-            st.write(styled_df)
 
 if __name__ == "__main__":
     app()
