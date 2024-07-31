@@ -5,6 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import ast
 import openpyxl
 from openpyxl.styles import PatternFill
+import tempfile
 
 def load_file(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1]
@@ -12,7 +13,7 @@ def load_file(uploaded_file):
         df = pd.read_excel(uploaded_file, engine='openpyxl')
     elif file_type == 'csv':
         df = pd.read_csv(uploaded_file)
-    return df
+    return df, uploaded_file.name
 
 def preprocess_embeddings(df, embedding_col):
     # Convertir les chaînes de caractères en listes de nombres si nécessaire
@@ -78,7 +79,7 @@ def app():
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
     
     if uploaded_file:
-        df = load_file(uploaded_file)
+        df, file_name = load_file(uploaded_file)
         st.write("Aperçu des données :")
         st.write(df.head())
         
@@ -104,12 +105,13 @@ def app():
                 st.write("Tableau des similarités :")
                 st.write(similarity_table)
                 
-                excel_file = save_to_excel(similarity_table, 'similarity_table.xlsx')
-                with open(excel_file, 'rb') as f:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                    excel_file = save_to_excel(similarity_table, tmp_file.name)
+                    tmp_file.seek(0)
                     st.download_button(
                         label="Télécharger le tableau en Excel",
-                        data=f,
-                        file_name='similarity_table.xlsx',
+                        data=tmp_file.read(),
+                        file_name=f'similarite_semantique_{file_name.split(".")[0]}.xlsx',
                         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                     )
     
@@ -149,12 +151,13 @@ def app():
             st.write(f"Top {num_links} URLs les plus similaires à {selected_url} :")
             st.write(report_df)
             
-            excel_report_file = save_to_excel(report_df, f'similarity_report_{selected_url}.xlsx')
-            with open(excel_report_file, 'rb') as f:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                excel_report_file = save_to_excel(report_df, tmp_file.name)
+                tmp_file.seek(0)
                 st.download_button(
                     label="Télécharger le rapport en Excel",
-                    data=f,
-                    file_name=f'similarity_report_{selected_url}.xlsx',
+                    data=tmp_file.read(),
+                    file_name=f'similarite_semantique_{selected_url}.xlsx',
                     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 )
 
