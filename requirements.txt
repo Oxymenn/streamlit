@@ -13,4 +13,3 @@ plotly
 matplotlib
 nltk
 transformers
-xlsxwriter
