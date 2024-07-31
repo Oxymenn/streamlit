@@ -12,3 +12,5 @@ openai
 plotly
 matplotlib
 nltk
+gensim
+transformers
