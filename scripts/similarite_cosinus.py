@@ -39,12 +39,14 @@ def generate_similarity_table(df, url_column, similarities, num_links):
                 similar_scores.append(similarity_scores[idx])
                 count += 1
         url_to_dest[row[url_column]] = similar_urls
-        similarity_data.append({
-            "URL de départ": row[url_column],
-            "URLs de destination": ", ".join(similar_urls),
-            "Scores de similarité": ", ".join(map(str, similar_scores))
-        })
+        for url, score in zip(similar_urls, similar_scores):
+            similarity_data.append({
+                "URL de départ": row[url_column],
+                "URL de destination": url,
+                "Score de similarité": score
+            })
     similarity_df = pd.DataFrame(similarity_data)
+    similarity_df = similarity_df.sort_values(by="Score de similarité", ascending=False)
     return similarity_df, url_to_dest
 
 def close_loop(url_to_dest):
@@ -87,12 +89,9 @@ def save_to_excel(similarity_table):
 
     for row in range(2, sheet.max_row + 1):
         cell_value = sheet.cell(row=row, column=3).value
-        if isinstance(cell_value, str):
-            scores = cell_value.split(", ")
-            for score in scores:
-                score = float(score)
-                cell = f'C{row}'
-                apply_color(sheet, cell, score)
+        if isinstance(cell_value, (int, float)):
+            cell = f'C{row}'
+            apply_color(sheet, cell, cell_value)
 
     wb.save(file_name)
     return file_name
