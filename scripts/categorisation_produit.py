@@ -4,7 +4,6 @@ import re
 from bs4 import BeautifulSoup
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from gensim.models import Word2Vec
 from transformers import BertModel, BertTokenizer
 import torch
 
@@ -20,25 +19,21 @@ def clean_text(text):
     text = re.sub(r'[^\w\s]', '', text)
     return text
 
-def get_embedding(text, model, tokenizer):
+def get_bert_embedding(text, model, tokenizer):
     inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True)
     outputs = model(**inputs)
     return outputs.last_hidden_state.mean(dim=1).detach().numpy()
 
-def find_similarities(text1, text2, vectorizers, w2v_model, bert_model, bert_tokenizer):
+def find_similarities(text1, text2, vectorizers, bert_model, bert_tokenizer):
     vectors1 = [vectorizer.transform([text1]).toarray() for vectorizer in vectorizers]
     vectors2 = [vectorizer.transform([text2]).toarray() for vectorizer in vectorizers]
-    
-    w2v_vector1 = w2v_model.wv[text1.split()]
-    w2v_vector2 = w2v_model.wv[text2.split()]
-    w2v_similarity = cosine_similarity([w2v_vector1.mean(axis=0)], [w2v_vector2.mean(axis=0)])[0][0]
-    
-    bert_vector1 = get_embedding(text1, bert_model, bert_tokenizer)
-    bert_vector2 = get_embedding(text2, bert_model, bert_tokenizer)
+
+    bert_vector1 = get_bert_embedding(text1, bert_model, bert_tokenizer)
+    bert_vector2 = get_bert_embedding(text2, bert_model, bert_tokenizer)
     bert_similarity = cosine_similarity(bert_vector1, bert_vector2)[0][0]
-    
+
     similarities = [cosine_similarity(v1, v2)[0][0] for v1, v2 in zip(vectors1, vectors2)]
-    similarities.extend([w2v_similarity, bert_similarity])
+    similarities.append(bert_similarity)
     return sum(similarities) / len(similarities)
 
 def app():
@@ -91,9 +86,6 @@ def app():
                 count_vectorizer = CountVectorizer().fit(df_primary['combined_text'].tolist() + cleaned_collections)
                 vectorizers = [tfidf_vectorizer, count_vectorizer]
 
-                # Charger Word2Vec
-                w2v_model = Word2Vec(sentences=[text.split() for text in df_primary['combined_text']], vector_size=100, window=5, min_count=1, workers=4)
-
                 # Charger BERT
                 bert_model = BertModel.from_pretrained('bert-base-uncased')
                 bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -102,7 +94,7 @@ def app():
                     combined_text = row['combined_text']
                     matched_collections = []
                     for collection, cleaned_collection in zip(collections, cleaned_collections):
-                        similarity = find_similarities(combined_text, cleaned_collection, vectorizers, w2v_model, bert_model, bert_tokenizer)
+                        similarity = find_similarities(combined_text, cleaned_collection, vectorizers, bert_model, bert_tokenizer)
                         if similarity > 0.1:  # Seuil de similarité (ajustable)
                             matched_collections.append(collection)
 
@@ -130,4 +122,4 @@ def app():
                 )
 
 # Assurez-vous d'installer les packages nécessaires :
-# pip install streamlit pandas scikit-learn beautifulsoup4 openpyxl gensim transformers torch
+# pip install streamlit pandas scikit-learn beautifulsoup4 openpyxl transformers torch
