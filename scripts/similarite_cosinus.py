@@ -60,9 +60,8 @@ def apply_color(sheet, row, column, score):
         fill = PatternFill(start_color='e50000', end_color='e50000', fill_type='solid')
     sheet.cell(row=row, column=column).fill = fill
 
-def save_to_excel(similarity_table):
-    file_name = 'similarity_table.xlsx'
-    similarity_table.to_excel(file_name, index=False, engine='openpyxl')
+def save_to_excel(dataframe, file_name):
+    dataframe.to_excel(file_name, index=False, engine='openpyxl')
     wb = openpyxl.load_workbook(file_name)
     sheet = wb.active
 
@@ -105,7 +104,7 @@ def app():
                 st.write("Tableau des similarités :")
                 st.write(similarity_table)
                 
-                excel_file = save_to_excel(similarity_table)
+                excel_file = save_to_excel(similarity_table, 'similarity_table.xlsx')
                 with open(excel_file, 'rb') as f:
                     st.download_button(
                         label="Télécharger le tableau en Excel",
@@ -131,26 +130,33 @@ def app():
             similarity_scores = similarities[selected_index]
             similar_indices = np.argsort(similarity_scores)[::-1]
             similar_urls = []
+            similar_scores = []
             count = 0
             for idx in similar_indices:
                 if df[url_column].iloc[idx] != selected_url and count < num_links:
                     similar_urls.append(df[url_column].iloc[idx])
+                    similar_scores.append(similarity_scores[idx])
                     count += 1
-            similar_scores = similarity_scores[[df[url_column].iloc[idx] != selected_url for idx in similar_indices]][:num_links]
             
-            st.write(f"Top {num_links} URLs les plus similaires à {selected_url} :")
-            for url, score in zip(similar_urls, similar_scores):
-                st.write(f"{url} (Score: {score})")
-            
-            # Télécharger les résultats du deuxième rapport en CSV
             report_data = {
-                "URL de référence": selected_url,
+                "URL de référence": [selected_url] * len(similar_urls),
                 "URLs similaires": similar_urls,
                 "Scores de similarité": similar_scores
             }
             report_df = pd.DataFrame(report_data)
-            report_csv = report_df.to_csv(index=False).encode('utf-8')
-            st.download_button(label="Télécharger le rapport en CSV", data=report_csv, file_name=f'similarity_report_{selected_url}.csv', mime='text/csv')
+            report_df = report_df.sort_values(by="Scores de similarité", ascending=False)
+            
+            st.write(f"Top {num_links} URLs les plus similaires à {selected_url} :")
+            st.write(report_df)
+            
+            excel_report_file = save_to_excel(report_df, f'similarity_report_{selected_url}.xlsx')
+            with open(excel_report_file, 'rb') as f:
+                st.download_button(
+                    label="Télécharger le rapport en Excel",
+                    data=f,
+                    file_name=f'similarity_report_{selected_url}.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
 
 if __name__ == "__main__":
     app()
