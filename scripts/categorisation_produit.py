@@ -21,8 +21,9 @@ def clean_text(text):
 
 def get_bert_embedding(text, model, tokenizer):
     inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True)
-    outputs = model(**inputs)
-    return outputs.last_hidden_state.mean(dim=1).detach().numpy()
+    with torch.no_grad():
+        outputs = model(**inputs)
+    return outputs.last_hidden_state.mean(dim=1).numpy()
 
 def find_similarities(text1, text2, vectorizers, bert_model, bert_tokenizer):
     vectors1 = [vectorizer.transform([text1]).toarray() for vectorizer in vectorizers]
@@ -90,12 +91,20 @@ def app():
                 bert_model = BertModel.from_pretrained('bert-base-uncased')
                 bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
+                # Calculer les embeddings BERT pour les collections
+                collection_embeddings = [get_bert_embedding(collection, bert_model, bert_tokenizer) for collection in cleaned_collections]
+
                 for i, row in df_primary.iterrows():
                     combined_text = row['combined_text']
                     matched_collections = []
-                    for collection, cleaned_collection in zip(collections, cleaned_collections):
+                    product_bert_embedding = get_bert_embedding(combined_text, bert_model, bert_tokenizer)
+                    
+                    for collection, cleaned_collection, collection_embedding in zip(collections, cleaned_collections, collection_embeddings):
                         similarity = find_similarities(combined_text, cleaned_collection, vectorizers, bert_model, bert_tokenizer)
-                        if similarity > 0.1:  # Seuil de similarité (ajustable)
+                        bert_similarity = cosine_similarity(product_bert_embedding, collection_embedding)[0][0]
+                        final_similarity = (similarity + bert_similarity) / 2  # Moyenne des similarités
+                        
+                        if final_similarity > 0.1:  # Seuil de similarité (ajustable)
                             matched_collections.append(collection)
 
                     if matched_collections:
