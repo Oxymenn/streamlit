@@ -86,11 +86,13 @@ def save_to_excel(similarity_table):
     sheet = wb.active
 
     for row in range(2, sheet.max_row + 1):
-        scores = sheet.cell(row=row, column=3).value.split(", ")
-        for idx, score in enumerate(scores):
-            score = float(score)
-            cell = f'C{row}'
-            apply_color(sheet, cell, score)
+        cell_value = sheet.cell(row=row, column=3).value
+        if isinstance(cell_value, str):
+            scores = cell_value.split(", ")
+            for score in scores:
+                score = float(score)
+                cell = f'C{row}'
+                apply_color(sheet, cell, score)
 
     wb.save(file_name)
     return file_name
