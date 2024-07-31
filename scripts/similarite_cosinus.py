@@ -29,15 +29,18 @@ def generate_similarity_table(df, url_column, similarities, num_links):
         similarity_scores = similarities[index]
         similar_indices = np.argsort(similarity_scores)[::-1]
         similar_urls = []
+        similar_scores = []
         count = 0
         for idx in similar_indices:
             if df[url_column].iloc[idx] != row[url_column] and count < num_links:
                 similar_urls.append(df[url_column].iloc[idx])
+                similar_scores.append(similarity_scores[idx])
                 count += 1
         url_to_dest[row[url_column]] = similar_urls
         similarity_data.append({
             "URL de départ": row[url_column],
-            "URLs de destination": ", ".join(similar_urls)
+            "URLs de destination": ", ".join(similar_urls),
+            "Scores de similarité": ", ".join(map(str, similar_scores))
         })
     similarity_df = pd.DataFrame(similarity_data)
     return similarity_df, url_to_dest
@@ -60,6 +63,23 @@ def close_loop(url_to_dest):
                 balanced_dest[url].append(dest)
 
     return balanced_dest
+
+def color_similarity(val):
+    try:
+        val = float(val)
+        if 0.9 <= val <= 1:
+            color = '#149414'
+        elif 0.8 <= val < 0.9:
+            color = '#16B84E'
+        elif 0.75 <= val < 0.8:
+            color = '#B0F2B6'
+        elif 0.6 <= val < 0.75:
+            color = '#ff4c4c'
+        else:
+            color = '#e50000'
+    except ValueError:
+        color = ''
+    return f'background-color: {color}'
 
 def app():
     st.title("Analyse de Similarité Cosinus des URL")
@@ -143,6 +163,11 @@ def app():
             report_df = pd.DataFrame(report_data)
             report_csv = report_df.to_csv(index=False).encode('utf-8')
             st.download_button(label="Télécharger le rapport en CSV", data=report_csv, file_name=f'similarity_report_{selected_url}.csv', mime='text/csv')
+            
+            # Appliquer le style de coloration
+            report_df = report_df.sort_values(by="Scores de similarité", ascending=False)
+            styled_df = report_df.style.applymap(color_similarity, subset=["Scores de similarité"])
+            st.write(styled_df)
 
 if __name__ == "__main__":
     app()
