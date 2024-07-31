@@ -136,7 +136,7 @@ def app():
             
             # Télécharger les résultats du deuxième rapport en CSV
             report_data = {
-                "URL de départ": selected_url,
+                "URL de référence": selected_url,
                 "URLs similaires": similar_urls,
                 "Scores de similarité": similar_scores
             }
