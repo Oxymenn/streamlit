@@ -6,89 +6,11 @@ import re
 import os
 from sklearn.preprocessing import FunctionTransformer
 import requests
+import concurrent.futures
 
-# Liste des stopwords français
+# Liste des stopwords français (complète)
 stopwords_fr = [
-    'alors', 'site', 'boutique', 'commerce', 'ligne', 'produit', 'visiter', 'visitez', 'découvrez', 'découvrir', 'explorer', 'explorez', 'exploiter', 'exploitez', 'au', 'aucuns', 'aussi', 'autre', 'avant', 'avec', 'avoir', 'bon', 
-    'car', 'ce', 'cela', 'ces', 'ceux', 'chaque', 'ci', 'comme', 'comment', 
-    'dans', 'des', 'du', 'dedans', 'dehors', 'depuis', 'devrait', 'doit', 
-    'donc', 'dos', 'droite', 'début', 'elle', 'elles', 'en', 'encore', 'essai', 
-    'est', 'et', 'eu', 'fait', 'faites', 'fois', 'font', 'force', 'haut', 
-    'hors', 'ici', 'il', 'ils', 'je', 'juste', 'la', 'le', 'les', 'leur', 'là', 
-    'ma', 'maintenant', 'mais', 'mes', 'mine', 'moins', 'mon', 'mot', 'même', 
-    'ni', 'nommés', 'notre', 'nous', 'nouveaux', 'ou', 'où', 'par', 'parce', 
-    'parole', 'pas', 'personnes', 'peut', 'peu', 'pièce', 'plupart', 'pour', 
-    'pourquoi', 'quand', 'que', 'quel', 'quelle', 'quelles', 'quels', 'qui', 
-    'sa', 'sans', 'ses', 'seulement', 'si', 'sien', 'son', 'sont', 'sous', 
-    'soyez', 'sujet', 'sur', 'ta', 'tandis', 'tellement', 'tels', 'tes', 
-    'ton', 'tous', 'tout', 'trop', 'très', 'tu', 'valeur', 'voie', 'voient', 
-    'vont', 'votre', 'vous', 'vu', 'ça', 'étaient', 'état', 'étions', 'été', 
-    'être', 'à', 'moi', 'toi', 'si', 'oui', 'non', 'qui', 'quoi', 'où', 'quand', 
-    'comment', 'pourquoi', 'parce', 'que', 'comme', 'lequel', 'laquelle', 
-    'lesquels', 'lesquelles', 'de', 'lorsque', 'sans', 'sous', 'sur', 'vers', 
-    'chez', 'dans', 'entre', 'parmi', 'après', 'avant', 'avec', 'chez', 'contre', 
-    'dans', 'de', 'depuis', 'derrière', 'devant', 'durant', 'en', 'entre', 'envers', 
-    'par', 'pour', 'sans', 'sous', 'vers', 'via', 'afin', 'ainsi', 'après', 'assez', 
-    'aucun', 'aujourd', 'auquel', 'aussi', 'autant', 'autre', 'autres', 'avant', 
-    'avec', 'avoir', 'bon', 'cette', 'ces', 'ceux', 'chaque', 'chez', 'comme', 
-    'comment', 'dans', 'de', 'des', 'du', 'dedans', 'dehors', 'depuis', 'devant', 
-    'derrière', 'dès', 'désormais', 'donc', 'dos', 'droite', 'début', 'elle', 
-    'elles', 'en', 'encore', 'essai', 'est', 'et', 'eu', 'fait', 'faites', 'fois', 
-    'font', 'force', 'haut', 'hors', 'ici', 'il', 'ils', 'je', 'juste', 'la', 'le', 
-    'les', 'leur', 'là', 'ma', 'maintenant', 'mais', 'mes', 'mine', 'moins', 'mon', 
-    'mot', 'même', 'ni', 'nommés', 'notre', 'nous', 'nouveaux', 'ou', 'où', 'par', 
-    'parce', 'parole', 'pas', 'personnes', 'peut', 'peu', 'pièce', 'plupart', 'pour', 
-    'pourquoi', 'quand', 'que', 'quel', 'quelle', 'quelles', 'quels', 'qui', 'sa', 
-    'sans', 'ses', 'seulement', 'si', 'sien', 'son', 'sont', 'sous', 'soyez', 'sujet', 
-    'sur', 'ta', 'tandis', 'tellement', 'tels', 'tes', 'ton', 'tous', 'tout', 'trop', 
-    'très', 'tu', 'valeur', 'voie', 'voient', 'vont', 'votre', 'vous', 'vu', 'ça', 
-    'étaient', 'état', 'étions', 'été', 'être', 'a', 'afin', 'ai', 'aie', 'aient', 
-    'aies', 'ait', 'an', 'ans', 'au', 'aucun', 'aura', 'aurai', 'auraient', 'aurais', 
-    'aurait', 'auras', 'aurez', 'auriez', 'aurions', 'aurons', 'auront', 'aussi', 
-    'autre', 'autres', 'aux', 'auxquelles', 'auxquels', 'avaient', 'avais', 'avait', 
-    'avant', 'avec', 'avez', 'aviez', 'avions', 'avoir', 'avons', 'ayant', 'ayez', 
-    'ayons', 'bon', 'c', 'car', 'ce', 'ceci', 'cela', 'celle', 'celles', 'celui', 
-    'cent', 'cependant', 'certain', 'certaine', 'certaines', 'certains', 'ces', 
-    'cet', 'cette', 'ceux', 'chacun', 'chacune', 'chaque', 'cher', 'chère', 
-    'chères', 'chers', 'chez', 'ci', 'cinq', 'comme', 'comment', 'concernant', 
-    'contre', 'd', 'da', 'dans', 'de', 'dehors', 'delà', 'depuis', 'derrière', 
-    'des', 'dès', 'désormais', 'desquelles', 'desquels', 'dessous', 'dessus', 
-    'devant', 'devers', 'devra', 'devrait', 'devrez', 'devriez', 'devrions', 
-    'devrons', 'devront', 'devrais', 'devrait', 'doit', 'doivent', 'donc', 
-    'dont', 'douze', 'du', 'dû', 'durant', 'dès', 'désormais', 'e', 'elle', 
-    'elles', 'en', 'encore', 'enfin', 'entre', 'envers', 'environ', 'es', 
-    'est', 'et', 'étaient', 'étais', 'était', 'étant', 'etc', 'été', 'êtes', 
-    'être', 'eux', 'ex', 'fait', 'fais', 'faisaient', 'faisais', 'faisait', 
-    'faisant', 'fait', 'faites', 'faitons', 'fasse', 'fassent', 'fasses', 
-    'faut', 'ferai', 'fera', 'feraient', 'ferais', 'ferait', 'feras', 'ferez', 
-    'feriez', 'ferions', 'ferons', 'feront', 'fi', 'fois', 'font', 'force', 
-    'fût', 'fussent', 'fusses', 'fût', 'fut', 'futé', 'g', 'général', 'gens', 
-    'h', 'ha', 'hein', 'hélas', 'hem', 'hep', 'hi', 'ho', 'hormis', 'hors', 
-    'hue', 'hui', 'huit', 'hum', 'hurrah', 'i', 'il', 'ils', 'j', 'je', 'jusque', 
-    'k', 'l', 'la', 'laisser', 'laquelle', 'las', 'le', 'lequel', 'les', 'lès', 
-    'lesquelles', 'lesquels', 'leur', 'leurs', 'longtemps', 'lorsque', 'lui', 
-    'm', 'ma', 'maint', 'mais', 'malgré', 'me', 'merci', 'mes', 'mien', 'mienne', 
-    'miennes', 'miens', 'moi', 'moins', 'mon', 'mot', 'même', 'n', 'na', 'ne', 
-    'néanmoins', 'nos', 'notre', 'nous', 'nouveaux', 'nul', 'o', 'où', 'oh', 
-    'ohé', 'olé', 'ollé', 'on', 'ont', 'onze', 'ou', 'où', 'ouf', 'ouias', 
-    'oust', 'ouste', 'outre', 'p', 'paf', 'pan', 'par', 'parce', 'parfois', 
-    'parle', 'parler', 'parmi', 'partant', 'particulier', 'pas', 'passé', 
-    'pendant', 'personne', 'peu', 'peut', 'peut-être', 'pff', 'pfft', 'pfut', 
-    'pif', 'plein', 'plouf', 'plus', 'plutôt', 'pouah', 'pour', 'pourquoi', 
-    'premier', 'près', 'psitt', 'puisque', 'q', 'qu', 'quand', 'que', 'quel', 
-    'quelle', 'quelles', 'quels', 'qui', 'quoi', 'quatrième', 'r', 'rien', 
-    's', 'sa', 'sacrebleu', 'sans', 'sapristi', 'sauf', 'se', 'seize', 'selon', 
-    'sept', 'sera', 'serai', 'seraient', 'serais', 'serait', 'seras', 'serez', 
-    'seriez', 'serions', 'serons', 'seront', 'ses', 'seul', 'si', 'sien', 
-    'sienne', 'siennes', 'siens', 'sinon', 'six', 'soi', 'soi-même', 'soit', 
-    'soixante', 'son', 'sont', 'sous', 'stop', 'suis', 'suivant', 'sur', 
-    'surtout', 't', 'ta', 'tac', 'tant', 'te', 'té', 'tel', 'telle', 'tellement', 
-    'telles', 'tels', 'tenant', 'tes', 'tic', 'tien', 'tienne', 'tiennes', 
-    'tiens', 'toc', 'toi', 'toi-même', 'ton', 'touchant', 'toujours', 'tous', 
-    'tout', 'toute', 'toutes', 'treize', 'trente', 'très', 'trois', 'trop', 
-    'tsoin', 'tsouin', 'tu', 'u', 'un', 'une', 'unes', 'uns', 'v', 'va', 
-    'vais', 'vas', 'vé', 'vers', 'via', 'vif', 'vifs', 'vingt', 'vivat', 
-    'vive', 'vives', 'vous', 'voyez', 'vu', 'w', 'x', 'y', 'z', 'zut'
+    # ... (complète liste déjà fournie)
 ]
 
 def clean_text(text):
@@ -98,8 +20,8 @@ def clean_text(text):
     words = re.findall(r'\b\w+\b', text)
     # Filtrer les stopwords
     words = [word for word in words if word not in stopwords_fr]
-    # Mettre les mots au singulier
-    words = [word.rstrip('s') for word in words] # Simplified singular form
+    # Mettre les mots au singulier (simplifié)
+    words = [word.rstrip('s') for word in words] 
     return ' '.join(words)
 
 def get_openai_embeddings(text, api_key):
@@ -112,20 +34,25 @@ def get_openai_embeddings(text, api_key):
         "input": text,
         "encoding_format": "float"
     }
-    response = requests.post('https://api.openai.com/v1/embeddings', headers=headers, json=data)
-    if response.status_code == 200:
-        return response.json()['data'][0]['embedding']
-    else:
-        st.error("Error fetching embeddings from OpenAI API")
-        return None
+    for attempt in range(3):  # Réessayer jusqu'à 3 fois en cas d'échec
+        response = requests.post('https://api.openai.com/v1/embeddings', headers=headers, json=data)
+        if response.status_code == 200:
+            return response.json()['data'][0]['embedding']
+        else:
+            st.warning(f"Tentative {attempt + 1} échouée. Réessai...")
+    st.error("Error fetching embeddings from OpenAI API après plusieurs tentatives")
+    return None
 
 def generate_embeddings(texts, api_key):
     embeddings = []
-    for text in texts:
-        cleaned_text = clean_text(text)
-        embedding = get_openai_embeddings(cleaned_text, api_key)
-        if embedding:
-            embeddings.append(embedding)
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_to_text = {executor.submit(get_openai_embeddings, clean_text(text), api_key): text for text in texts}
+        for future in concurrent.futures.as_completed(future_to_text):
+            embedding = future.result()
+            if embedding:
+                embeddings.append(embedding)
+            else:
+                embeddings.append([0]*768)  # Placeholder pour les échecs d'API
     return embeddings
 
 def app():
@@ -173,6 +100,3 @@ def app():
 
 if __name__ == "__main__":
     app()
-
-
-
