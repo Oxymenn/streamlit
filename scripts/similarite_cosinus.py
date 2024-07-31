@@ -26,7 +26,6 @@ def calculate_cosine_similarity(embeddings):
 
 def generate_similarity_table(df, url_column, similarities, num_links):
     similarity_data = []
-    url_to_dest = {url: [] for url in df[url_column]}
     for index, row in df.iterrows():
         similarity_scores = similarities[index]
         similar_indices = np.argsort(similarity_scores)[::-1]
@@ -38,7 +37,6 @@ def generate_similarity_table(df, url_column, similarities, num_links):
                 similar_urls.append(df[url_column].iloc[idx])
                 similar_scores.append(similarity_scores[idx])
                 count += 1
-        url_to_dest[row[url_column]] = similar_urls
         for url, score in zip(similar_urls, similar_scores):
             similarity_data.append({
                 "URL de départ": row[url_column],
@@ -47,28 +45,9 @@ def generate_similarity_table(df, url_column, similarities, num_links):
             })
     similarity_df = pd.DataFrame(similarity_data)
     similarity_df = similarity_df.sort_values(by="Score de similarité", ascending=False)
-    return similarity_df, url_to_dest
+    return similarity_df
 
-def close_loop(url_to_dest):
-    # Create a dictionary to count incoming links
-    url_incoming_links = {url: 0 for url in url_to_dest.keys()}
-
-    # Increment the incoming links count
-    for dest_urls in url_to_dest.values():
-        for dest in dest_urls:
-            if dest in url_incoming_links:
-                url_incoming_links[dest] += 1
-
-    # Balance the links to ensure each URL gets the same number of links
-    balanced_dest = {url: [] for url in url_to_dest.keys()}
-    for url, dest_urls in url_to_dest.items():
-        for dest in dest_urls:
-            if len(balanced_dest[dest]) < 4:  # Ensure each URL gets max 4 incoming links
-                balanced_dest[url].append(dest)
-
-    return balanced_dest
-
-def apply_color(sheet, cell, score):
+def apply_color(sheet, row, column, score):
     if 0.9 <= score <= 1:
         fill = PatternFill(start_color='149414', end_color='149414', fill_type='solid')
     elif 0.8 <= score < 0.9:
@@ -79,7 +58,7 @@ def apply_color(sheet, cell, score):
         fill = PatternFill(start_color='ff4c4c', end_color='ff4c4c', fill_type='solid')
     else:
         fill = PatternFill(start_color='e50000', end_color='e50000', fill_type='solid')
-    sheet[cell].fill = fill
+    sheet.cell(row=row, column=column).fill = fill
 
 def save_to_excel(similarity_table):
     file_name = 'similarity_table.xlsx'
@@ -88,10 +67,9 @@ def save_to_excel(similarity_table):
     sheet = wb.active
 
     for row in range(2, sheet.max_row + 1):
-        cell_value = sheet.cell(row=row, column=3).value
-        if isinstance(cell_value, (int, float)):
-            cell = f'C{row}'
-            apply_color(sheet, cell, cell_value)
+        score = sheet.cell(row=row, column=3).value
+        if isinstance(score, (int, float)):
+            apply_color(sheet, row, 3, score)
 
     wb.save(file_name)
     return file_name
@@ -121,18 +99,7 @@ def app():
                 
                 st.write("Calcul de la similarité terminé avec succès !")
                 
-                similarity_table, url_to_dest = generate_similarity_table(df, url_column, similarities, st.session_state.num_links)
-                balanced_dest = close_loop(url_to_dest)
-
-                # Mettre à jour le tableau des similarités avec les liens équilibrés
-                similarity_data = []
-                for url, dest_urls in balanced_dest.items():
-                    similarity_data.append({
-                        "URL de départ": url,
-                        "URLs de destination": ", ".join(dest_urls)
-                    })
-                similarity_table = pd.DataFrame(similarity_data)
-
+                similarity_table = generate_similarity_table(df, url_column, similarities, st.session_state.num_links)
                 st.session_state.similarity_table = similarity_table
                 
                 st.write("Tableau des similarités :")
