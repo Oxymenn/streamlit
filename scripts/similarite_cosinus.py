@@ -133,6 +133,16 @@ def app():
             st.write(f"Top {num_links} URLs les plus similaires à {selected_url} :")
             for url, score in zip(similar_urls, similar_scores):
                 st.write(f"{url} (Score: {score})")
+            
+            # Télécharger les résultats du deuxième rapport en CSV
+            report_data = {
+                "URL de départ": selected_url,
+                "URLs similaires": similar_urls,
+                "Scores de similarité": similar_scores
+            }
+            report_df = pd.DataFrame(report_data)
+            report_csv = report_df.to_csv(index=False).encode('utf-8')
+            st.download_button(label="Télécharger le rapport en CSV", data=report_csv, file_name=f'similarity_report_{selected_url}.csv', mime='text/csv')
 
 if __name__ == "__main__":
     app()
