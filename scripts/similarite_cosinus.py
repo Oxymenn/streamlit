@@ -106,7 +106,13 @@ def app():
                 st.write(similarity_table)
                 
                 excel_file = save_to_excel(similarity_table)
-                st.download_button(label="Télécharger le tableau en Excel", data=open(excel_file, 'rb').read(), file_name='similarity_table.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                with open(excel_file, 'rb') as f:
+                    st.download_button(
+                        label="Télécharger le tableau en Excel",
+                        data=f,
+                        file_name='similarity_table.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
     
     if 'similarities' in st.session_state:
         df = st.session_state.df
@@ -144,7 +150,7 @@ def app():
             }
             report_df = pd.DataFrame(report_data)
             report_csv = report_df.to_csv(index=False).encode('utf-8')
-            st.download_button(label="Télécharger le rapport en CSV", data=report_csv, file_name=f'similarity_report_{selected_url}.xlsx', mime='text/csv')
+            st.download_button(label="Télécharger le rapport en CSV", data=report_csv, file_name=f'similarity_report_{selected_url}.csv', mime='text/csv')
 
 if __name__ == "__main__":
     app()
