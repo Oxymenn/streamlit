@@ -32,6 +32,7 @@ def main():
                 df = pd.read_excel(uploaded_file)
 
             st.write("Fichier chargé avec succès.")
+            st.write(df.head())  # Afficher les premières lignes du DataFrame pour vérification
 
             # Sélectionner les colonnes des mots clés et des volumes
             keyword_column = st.selectbox("Sélectionner la colonne des mots clés", df.columns)
