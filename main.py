@@ -4,6 +4,7 @@ from scripts import similarite_cosinus
 from scripts import audit_maillage_interne
 from scripts import cannibalisation_serp
 from scripts import categorisation_produit
+from scripts import test_cannibalisation
 
 # Configuration des pages
 PAGES = {
@@ -11,7 +12,8 @@ PAGES = {
     "Similarité Cosinus": similarite_cosinus,
     "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
-    "Catégorisation des produits": categorisation_produit
+    "Catégorisation des produits": categorisation_produit,
+    "Test Cannibalisation": test_cannibalisation
 }
 
 # Titre principal
