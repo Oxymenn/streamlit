@@ -22,8 +22,8 @@ def calculate_cosine_similarity(embeddings):
     similarities = cosine_similarity(embeddings)
     return similarities
 
-def generate_second_sheet(df, url_column, similarities, num_links):
-    second_sheet_data = []
+def generate_similarity_table(df, url_column, similarities, num_links):
+    similarity_data = []
     for index, row in df.iterrows():
         similarity_scores = similarities[index]
         similar_indices = np.argsort(similarity_scores)[::-1]
@@ -33,10 +33,10 @@ def generate_second_sheet(df, url_column, similarities, num_links):
             if df[url_column].iloc[idx] != row[url_column] and count < num_links:
                 similar_urls.append(df[url_column].iloc[idx])
                 count += 1
-        second_sheet_data.append([row[url_column]] + similar_urls)
+        similarity_data.append([row[url_column]] + similar_urls)
     columns = ["URL de départ"] + [f"URL similaire {i+1}" for i in range(num_links)]
-    second_sheet_df = pd.DataFrame(second_sheet_data, columns=columns)
-    return second_sheet_df
+    similarity_df = pd.DataFrame(similarity_data, columns=columns)
+    return similarity_df
 
 def app():
     st.title("Analyse de Similarité Cosinus des URL")
@@ -72,21 +72,21 @@ def app():
         num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 5))  # 5 liens au lieu de 4
         st.session_state.num_links = num_links
 
-        # Générer la deuxième feuille
-        second_sheet_df = generate_second_sheet(df, url_column, similarities, st.session_state.num_links)
-        st.write("Deuxième feuille des similarités :")
-        st.write(second_sheet_df)
+        # Générer le tableau de similarité
+        similarity_df = generate_similarity_table(df, url_column, similarities, st.session_state.num_links)
+        st.write("Tableau de similarité :")
+        st.write(similarity_df)
 
         # Ajouter les colonnes G et H avec les formules spécifiées
-        second_sheet_df['concatener'] = second_sheet_df.apply(
+        similarity_df['concatener'] = similarity_df.apply(
             lambda row: f'=CONCATENER("Lien 1 : ";{row["URL similaire 1"]};" ; Lien 2 : ";{row["URL similaire 2"]};" ; Lien 3 : ";{row["URL similaire 3"]};" ; Lien 4 : ";{row["URL similaire 4"]};" ; Lien 5 : ";{row["URL similaire 5"]};" ; ")', axis=1
         )
-        second_sheet_df['NB.SI'] = second_sheet_df.apply(
+        similarity_df['NB.SI'] = similarity_df.apply(
             lambda row: f'=NB.SI(B:F;{row["URL de départ"]})', axis=1
         )
 
-        second_sheet_csv = second_sheet_df.to_csv(index=False).encode('utf-8')
-        st.download_button(label="Télécharger la deuxième feuille en CSV", data=second_sheet_csv, file_name='second_sheet.csv', mime='text/csv')
+        similarity_csv = similarity_df.to_csv(index=False).encode('utf-8')
+        st.download_button(label="Télécharger le tableau de similarité en CSV", data=similarity_csv, file_name='similarity_table.csv', mime='text/csv')
 
 if __name__ == "__main__":
     app()
