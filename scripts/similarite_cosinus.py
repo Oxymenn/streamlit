@@ -77,11 +77,23 @@ def app():
         st.write("Tableau de similarité :")
         st.write(similarity_df)
 
-        # Ajouter les colonnes G et H avec les valeurs calculées
-        similarity_df['concatener'] = similarity_df.apply(lambda row: f"Lien 1 : {row['URL similaire 1']} ; Lien 2 : {row['URL similaire 2']} ; Lien 3 : {row['URL similaire 3']} ; Lien 4 : {row['URL similaire 4']} ; Lien 5 : {row['URL similaire 5']} ; ", axis=1)
+        # Normaliser les URLs pour éviter les problèmes de casse et d'espaces
+        def normalize_url(url):
+            return url.strip().lower()
 
-        # Calculate the NB.SI by checking URL matches
-        similarity_df['NB.SI'] = similarity_df.apply(lambda row: sum(row[1:6] == row['URL de départ']), axis=1)
+        # Calculer le nombre de fois où l'URL de départ apparaît dans les URL similaires
+        similarity_df['NB.SI'] = similarity_df.apply(
+            lambda row: sum(normalize_url(url) == normalize_url(row['URL de départ']) for url in row[1:6]), axis=1
+        )
+
+        # Vérification du calcul
+        st.write("Données après calcul de NB.SI :")
+        st.write(similarity_df[['URL de départ', 'NB.SI']])
+
+        # Concaténer les URLs similaires
+        similarity_df['concatener'] = similarity_df.apply(
+            lambda row: f"Lien 1 : {row['URL similaire 1']} ; Lien 2 : {row['URL similaire 2']} ; Lien 3 : {row['URL similaire 3']} ; Lien 4 : {row['URL similaire 4']} ; Lien 5 : {row['URL similaire 5']} ; ", axis=1
+        )
 
         similarity_csv = similarity_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="Télécharger le tableau de similarité en CSV", data=similarity_csv, file_name='similarity_table.csv', mime='text/csv')
