@@ -78,7 +78,7 @@ def app():
         st.write(similarity_df)
 
         # Ajouter les colonnes G et H avec les formules spécifiées
-        similarity_df['concatener'] = '=CONCATENER("Lien 1 : ";B2;" ; Lien 2 : ";C2;" ; Lien 3 : ";D2;" ; Lien 4 : ";E2;" ; Lien 5 : ";F2)'
+        similarity_df['concatener'] = '=CONCATENER("Lien 1 : ";B2;" ; Lien 2 : ";C2;" ; Lien 3 : ";D2;" ; Lien 4 : ";E2;" ; Lien 5 : ";F2;" ; ")'
         similarity_df['NB.SI'] = '=NB.SI(B:F;A2)'
 
         similarity_csv = similarity_df.to_csv(index=False).encode('utf-8')
