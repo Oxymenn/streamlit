@@ -79,7 +79,7 @@ def app():
 
         # Ajouter les colonnes G et H avec les valeurs calculées
         similarity_df['concatener'] = similarity_df.apply(lambda row: f"Lien 1 : {row['URL similaire 1']} ; Lien 2 : {row['URL similaire 2']} ; Lien 3 : {row['URL similaire 3']} ; Lien 4 : {row['URL similaire 4']} ; Lien 5 : {row['URL similaire 5']} ; ", axis=1)
-        
+
         # Calculate the NB.SI by checking URL matches
         similarity_df['NB.SI'] = similarity_df.apply(lambda row: sum(row[1:6] == row['URL de départ']), axis=1)
 
