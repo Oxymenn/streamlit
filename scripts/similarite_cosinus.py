@@ -61,31 +61,47 @@ def close_loop(url_to_dest):
 
     return balanced_dest
 
+def generate_second_sheet(df, url_column, similarities, num_links):
+    second_sheet_data = []
+    for index, row in df.iterrows():
+        similarity_scores = similarities[index]
+        similar_indices = np.argsort(similarity_scores)[::-1]
+        similar_urls = []
+        count = 0
+        for idx in similar_indices:
+            if df[url_column].iloc[idx] != row[url_column] and count < num_links:
+                similar_urls.append(df[url_column].iloc[idx])
+                count += 1
+        second_sheet_data.append([row[url_column]] + similar_urls)
+    columns = ["URL de départ"] + [f"URL similaire {i+1}" for i in range(num_links)]
+    second_sheet_df = pd.DataFrame(second_sheet_data, columns=columns)
+    return second_sheet_df
+
 def app():
     st.title("Analyse de Similarité Cosinus des URL")
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
-    
+
     if uploaded_file:
         df = load_file(uploaded_file)
         st.write("Aperçu des données :")
         st.write(df.head())
-        
+
         url_column = st.selectbox("Sélectionnez la colonne des URL", df.columns)
         embedding_column = st.selectbox("Sélectionnez la colonne des Embeddings", df.columns)
-        
+
         if st.button("Calculer la similarité cosinus"):
             with st.spinner("Calcul de la similarité en cours..."):
                 embeddings = preprocess_embeddings(df, embedding_column)
                 similarities = calculate_cosine_similarity(embeddings)
-                
+
                 st.session_state.similarities = similarities
                 st.session_state.df = df
                 st.session_state.url_column = url_column
                 st.session_state.embedding_column = embedding_column
                 st.session_state.num_links = min(5, len(df))  # 5 liens au lieu de 4
-                
+
                 st.write("Calcul de la similarité terminé avec succès !")
-                
+
                 similarity_table, url_to_dest = generate_similarity_table(df, url_column, similarities, st.session_state.num_links)
                 balanced_dest = close_loop(url_to_dest)
 
@@ -99,25 +115,33 @@ def app():
                 similarity_table = pd.DataFrame(similarity_data)
 
                 st.session_state.similarity_table = similarity_table
-                
+
                 st.write("Tableau des similarités :")
                 st.write(similarity_table)
-                
+
                 csv = similarity_table.to_csv(index=False).encode('utf-8')
                 st.download_button(label="Télécharger le tableau en CSV", data=csv, file_name='similarity_table.csv', mime='text/csv')
-    
+
+                # Générer la deuxième feuille
+                second_sheet_df = generate_second_sheet(df, url_column, similarities, st.session_state.num_links)
+                st.write("Deuxième feuille des similarités :")
+                st.write(second_sheet_df)
+
+                second_sheet_csv = second_sheet_df.to_csv(index=False).encode('utf-8')
+                st.download_button(label="Télécharger la deuxième feuille en CSV", data=second_sheet_csv, file_name='second_sheet.csv', mime='text/csv')
+
     if 'similarities' in st.session_state:
         df = st.session_state.df
         url_column = st.session_state.url_column
         similarities = st.session_state.similarities
-        
+
         # Curseur pour le nombre de liens à analyser
         num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 5))  # 5 liens au lieu de 4
         st.session_state.num_links = num_links
-        
+
         # Sélecteur pour l'URL
         selected_url = st.selectbox("Sélectionnez l'URL pour voir les liens similaires", df[url_column])
-        
+
         if selected_url:
             selected_index = df[df[url_column] == selected_url].index[0]
             similarity_scores = similarities[selected_index]
@@ -129,11 +153,11 @@ def app():
                     similar_urls.append(df[url_column].iloc[idx])
                     count += 1
             similar_scores = similarity_scores[[df[url_column].iloc[idx] != selected_url for idx in similar_indices]][:num_links]
-            
+
             st.write(f"Top {num_links} URLs les plus similaires à {selected_url} :")
             for url, score in zip(similar_urls, similar_scores):
                 st.write(f"{url} (Score: {score})")
-            
+
             # Télécharger les résultats du deuxième rapport en CSV
             report_data = {
                 "URL de référence": selected_url,
