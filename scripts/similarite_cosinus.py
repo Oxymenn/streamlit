@@ -59,7 +59,7 @@ def app():
                 st.session_state.df = df
                 st.session_state.url_column = url_column
                 st.session_state.embedding_column = embedding_column
-                st.session_state.num_links = min(5, len(df))  # 5 liens au lieu de 4
+                st.session_state.num_links = 5  # 5 liens
 
                 st.write("Calcul de la similarité terminé avec succès !")
 
@@ -69,7 +69,7 @@ def app():
         similarities = st.session_state.similarities
 
         # Curseur pour le nombre de liens à analyser
-        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=len(df), value=st.session_state.get('num_links', 5))  # 5 liens au lieu de 4
+        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=5, value=st.session_state.get('num_links', 5))  # 5 liens
         st.session_state.num_links = num_links
 
         # Générer le tableau de similarité
