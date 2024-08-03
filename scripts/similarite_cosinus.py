@@ -77,9 +77,9 @@ def app():
         st.write("Tableau de similarité :")
         st.write(similarity_df)
 
-        # Ajouter les colonnes G et H avec les formules spécifiées
-        similarity_df['concatener'] = '=CONCATENER("Lien 1 : ";B2;" ; Lien 2 : ";C2;" ; Lien 3 : ";D2;" ; Lien 4 : ";E2;" ; Lien 5 : ";F2;" ; ")'
-        similarity_df['NB.SI'] = '=NB.SI(B:F;A2)'
+        # Ajouter les colonnes G et H avec les valeurs calculées
+        similarity_df['concatener'] = similarity_df.apply(lambda row: f"Lien 1 : {row['URL similaire 1']} ; Lien 2 : {row['URL similaire 2']} ; Lien 3 : {row['URL similaire 3']} ; Lien 4 : {row['URL similaire 4']} ; Lien 5 : {row['URL similaire 5']} ; ", axis=1)
+        similarity_df['NB.SI'] = similarity_df.iloc[:, 1:6].apply(lambda x: (x == similarity_df['URL de départ']).sum(), axis=1)
 
         similarity_csv = similarity_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="Télécharger le tableau de similarité en CSV", data=similarity_csv, file_name='similarity_table.csv', mime='text/csv')
