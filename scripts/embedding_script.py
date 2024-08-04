@@ -153,6 +153,61 @@ def app():
                     file_name='similarity_results.csv',
                     mime='text/csv'
                 )
+
+                # Créer le second tableau pour toutes les URLs de départ
+                links_table = {
+                    'URL de départ': [],
+                    'URL similaire 1': [],
+                    'URL similaire 2': [],
+                    'URL similaire 3': [],
+                    'URL similaire 4': [],
+                    'URL similaire 5': [],
+                    'Concatener': []
+                }
+
+                for i, url in enumerate(urls):
+                    # Obtenir les similarités pour l'URL en cours
+                    similarities = st.session_state['similarity_matrix'][i]
+                    
+                    # Créer un DataFrame temporaire pour trier les similarités
+                    temp_df = pd.DataFrame({
+                        'URL': urls,
+                        'Similarité': similarities
+                    })
+
+                    # Exclure l'URL de départ
+                    temp_df = temp_df[temp_df['URL'] != url]
+
+                    # Trier et prendre les 5 meilleures similarités
+                    top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(5)['URL'].tolist()
+
+                    # Remplir les données dans le tableau
+                    links_table['URL de départ'].append(url)
+                    links_table['URL similaire 1'].append(top_similar_urls[0] if len(top_similar_urls) > 0 else None)
+                    links_table['URL similaire 2'].append(top_similar_urls[1] if len(top_similar_urls) > 1 else None)
+                    links_table['URL similaire 3'].append(top_similar_urls[2] if len(top_similar_urls) > 2 else None)
+                    links_table['URL similaire 4'].append(top_similar_urls[3] if len(top_similar_urls) > 3 else None)
+                    links_table['URL similaire 5'].append(top_similar_urls[4] if len(top_similar_urls) > 4 else None)
+
+                    # Concatener les URLs
+                    concatenated = f"Lien 1 : {top_similar_urls[0]}; Lien 2 : {top_similar_urls[1]}; Lien 3 : {top_similar_urls[2]}; Lien 4 : {top_similar_urls[3]}; Lien 5 : {top_similar_urls[4]}"
+                    links_table['Concatener'].append(concatenated)
+
+                # Créer un DataFrame pour le second tableau
+                links_df = pd.DataFrame(links_table)
+
+                # Afficher le second tableau
+                st.dataframe(links_df)
+
+                # Télécharger le second tableau en CSV
+                csv_links = links_df.to_csv().encode('utf-8')
+                st.download_button(
+                    label="Télécharger le tableau des liens en CSV",
+                    data=csv_links,
+                    file_name='links_table.csv',
+                    mime='text/csv'
+                )
+
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier: {e}")
 
