@@ -3,10 +3,7 @@ import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import re
-import os
-from sklearn.preprocessing import FunctionTransformer
 import requests
-from requests_html import HTMLSession
 from bs4 import BeautifulSoup
 import concurrent.futures
 
@@ -28,16 +25,14 @@ def clean_text(text):
     return ' '.join(words)
 
 def extract_content_from_url(url):
-    # Extraire le contenu HTML d'une URL spécifique
-    session = HTMLSession()
     try:
-        response = session.get(url)
-        response.html.render()  # Render JavaScript content if needed
+        response = requests.get(url)
+        response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
         # Extraire le texte de la classe 'below-woocommerce-category'
         content = soup.find(class_='below-woocommerce-category')
         return content.get_text(separator=' ') if content else ''
-    except Exception as e:
+    except requests.RequestException as e:
         st.warning(f"Erreur lors de l'extraction de l'URL {url}: {e}")
         return ''
 
