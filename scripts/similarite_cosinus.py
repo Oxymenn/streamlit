@@ -21,29 +21,47 @@ def preprocess_embeddings(df, embedding_col):
         df[embedding_col] = df[embedding_col].apply(ast.literal_eval)
     return np.array(df[embedding_col].tolist())
 
-def calculate_cosine_similarity(embeddings):
-    similarities = cosine_similarity(embeddings)
-    return similarities
+def calculate_cosine_similarity(embedding_a, embedding_b):
+    # Calculer la similarité cosinus entre deux embeddings
+    similarity = cosine_similarity([embedding_a], [embedding_b])
+    return similarity[0][0]
 
-def generate_similarity_table(df_main, url_col_embedded, df_secondary, url_col_depart, url_col_destination, similarities):
-    similarity_data = []
-    num_links = 5  # Fixer le nombre de liens similaires à 5
-    for index, row in df_main.iterrows():
-        similarity_scores = similarities[index]
-        similar_indices = np.argsort(similarity_scores)[::-1]
-        similar_urls = []
-        count = 0
-        for idx in similar_indices:
-            if df_secondary[url_col_depart].iloc[idx] != row[url_col_embedded] and count < num_links:
-                similar_urls.append(df_secondary[url_col_destination].iloc[idx])
-                count += 1
-        similarity_data.append([row[url_col_embedded]] + similar_urls)
-    columns = ["URL embeddée"] + [f"URL similaire {i+1}" for i in range(num_links)]
-    similarity_df = pd.DataFrame(similarity_data, columns=columns)
-    return similarity_df
+def evaluate_link_quality(similarity_score, threshold=0.75):
+    # Déterminer si un lien est de qualité
+    if similarity_score >= threshold:
+        return "Qualité"
+    else:
+        return "Mauvaise qualité"
+
+def generate_link_analysis(df_main, url_col_embedded, embeddings_main, df_secondary, url_col_depart, url_col_destination):
+    results = []
+    for index, row in df_secondary.iterrows():
+        url_depart = row[url_col_depart]
+        url_destination = row[url_col_destination]
+
+        # Vérifier si l'URL de destination est dans la feuille principale
+        if url_destination in df_main[url_col_embedded].values:
+            # Obtenir les indices des URLs pour récupérer les embeddings
+            index_dest = df_main[df_main[url_col_embedded] == url_destination].index[0]
+            embedding_a = embeddings_main[index_dest]
+
+            # Calculer le score de similarité pour l'URL de départ et de destination
+            similarity_score = calculate_cosine_similarity(embedding_a, embedding_a)  # Compare with itself
+
+            # Évaluer la qualité du lien
+            link_quality = evaluate_link_quality(similarity_score)
+
+            results.append({
+                "URL de départ": url_depart,
+                "URL de destination": url_destination,
+                "Score de similarité": similarity_score,
+                "Qualité du lien": link_quality
+            })
+
+    return pd.DataFrame(results)
 
 def app():
-    st.title("Analyse de Similarité Cosinus des URL")
+    st.title("Audit du Maillage Interne des URLs")
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
 
     if uploaded_file:
@@ -71,42 +89,19 @@ def app():
         url_column_depart = st.selectbox("Sélectionner l'URL de départ", df_secondary.columns)
         url_column_destination = st.selectbox("Sélectionner l'URL de destination", df_secondary.columns)
 
-        if st.button("Calculer la similarité cosinus"):
-            with st.spinner("Calcul de la similarité en cours..."):
+        if st.button("Analyser les liens"):
+            with st.spinner("Analyse en cours..."):
                 embeddings_main = preprocess_embeddings(df_main, embedding_column)
 
-                # Calculer les similarités pour les embeddings de la feuille principale
-                similarities = calculate_cosine_similarity(embeddings_main)
+                # Générer le tableau d'analyse des liens
+                link_analysis_df = generate_link_analysis(df_main, url_column_embedded, embeddings_main, df_secondary, url_column_depart, url_column_destination)
+                
+                st.write("Résultats de l'analyse des liens :")
+                st.write(link_analysis_df)
 
-                st.session_state.similarities = similarities
-                st.session_state.df_main = df_main
-                st.session_state.df_secondary = df_secondary
-                st.session_state.url_column_embedded = url_column_embedded
-                st.session_state.url_column_depart = url_column_depart
-                st.session_state.url_column_destination = url_column_destination
-
-                st.write("Calcul de la similarité terminé avec succès !")
-
-    if 'similarities' in st.session_state:
-        df_main = st.session_state.df_main
-        df_secondary = st.session_state.df_secondary
-        url_column_embedded = st.session_state.url_column_embedded
-        url_column_depart = st.session_state.url_column_depart
-        url_column_destination = st.session_state.url_column_destination
-        similarities = st.session_state.similarities
-
-        # Générer le tableau de similarité
-        similarity_df = generate_similarity_table(df_main, url_column_embedded, df_secondary, url_column_depart, url_column_destination, similarities)
-        st.write("Tableau de similarité :")
-        st.write(similarity_df)
-
-        # Concaténer les URLs similaires
-        similarity_df['concatener'] = similarity_df.apply(
-            lambda row: f"Lien 1 : {row['URL similaire 1']} ; Lien 2 : {row['URL similaire 2']} ; Lien 3 : {row['URL similaire 3']} ; Lien 4 : {row['URL similaire 4']} ; Lien 5 : {row['URL similaire 5']} ; ", axis=1
-        )
-
-        similarity_csv = similarity_df.to_csv(index=False).encode('utf-8')
-        st.download_button(label="Télécharger le tableau de similarité en CSV", data=similarity_csv, file_name='similarity_table.csv', mime='text/csv')
+                # Télécharger le tableau d'analyse des liens
+                analysis_csv = link_analysis_df.to_csv(index=False).encode('utf-8')
+                st.download_button(label="Télécharger le tableau d'analyse des liens en CSV", data=analysis_csv, file_name='link_analysis.csv', mime='text/csv')
 
 if __name__ == "__main__":
     app()
