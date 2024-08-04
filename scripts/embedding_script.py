@@ -4,14 +4,26 @@ import openai
 import requests
 from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
 import re
 
-# Télécharger les ressources nécessaires pour NLTK
-nltk.download('stopwords')
-nltk.download('wordnet')
+# Définir une liste de stopwords en français
+stopwords_fr = {
+    "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
+    "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
+    "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
+    "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
+    "est", "et", "eu", "fait", "faites", "fois", "font", "force", "haut", 
+    "hors", "ici", "il", "ils", "je", "juste", "la", "le", "les", "leur", 
+    "là", "ma", "maintenant", "mais", "mes", "mien", "moins", "mon", "mot", 
+    "même", "ni", "nommés", "notre", "nous", "nouveaux", "ou", "où", "par", 
+    "parce", "parole", "pas", "personnes", "peut", "peu", "pièce", "plupart", 
+    "pour", "pourquoi", "quand", "que", "quel", "quelle", "quelles", "quels", 
+    "qui", "sa", "sans", "ses", "seulement", "si", "sien", "son", "sont", 
+    "sous", "soyez", "sujet", "sur", "ta", "tandis", "tellement", "tels", 
+    "tes", "ton", "tous", "tout", "trop", "très", "tu", "valeur", "voie", 
+    "voient", "vont", "votre", "vous", "vu", "ça", "étaient", "état", "étions", 
+    "été", "être"
+}
 
 # Configure OpenAI API Key à partir de secret.toml
 openai.api_key = st.secrets["api_key"]
@@ -29,13 +41,8 @@ def extract_and_clean_content(url):
         content = re.sub(r'[^\w\s]', '', content)  # Supprimer la ponctuation
 
         # Retirer les mots vides
-        stop_words = set(stopwords.words('english'))
         words = content.split()
-        content = ' '.join([word for word in words if word not in stop_words])
-
-        # Lemmatisation
-        lemmatizer = WordNetLemmatizer()
-        content = ' '.join([lemmatizer.lemmatize(word) for word in content.split()])
+        content = ' '.join([word for word in words if word not in stopwords_fr])
 
         return content
     except Exception as e:
