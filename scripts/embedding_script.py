@@ -42,8 +42,7 @@ def get_openai_embeddings(text, api_key):
     }
     data = {
         "model": "text-embedding-ada-002",
-        "input": text,
-        "encoding_format": "float"
+        "input": text
     }
     for attempt in range(3):  # Réessayer jusqu'à 3 fois en cas d'échec
         response = requests.post('https://api.openai.com/v1/embeddings', headers=headers, json=data)
@@ -61,11 +60,11 @@ def generate_embeddings(texts, api_key):
         for future in concurrent.futures.as_completed(future_to_text):
             embedding = future.result()
             if embedding:
-                # Convertir l'embedding en chaîne de caractères
-                embeddings.append(','.join(map(str, embedding)))
+                # Convertir l'embedding en chaîne au format de liste Python
+                embeddings.append(str(embedding))
             else:
                 # Placeholder pour les échecs d'API
-                embeddings.append(','.join(['0']*768))
+                embeddings.append(str([0]*768))
     return embeddings
 
 def app():
