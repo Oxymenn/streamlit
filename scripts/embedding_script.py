@@ -94,7 +94,7 @@ def calculate_similarity(embeddings):
 
 # Fonction principale de l'application
 def app():
-    st.title("Analyse sémantique - Pages similaires")
+    st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
