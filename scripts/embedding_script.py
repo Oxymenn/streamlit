@@ -87,50 +87,55 @@ def get_embeddings(text):
         st.error(f"Erreur lors de la récupération des embeddings: {err}")
         return []
 
-# Titre de l'application
-st.title("Embedding d'URLs avec OpenAI")
+# Fonction principale de l'application
+def main():
+    # Titre de l'application
+    st.title("Embedding d'URLs avec OpenAI")
 
-# Téléchargement du fichier
-uploaded_file = st.file_uploader("Choisissez un fichier CSV ou Excel", type=["csv", "xlsx"])
+    # Téléchargement du fichier
+    uploaded_file = st.file_uploader("Choisissez un fichier CSV ou Excel", type=["csv", "xlsx"])
 
-if uploaded_file is not None:
-    # Lire le fichier dans un DataFrame pandas
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    if uploaded_file is not None:
+        # Lire le fichier dans un DataFrame pandas
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
 
-    # Vérifier si le DataFrame est vide
-    if df.empty:
-        st.error("Le fichier téléchargé est vide ou n'a pas pu être lu correctement.")
-    else:
-        # Sélection de la colonne des URLs
-        url_column = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
+        # Vérifier si le DataFrame est vide
+        if df.empty:
+            st.error("Le fichier téléchargé est vide ou n'a pas pu être lu correctement.")
+        else:
+            # Sélection de la colonne des URLs
+            url_column = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
 
-        # Préparer une colonne pour les embeddings
-        df["Embeddings"] = np.nan
+            # Préparer une colonne pour les embeddings
+            df["Embeddings"] = np.nan
 
-        # Processus d'embedding
-        with st.spinner("Traitement en cours..."):
-            for i, url in enumerate(df[url_column]):
-                st.write(f"Traitement de l'URL {i+1}/{len(df)}: {url}")
-                cleaned_text = get_and_clean_html(url)
-                if cleaned_text:
-                    embedding = get_embeddings(cleaned_text)
-                    df.at[i, "Embeddings"] = str(embedding)
+            # Processus d'embedding
+            with st.spinner("Traitement en cours..."):
+                for i, url in enumerate(df[url_column]):
+                    st.write(f"Traitement de l'URL {i+1}/{len(df)}: {url}")
+                    cleaned_text = get_and_clean_html(url)
+                    if cleaned_text:
+                        embedding = get_embeddings(cleaned_text)
+                        df.at[i, "Embeddings"] = str(embedding)
 
-        # Affichage du DataFrame
-        st.write(df)
+            # Affichage du DataFrame
+            st.write(df)
 
-        # Téléchargement du fichier modifié
-        def convert_df_to_csv(df):
-            return df.to_csv(index=False).encode('utf-8')
+            # Téléchargement du fichier modifié
+            def convert_df_to_csv(df):
+                return df.to_csv(index=False).encode('utf-8')
 
-        csv = convert_df_to_csv(df)
-        st.download_button(
-            label="Télécharger le fichier avec embeddings",
-            data=csv,
-            file_name='embedded_urls.csv',
-            mime='text/csv',
-        )
+            csv = convert_df_to_csv(df)
+            st.download_button(
+                label="Télécharger le fichier avec embeddings",
+                data=csv,
+                file_name='embedded_urls.csv',
+                mime='text/csv',
+            )
 
+# Appeler la fonction principale
+if __name__ == "__main__":
+    main()
