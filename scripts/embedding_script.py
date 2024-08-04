@@ -98,29 +98,31 @@ def app():
 
             urls = df[column_option]
 
-            # Extraire et nettoyer le contenu des URLs
-            contents = [extract_and_clean_content(url) for url in urls]
-            embeddings = [get_embeddings(content) for content in contents if content]
+            # Ajouter un bouton pour lancer le traitement
+            if st.button("Lancer le traitement"):
+                # Extraire et nettoyer le contenu des URLs
+                contents = [extract_and_clean_content(url) for url in urls]
+                embeddings = [get_embeddings(content) for content in contents if content]
 
-            if embeddings:
-                # Calculer la similarité cosinus
-                similarity_matrix = calculate_similarity(embeddings)
+                if embeddings:
+                    # Calculer la similarité cosinus
+                    similarity_matrix = calculate_similarity(embeddings)
 
-                if similarity_matrix is not None:
-                    # Création d'un DataFrame pour l'affichage
-                    similarity_df = pd.DataFrame(similarity_matrix, columns=urls, index=urls)
+                    if similarity_matrix is not None:
+                        # Création d'un DataFrame pour l'affichage
+                        similarity_df = pd.DataFrame(similarity_matrix, columns=urls, index=urls)
 
-                    # Affichage du tableau interactif
-                    st.dataframe(similarity_df)
+                        # Affichage du tableau interactif
+                        st.dataframe(similarity_df)
 
-                    # Télécharger le fichier CSV avec les résultats
-                    csv = similarity_df.to_csv().encode('utf-8')
-                    st.download_button(
-                        label="Télécharger les résultats en CSV",
-                        data=csv,
-                        file_name='similarity_results.csv',
-                        mime='text/csv'
-                    )
+                        # Télécharger le fichier CSV avec les résultats
+                        csv = similarity_df.to_csv().encode('utf-8')
+                        st.download_button(
+                            label="Télécharger les résultats en CSV",
+                            data=csv,
+                            file_name='similarity_results.csv',
+                            mime='text/csv'
+                        )
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier: {e}")
 
