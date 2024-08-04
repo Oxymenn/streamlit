@@ -158,15 +158,13 @@ def app():
                 )
 
                 # Créer le second tableau pour toutes les URLs de départ
-                links_table = {
-                    'URL de départ': [],
-                    'URL similaire 1': [],
-                    'URL similaire 2': [],
-                    'URL similaire 3': [],
-                    'URL similaire 4': [],
-                    'URL similaire 5': [],
-                    'Concatener': []
-                }
+                links_table = {'URL de départ': []}
+
+                # Ajouter dynamiquement les colonnes pour les URLs similaires
+                for n in range(1, max_results + 1):
+                    links_table[f'URL similaire {n}'] = []
+
+                links_table['Concatener'] = []
 
                 for i, url in enumerate(urls):
                     # Obtenir les similarités pour l'URL en cours
@@ -181,19 +179,19 @@ def app():
                     # Exclure l'URL de départ
                     temp_df = temp_df[temp_df['URL'] != url]
 
-                    # Trier et prendre les 5 meilleures similarités
-                    top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(5)['URL'].tolist()
+                    # Trier et prendre les meilleurs résultats selon max_results
+                    top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(max_results)['URL'].tolist()
 
                     # Remplir les données dans le tableau
                     links_table['URL de départ'].append(url)
-                    links_table['URL similaire 1'].append(top_similar_urls[0] if len(top_similar_urls) > 0 else None)
-                    links_table['URL similaire 2'].append(top_similar_urls[1] if len(top_similar_urls) > 1 else None)
-                    links_table['URL similaire 3'].append(top_similar_urls[2] if len(top_similar_urls) > 2 else None)
-                    links_table['URL similaire 4'].append(top_similar_urls[3] if len(top_similar_urls) > 3 else None)
-                    links_table['URL similaire 5'].append(top_similar_urls[4] if len(top_similar_urls) > 4 else None)
+                    for n in range(1, max_results + 1):
+                        if len(top_similar_urls) >= n:
+                            links_table[f'URL similaire {n}'].append(top_similar_urls[n - 1])
+                        else:
+                            links_table[f'URL similaire {n}'].append(None)
 
                     # Concatener les URLs
-                    concatenated = f"Lien 1 : {top_similar_urls[0] if len(top_similar_urls) > 0 else ''}; Lien 2 : {top_similar_urls[1] if len(top_similar_urls) > 1 else ''}; Lien 3 : {top_similar_urls[2] if len(top_similar_urls) > 2 else ''}; Lien 4 : {top_similar_urls[3] if len(top_similar_urls) > 3 else ''}; Lien 5 : {top_similar_urls[4] if len(top_similar_urls) > 4 else ''}"
+                    concatenated = '; '.join([f"Lien {n} : {top_similar_urls[n - 1]}" if len(top_similar_urls) >= n else f"Lien {n} : " for n in range(1, max_results + 1)])
                     links_table['Concatener'].append(concatenated)
 
                 # Créer un DataFrame pour le second tableau
