@@ -93,34 +93,34 @@ def app():
             else:
                 df = pd.read_excel(uploaded_file)
 
-            if 'URL' not in df.columns:
-                st.error("Le fichier doit contenir une colonne nommée 'URL'")
-            else:
-                urls = df['URL']
+            # Afficher les colonnes disponibles et permettre à l'utilisateur de sélectionner la colonne des URLs
+            column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
 
-                # Extraire et nettoyer le contenu des URLs
-                contents = [extract_and_clean_content(url) for url in urls]
-                embeddings = [get_embeddings(content) for content in contents if content]
+            urls = df[column_option]
 
-                if embeddings:
-                    # Calculer la similarité cosinus
-                    similarity_matrix = calculate_similarity(embeddings)
+            # Extraire et nettoyer le contenu des URLs
+            contents = [extract_and_clean_content(url) for url in urls]
+            embeddings = [get_embeddings(content) for content in contents if content]
 
-                    if similarity_matrix is not None:
-                        # Création d'un DataFrame pour l'affichage
-                        similarity_df = pd.DataFrame(similarity_matrix, columns=urls, index=urls)
+            if embeddings:
+                # Calculer la similarité cosinus
+                similarity_matrix = calculate_similarity(embeddings)
 
-                        # Affichage du tableau interactif
-                        st.dataframe(similarity_df)
+                if similarity_matrix is not None:
+                    # Création d'un DataFrame pour l'affichage
+                    similarity_df = pd.DataFrame(similarity_matrix, columns=urls, index=urls)
 
-                        # Télécharger le fichier CSV avec les résultats
-                        csv = similarity_df.to_csv().encode('utf-8')
-                        st.download_button(
-                            label="Télécharger les résultats en CSV",
-                            data=csv,
-                            file_name='similarity_results.csv',
-                            mime='text/csv'
-                        )
+                    # Affichage du tableau interactif
+                    st.dataframe(similarity_df)
+
+                    # Télécharger le fichier CSV avec les résultats
+                    csv = similarity_df.to_csv().encode('utf-8')
+                    st.download_button(
+                        label="Télécharger les résultats en CSV",
+                        data=csv,
+                        file_name='similarity_results.csv',
+                        mime='text/csv'
+                    )
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier: {e}")
 
