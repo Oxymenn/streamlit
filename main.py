@@ -9,13 +9,12 @@ from scripts import test_similarite
 
 # Configuration des pages
 PAGES = {
-    "Embeddings d'urls": embedding_script,
+    "Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)": embedding_script,
     "Similarité Cosinus": similarite_cosinus,
     "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
     "Catégorisation des produits": categorisation_produit,
-    "Test Cannibalisation": test_cannibalisation,
-    "Test Similarité": test_similarite
+    "Test Cannibalisation": test_cannibalisation
 }
 
 # Titre principal
