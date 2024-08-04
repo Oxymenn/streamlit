@@ -109,47 +109,45 @@ def app():
 
             urls = df[column_option].dropna().unique()
 
+            # Initialiser l'état de session
+            if 'contents' not in st.session_state:
+                st.session_state['contents'] = [extract_and_clean_content(url) for url in urls]
+                st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
+                st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+
             # Ajouter un bouton pour lancer l'analyse
-            if st.button("Lancer l'analyse"):
-                # Extraire et nettoyer le contenu des URLs
-                contents = [extract_and_clean_content(url) for url in urls]
-                embeddings = [get_embeddings(content) for content in contents if content]
+            if st.button("Lancer l'analyse") or 'similarity_matrix' in st.session_state:
+                if st.session_state['similarity_matrix'] is not None:
+                    # Sélecteur d'URL et curseur pour le nombre de résultats
+                    selected_url = st.selectbox("Sélectionnez une URL", urls)
+                    max_results = st.slider("Nombre d'URLs les plus proches à afficher", 1, len(urls), 5)
 
-                if embeddings:
-                    # Calculer la similarité cosinus
-                    similarity_matrix = calculate_similarity(embeddings)
+                    # Trouver l'index de l'URL sélectionnée
+                    selected_index = urls.tolist().index(selected_url)
 
-                    if similarity_matrix is not None:
-                        # Sélecteur d'URL et curseur pour le nombre de résultats
-                        selected_url = st.selectbox("Sélectionnez une URL", urls)
-                        max_results = st.slider("Nombre d'URLs les plus proches à afficher", 1, len(urls), 5)
+                    # Obtenir les similarités pour l'URL sélectionnée
+                    selected_similarities = st.session_state['similarity_matrix'][selected_index]
 
-                        # Trouver l'index de l'URL sélectionnée
-                        selected_index = urls.tolist().index(selected_url)
+                    # Créer un DataFrame des similarités
+                    similarity_df = pd.DataFrame({
+                        'URL': urls,
+                        'Similarité': selected_similarities
+                    })
 
-                        # Obtenir les similarités pour l'URL sélectionnée
-                        selected_similarities = similarity_matrix[selected_index]
+                    # Trier le DataFrame par similarité décroissante
+                    similarity_df = similarity_df.sort_values(by='Similarité', ascending=False)
 
-                        # Créer un DataFrame des similarités
-                        similarity_df = pd.DataFrame({
-                            'URL': urls,
-                            'Similarité': selected_similarities
-                        })
+                    # Afficher le nombre de résultats spécifié par le curseur
+                    st.dataframe(similarity_df.head(max_results))
 
-                        # Trier le DataFrame par similarité décroissante
-                        similarity_df = similarity_df.sort_values(by='Similarité', ascending=False)
-
-                        # Afficher le nombre de résultats spécifié par le curseur
-                        st.dataframe(similarity_df.head(max_results))
-
-                        # Télécharger le fichier CSV avec les résultats
-                        csv = similarity_df.to_csv().encode('utf-8')
-                        st.download_button(
-                            label="Télécharger les résultats en CSV",
-                            data=csv,
-                            file_name='similarity_results.csv',
-                            mime='text/csv'
-                        )
+                    # Télécharger le fichier CSV avec les résultats
+                    csv = similarity_df.to_csv().encode('utf-8')
+                    st.download_button(
+                        label="Télécharger les résultats en CSV",
+                        data=csv,
+                        file_name='similarity_results.csv',
+                        mime='text/csv'
+                    )
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier: {e}")
 
