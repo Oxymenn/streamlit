@@ -34,9 +34,13 @@ def extract_and_clean_content(url):
         response = requests.get(url)
         response.raise_for_status()  # Assure que la requête est réussie
         soup = BeautifulSoup(response.text, 'html.parser')
+        element = soup.find(class_='below-woocommerce-category')
         
-        # Extraire tout le texte de la page HTML
-        content = soup.get_text(separator=" ", strip=True)
+        if element:
+            content = element.get_text(separator=" ", strip=True)
+        else:
+            st.error(f"Élément non trouvé dans l'URL: {url}")
+            return None
 
         # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content)  # Nettoyer les espaces
@@ -149,7 +153,7 @@ def app():
                 st.download_button(
                     label="Télécharger les urls similaires à l'url filtrée (CSV)",
                     data=csv,
-                    file_name=f'blabla_urls_similaires_{file_name}.csv',
+                    file_name=f'urls_similaires-{file_name}.csv',
                     mime='text/csv'
                 )
 
