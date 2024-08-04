@@ -26,7 +26,7 @@ stopwords_fr = {
 }
 
 # Configure OpenAI API Key à partir de secret.toml
-openai.api_key = st.secrets["api_key"]
+openai.api_key = st.secrets.get("api_key", "default_key")
 
 # Fonction pour extraire et nettoyer le contenu HTML
 def extract_and_clean_content(url):
