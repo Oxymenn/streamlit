@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import openai
 import requests
 from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
@@ -26,7 +25,7 @@ stopwords_fr = {
 }
 
 # Configuration de la clé API OpenAI
-openai.api_key = st.secrets.get("api_key", "default_key")
+OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
 # Fonction pour extraire et nettoyer le contenu HTML
 def extract_and_clean_content(url):
@@ -59,17 +58,29 @@ def extract_and_clean_content(url):
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-# Fonction pour obtenir les embeddings d'un texte
+# Fonction pour obtenir les embeddings d'un texte en utilisant l'API OpenAI
 def get_embeddings(text):
     try:
-        response = openai.Embedding.create(
-            input=text,
-            model="text-embedding-ada-002"  # Remplacez par le modèle correct si nécessaire
+        response = requests.post(
+            'https://api.openai.com/v1/embeddings',
+            headers={
+                'Authorization': f'Bearer {OPENAI_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': 'text-embedding-3-small',  # Assurez-vous que ce modèle est disponible
+                'input': text,
+                'encoding_format': 'float'
+            }
         )
-        return response.data[0].embedding
+        response.raise_for_status()  # Assurez-vous que la réponse est réussie
+        data = response.json()
+        return data['data'][0]['embedding']
+    except requests.exceptions.HTTPError as http_err:
+        st.error(f"HTTP error occurred: {http_err}")
     except Exception as e:
         st.error(f"Erreur lors de la création des embeddings: {e}")
-        return None
+    return None
 
 # Fonction pour calculer la similarité cosinus
 def calculate_similarity(embeddings):
