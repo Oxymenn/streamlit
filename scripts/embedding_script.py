@@ -4,13 +4,22 @@ import numpy as np
 import requests
 from bs4 import BeautifulSoup
 import re
-import nltk
-from nltk.corpus import stopwords
 import inflect
 import unidecode
 
-# Télécharger les stopwords français
-nltk.download('stopwords')
+# Liste de stopwords en français
+STOPWORDS_FR = {
+    'alors', 'au', 'aucuns', 'aussi', 'autre', 'avant', 'avec', 'avoir', 'bon', 'car', 'ce', 'cela',
+    'ces', 'ceux', 'chaque', 'ci', 'comme', 'comment', 'dans', 'des', 'du', 'dedans', 'dehors', 'depuis',
+    'devrait', 'doit', 'donc', 'dos', 'début', 'elle', 'elles', 'en', 'encore', 'essai', 'est', 'et', 'eu',
+    'fait', 'faites', 'fois', 'font', 'force', 'haut', 'hors', 'ici', 'il', 'ils', 'je', 'juste', 'la', 'le',
+    'les', 'leur', 'là', 'ma', 'maintenant', 'mais', 'mes', 'mine', 'moins', 'mon', 'mot', 'même', 'ni',
+    'nommés', 'notre', 'nous', 'nouveaux', 'ou', 'où', 'par', 'parce', 'parole', 'pas', 'personnes', 'peut',
+    'peu', 'pièce', 'plupart', 'pour', 'pourquoi', 'quand', 'que', 'quel', 'quelle', 'quelles', 'quels',
+    'qui', 'sa', 'sans', 'ses', 'seulement', 'si', 'sien', 'son', 'sont', 'sous', 'soyez', 'sujet', 'sur',
+    'ta', 'tandis', 'tellement', 'tels', 'tes', 'ton', 'tous', 'tout', 'trop', 'très', 'tu', 'valeur', 'voie',
+    'voient', 'vont', 'votre', 'vous', 'vu', 'ça', 'étaient', 'état', 'étions', 'été', 'être'
+}
 
 # Initialiser l'outil de singularisation
 p = inflect.engine()
@@ -25,9 +34,8 @@ def clean_text(text):
     # Suppression des accents
     text = unidecode.unidecode(text)
     # Suppression des stopwords en français
-    stop_words = set(stopwords.words('french'))
     words = text.split()
-    words = [word for word in words if word not in stop_words]
+    words = [word for word in words if word not in STOPWORDS_FR]
     # Mise au singulier
     words = [p.singular_noun(word) if p.singular_noun(word) else word for word in words]
     # Reconstruction du texte
