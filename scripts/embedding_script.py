@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -62,9 +61,11 @@ def generate_embeddings(texts, api_key):
         for future in concurrent.futures.as_completed(future_to_text):
             embedding = future.result()
             if embedding:
-                embeddings.append(embedding)
+                # Convertir l'embedding en chaîne de caractères
+                embeddings.append(','.join(map(str, embedding)))
             else:
-                embeddings.append([0]*768)  # Placeholder pour les échecs d'API
+                # Placeholder pour les échecs d'API
+                embeddings.append(','.join(['0']*768))
     return embeddings
 
 def app():
@@ -100,15 +101,14 @@ def app():
                     # Générer les embeddings
                     embeddings = generate_embeddings(texts, api_key)
                     
-                    # Ajouter les embeddings à un nouveau DataFrame
-                    df_embeddings = pd.DataFrame(embeddings, columns=[f"Embedding {i+1}" for i in range(len(embeddings[0]))])
-                    result_df = pd.concat([df, df_embeddings], axis=1)
+                    # Ajouter les embeddings en tant que nouvelle colonne
+                    df['Embeddings'] = embeddings
                     
                     st.write("Embeddings générés avec succès !")
-                    st.write(result_df.head())
+                    st.write(df.head())
 
                 st.download_button(label="Télécharger le fichier avec Embeddings",
-                                   data=result_df.to_csv(index=False).encode('utf-8'),
+                                   data=df.to_csv(index=False).encode('utf-8'),
                                    file_name='embeddings_output.csv',
                                    mime='text/csv')
             else:
