@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import requests
 from bs4 import BeautifulSoup
-import re
 import inflect
 import unidecode
 
@@ -101,32 +100,37 @@ if uploaded_file is not None:
     else:
         df = pd.read_excel(uploaded_file)
 
-    # Sélection de la colonne des URLs
-    url_column = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
+    # Vérifier si le DataFrame est vide
+    if df.empty:
+        st.error("Le fichier téléchargé est vide ou n'a pas pu être lu correctement.")
+    else:
+        # Sélection de la colonne des URLs
+        url_column = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
 
-    # Préparer une colonne pour les embeddings
-    df["Embeddings"] = np.nan
+        # Préparer une colonne pour les embeddings
+        df["Embeddings"] = np.nan
 
-    # Processus d'embedding
-    with st.spinner("Traitement en cours..."):
-        for i, url in enumerate(df[url_column]):
-            st.write(f"Traitement de l'URL {i+1}/{len(df)}: {url}")
-            cleaned_text = get_and_clean_html(url)
-            if cleaned_text:
-                embedding = get_embeddings(cleaned_text)
-                df.at[i, "Embeddings"] = str(embedding)
+        # Processus d'embedding
+        with st.spinner("Traitement en cours..."):
+            for i, url in enumerate(df[url_column]):
+                st.write(f"Traitement de l'URL {i+1}/{len(df)}: {url}")
+                cleaned_text = get_and_clean_html(url)
+                if cleaned_text:
+                    embedding = get_embeddings(cleaned_text)
+                    df.at[i, "Embeddings"] = str(embedding)
 
-    # Affichage du DataFrame
-    st.write(df)
+        # Affichage du DataFrame
+        st.write(df)
 
-    # Téléchargement du fichier modifié
-    def convert_df_to_csv(df):
-        return df.to_csv(index=False).encode('utf-8')
+        # Téléchargement du fichier modifié
+        def convert_df_to_csv(df):
+            return df.to_csv(index=False).encode('utf-8')
 
-    csv = convert_df_to_csv(df)
-    st.download_button(
-        label="Télécharger le fichier avec embeddings",
-        data=csv,
-        file_name='embedded_urls.csv',
-        mime='text/csv',
-    )
+        csv = convert_df_to_csv(df)
+        st.download_button(
+            label="Télécharger le fichier avec embeddings",
+            data=csv,
+            file_name='embedded_urls.csv',
+            mime='text/csv',
+        )
+
