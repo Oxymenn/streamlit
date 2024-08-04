@@ -32,8 +32,15 @@ openai.api_key = st.secrets["api_key"]
 def extract_and_clean_content(url):
     try:
         response = requests.get(url)
+        response.raise_for_status()  # Assure que la requête est réussie
         soup = BeautifulSoup(response.text, 'html.parser')
-        content = soup.find(class_='below-woocommerce-category').get_text(separator=" ", strip=True)
+        element = soup.find(class_='below-woocommerce-category')
+        
+        if element:
+            content = element.get_text(separator=" ", strip=True)
+        else:
+            st.error(f"Élément non trouvé dans l'URL: {url}")
+            return None
 
         # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content)  # Nettoyer les espaces
@@ -45,22 +52,33 @@ def extract_and_clean_content(url):
         content = ' '.join([word for word in words if word not in stopwords_fr])
 
         return content
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erreur lors de l'accès à {url}: {e}")
+        return None
     except Exception as e:
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
 # Fonction pour obtenir les embeddings d'un texte
 def get_embeddings(text):
-    response = openai.Embedding.create(
-        input=text,
-        model="text-embedding-ada-002"
-    )
-    return response['data'][0]['embedding']
+    try:
+        response = openai.Embedding.create(
+            input=text,
+            model="text-embedding-ada-002"
+        )
+        return response['data'][0]['embedding']
+    except Exception as e:
+        st.error(f"Erreur lors de la création des embeddings: {e}")
+        return None
 
 # Fonction pour calculer la similarité cosinus
 def calculate_similarity(embeddings):
-    similarity_matrix = cosine_similarity(embeddings)
-    return similarity_matrix
+    try:
+        similarity_matrix = cosine_similarity(embeddings)
+        return similarity_matrix
+    except Exception as e:
+        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
+        return None
 
 # Interface Streamlit
 st.title("Analyse de similarité de contenu Web")
@@ -68,32 +86,39 @@ uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des
 
 if uploaded_file is not None:
     # Lire le fichier importé
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
 
-    urls = df['URL']  # Assurez-vous que le fichier a une colonne nommée 'URL'
+        if 'URL' not in df.columns:
+            st.error("Le fichier doit contenir une colonne nommée 'URL'")
+        else:
+            urls = df['URL']
 
-    # Extraire et nettoyer le contenu des URLs
-    contents = [extract_and_clean_content(url) for url in urls]
-    embeddings = [get_embeddings(content) for content in contents if content]
+            # Extraire et nettoyer le contenu des URLs
+            contents = [extract_and_clean_content(url) for url in urls]
+            embeddings = [get_embeddings(content) for content in contents if content]
 
-    if embeddings:
-        # Calculer la similarité cosinus
-        similarity_matrix = calculate_similarity(embeddings)
+            if embeddings:
+                # Calculer la similarité cosinus
+                similarity_matrix = calculate_similarity(embeddings)
 
-        # Création d'un DataFrame pour l'affichage
-        similarity_df = pd.DataFrame(similarity_matrix, columns=urls, index=urls)
+                if similarity_matrix is not None:
+                    # Création d'un DataFrame pour l'affichage
+                    similarity_df = pd.DataFrame(similarity_matrix, columns=urls, index=urls)
 
-        # Affichage du tableau interactif
-        st.dataframe(similarity_df)
+                    # Affichage du tableau interactif
+                    st.dataframe(similarity_df)
 
-        # Télécharger le fichier CSV avec les résultats
-        csv = similarity_df.to_csv().encode('utf-8')
-        st.download_button(
-            label="Télécharger les résultats en CSV",
-            data=csv,
-            file_name='similarity_results.csv',
-            mime='text/csv'
-        )
+                    # Télécharger le fichier CSV avec les résultats
+                    csv = similarity_df.to_csv().encode('utf-8')
+                    st.download_button(
+                        label="Télécharger les résultats en CSV",
+                        data=csv,
+                        file_name='similarity_results.csv',
+                        mime='text/csv'
+                    )
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du fichier: {e}")
