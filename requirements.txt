@@ -13,4 +13,5 @@ plotly
 matplotlib
 transformers
 requests
-spacy
+spacy==3.5.4  # Assurez-vous que cette version est compatible avec votre environnement
+thinc==8.1.17  # Version compatible avec SpaCy 3.5.4
