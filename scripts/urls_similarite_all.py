@@ -115,16 +115,29 @@ def app():
 
             urls = df[column_option].dropna().unique()
 
-            # Initialiser l'état de session si nécessaire
-            if 'contents' not in st.session_state:
-                st.session_state['contents'] = [extract_and_clean_content(url) for url in urls]
-            if 'embeddings' not in st.session_state:
-                st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
-            if 'similarity_matrix' not in st.session_state:
-                st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+            # Initialiser les listes de contenus et d'embeddings
+            contents = []
+            embeddings = []
+
+            # Extraire et traiter le contenu de chaque URL
+            for url in urls:
+                content = extract_and_clean_content(url)
+                if content:  # S'assurer que le contenu n'est pas None
+                    contents.append(content)
+                    embedding = get_embeddings(content)
+                    if embedding:  # S'assurer que l'embedding n'est pas None
+                        embeddings.append(embedding)
+
+            # Vérifier si tous les embeddings sont obtenus
+            if len(contents) != len(embeddings):
+                st.error("Certains embeddings n'ont pas pu être calculés. Vérifiez les URLs pour des erreurs potentielles.")
+                return
+
+            # Calculer la matrice de similarité
+            similarity_matrix = calculate_similarity(embeddings)
 
             # Vérification de la matrice de similarité
-            if st.session_state['similarity_matrix'] is not None:
+            if similarity_matrix is not None:
                 # Sélecteur d'URL et curseur pour le nombre de résultats
                 selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
                 max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
@@ -133,7 +146,7 @@ def app():
                 selected_index = urls.tolist().index(selected_url)
 
                 # Obtenir les similarités pour l'URL sélectionnée
-                selected_similarities = st.session_state['similarity_matrix'][selected_index]
+                selected_similarities = similarity_matrix[selected_index]
 
                 # Créer un DataFrame des similarités
                 similarity_df = pd.DataFrame({
@@ -172,7 +185,7 @@ def app():
 
                 for i, url in enumerate(urls):
                     # Obtenir les similarités pour l'URL en cours
-                    similarities = st.session_state['similarity_matrix'][i]
+                    similarities = similarity_matrix[i]
                     
                     # Créer un DataFrame temporaire pour trier les similarités
                     temp_df = pd.DataFrame({
