@@ -6,11 +6,14 @@ import re
 import os
 from sklearn.preprocessing import FunctionTransformer
 import requests
+from requests_html import HTMLSession
+from bs4 import BeautifulSoup
 import concurrent.futures
 
 # Liste des stopwords français (complète)
 stopwords_fr = [
-    # ... (complète liste déjà fournie)
+    "et", "boutique", "découvrez", "découvrir", "découvrer", "site", "explorez", "explorer", "produit", "ou", "mais", "donc", "or", "ni", "car", "à", "le", "la", "les", "un", "une", "des", "du", "de", "dans", "en",
+    "par", "pour", "avec", "sans", "sous", "sur", "chez", "entre", "contre", "vers", "après", "avant", "comme", "lorsque"
 ]
 
 def clean_text(text):
@@ -24,13 +27,27 @@ def clean_text(text):
     words = [word.rstrip('s') for word in words] 
     return ' '.join(words)
 
+def extract_content_from_url(url):
+    # Extraire le contenu HTML d'une URL spécifique
+    session = HTMLSession()
+    try:
+        response = session.get(url)
+        response.html.render()  # Render JavaScript content if needed
+        soup = BeautifulSoup(response.content, 'html.parser')
+        # Extraire le texte de la classe 'below-woocommerce-category'
+        content = soup.find(class_='below-woocommerce-category')
+        return content.get_text(separator=' ') if content else ''
+    except Exception as e:
+        st.warning(f"Erreur lors de l'extraction de l'URL {url}: {e}")
+        return ''
+
 def get_openai_embeddings(text, api_key):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     data = {
-        "model": "text-embedding-3-small",
+        "model": "text-embedding-ada-002",
         "input": text,
         "encoding_format": "float"
     }
@@ -40,7 +57,7 @@ def get_openai_embeddings(text, api_key):
             return response.json()['data'][0]['embedding']
         else:
             st.warning(f"Tentative {attempt + 1} échouée. Réessai...")
-    st.error("Error fetching embeddings from OpenAI API après plusieurs tentatives")
+    st.error("Erreur lors de la récupération des embeddings depuis l'API OpenAI après plusieurs tentatives")
     return None
 
 def generate_embeddings(texts, api_key):
@@ -56,7 +73,7 @@ def generate_embeddings(texts, api_key):
     return embeddings
 
 def app():
-    st.title("Transformer le contenu de vos urls en Embeddings")
+    st.title("Transformer le contenu de vos URLs en Embeddings")
 
     # Lire la clé API depuis les secrets
     try:
@@ -79,20 +96,24 @@ def app():
         st.write(df.head())
         
         url_column = st.selectbox("Sélectionnez la colonne des URL", df.columns)
-        embedding_column = st.selectbox("Sélectionnez la colonne pour les Embeddings", df.columns)
 
         if st.button("Générer les Embeddings"):
             if api_key:
-                with st.spinner("Génération des embeddings en cours..."):
-                    texts = df[url_column].tolist()
+                with st.spinner("Extraction et génération des embeddings en cours..."):
+                    # Extraire le contenu pertinent de chaque URL
+                    texts = [extract_content_from_url(url) for url in df[url_column].tolist()]
+                    # Générer les embeddings
                     embeddings = generate_embeddings(texts, api_key)
                     
-                    df[embedding_column] = embeddings
+                    # Ajouter les embeddings à un nouveau DataFrame
+                    df_embeddings = pd.DataFrame(embeddings, columns=[f"Embedding {i+1}" for i in range(len(embeddings[0]))])
+                    result_df = pd.concat([df, df_embeddings], axis=1)
+                    
                     st.write("Embeddings générés avec succès !")
-                    st.write(df.head())
+                    st.write(result_df.head())
 
                 st.download_button(label="Télécharger le fichier avec Embeddings",
-                                   data=df.to_csv(index=False).encode('utf-8'),
+                                   data=result_df.to_csv(index=False).encode('utf-8'),
                                    file_name='embeddings_output.csv',
                                    mime='text/csv')
             else:
