@@ -156,6 +156,7 @@ def app():
 
                 # Créer le second tableau pour toutes les URLs de départ
                 links_table = {
+                    'URL de départ': [],
                     'URL similaire 1': [],
                     'URL similaire 2': [],
                     'URL similaire 3': [],
@@ -187,6 +188,7 @@ def app():
                     all_similar_urls.extend(top_similar_urls)
 
                     # Remplir les données dans le tableau
+                    links_table['URL de départ'].append(url)
                     links_table['URL similaire 1'].append(top_similar_urls[0] if len(top_similar_urls) > 0 else None)
                     links_table['URL similaire 2'].append(top_similar_urls[1] if len(top_similar_urls) > 1 else None)
                     links_table['URL similaire 3'].append(top_similar_urls[2] if len(top_similar_urls) > 2 else None)
@@ -204,13 +206,13 @@ def app():
                 links_table['Occurrences'] = [occurrences_count[url] for url in urls]
 
                 # Créer un DataFrame pour le second tableau
-                links_df = pd.DataFrame(links_table, index=urls)
+                links_df = pd.DataFrame(links_table)
 
                 # Afficher le second tableau
                 st.dataframe(links_df)
 
                 # Télécharger le second tableau en CSV
-                csv_links = links_df.to_csv().encode('utf-8')
+                csv_links = links_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="Télécharger le tableau des liens en CSV",
                     data=csv_links,
