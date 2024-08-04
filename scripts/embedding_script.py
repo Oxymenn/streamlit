@@ -8,7 +8,7 @@ import re
 
 # Liste de stopwords en français
 stopwords_fr = {
-    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
+    "alors", "boutique", "site", "collection", "gamme", "découvrez", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
     "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
     "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
@@ -156,14 +156,16 @@ def app():
 
                 # Créer le second tableau pour toutes les URLs de départ
                 links_table = {
-                    'URL de départ': [],
                     'URL similaire 1': [],
                     'URL similaire 2': [],
                     'URL similaire 3': [],
                     'URL similaire 4': [],
                     'URL similaire 5': [],
-                    'Concatener': []
+                    'Concatener': [],
+                    'Occurrences': []
                 }
+
+                all_similar_urls = []
 
                 for i, url in enumerate(urls):
                     # Obtenir les similarités pour l'URL en cours
@@ -181,8 +183,10 @@ def app():
                     # Trier et prendre les 5 meilleures similarités
                     top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(5)['URL'].tolist()
 
+                    # Ajouter ces URLs à la liste complète pour le comptage
+                    all_similar_urls.extend(top_similar_urls)
+
                     # Remplir les données dans le tableau
-                    links_table['URL de départ'].append(url)
                     links_table['URL similaire 1'].append(top_similar_urls[0] if len(top_similar_urls) > 0 else None)
                     links_table['URL similaire 2'].append(top_similar_urls[1] if len(top_similar_urls) > 1 else None)
                     links_table['URL similaire 3'].append(top_similar_urls[2] if len(top_similar_urls) > 2 else None)
@@ -190,11 +194,17 @@ def app():
                     links_table['URL similaire 5'].append(top_similar_urls[4] if len(top_similar_urls) > 4 else None)
 
                     # Concatener les URLs
-                    concatenated = f"Lien 1 : {top_similar_urls[0]}; Lien 2 : {top_similar_urls[1]}; Lien 3 : {top_similar_urls[2]}; Lien 4 : {top_similar_urls[3]}; Lien 5 : {top_similar_urls[4]}"
+                    concatenated = f"Lien 1 : {top_similar_urls[0] if len(top_similar_urls) > 0 else ''}; Lien 2 : {top_similar_urls[1] if len(top_similar_urls) > 1 else ''}; Lien 3 : {top_similar_urls[2] if len(top_similar_urls) > 2 else ''}; Lien 4 : {top_similar_urls[3] if len(top_similar_urls) > 3 else ''}; Lien 5 : {top_similar_urls[4] if len(top_similar_urls) > 4 else ''}"
                     links_table['Concatener'].append(concatenated)
 
+                # Compter les occurrences de chaque URL de départ dans les URLs similaires
+                occurrences_count = {url: all_similar_urls.count(url) for url in urls}
+
+                # Ajouter les occurrences à la table des liens
+                links_table['Occurrences'] = [occurrences_count[url] for url in urls]
+
                 # Créer un DataFrame pour le second tableau
-                links_df = pd.DataFrame(links_table)
+                links_df = pd.DataFrame(links_table, index=urls)
 
                 # Afficher le second tableau
                 st.dataframe(links_df)
