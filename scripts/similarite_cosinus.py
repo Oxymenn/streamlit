@@ -119,6 +119,10 @@ def app():
                 st.write("Tableau de similarité :")
                 st.write(similarity_df)
 
+                # Télécharger le tableau de similarité
+                similarity_csv = similarity_df.to_csv(index=False).encode('utf-8')
+                st.download_button(label="Télécharger le tableau de similarité en CSV", data=similarity_csv, file_name='similarity_table.csv', mime='text/csv')
+
                 # Générer le tableau d'analyse des liens
                 link_analysis_df = generate_link_analysis(df_main, url_column_embedded, embeddings_main, df_secondary, url_column_depart, url_column_destination)
                 st.write("Résultats de l'analyse des liens :")
@@ -126,7 +130,4 @@ def app():
 
                 # Télécharger le tableau d'analyse des liens
                 analysis_csv = link_analysis_df.to_csv(index=False).encode('utf-8')
-                st.download_button(label="Télécharger le tableau d'analyse des liens en CSV", data=analysis_csv, file_name='link_analysis.csv', mime='text/csv')
-
-if __name__ == "__main__":
-    app()
+      
