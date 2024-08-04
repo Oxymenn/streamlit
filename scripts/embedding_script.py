@@ -109,14 +109,17 @@ def app():
 
             urls = df[column_option].dropna().unique()
 
-            # Initialiser l'état de session
+            # Initialiser l'état de session si nécessaire
             if 'contents' not in st.session_state:
                 st.session_state['contents'] = [extract_and_clean_content(url) for url in urls]
+            if 'embeddings' not in st.session_state:
                 st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
+            if 'similarity_matrix' not in st.session_state:
                 st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
 
             # Ajouter un bouton pour lancer l'analyse
-            if st.button("Lancer l'analyse") or 'similarity_matrix' in st.session_state:
+            if st.button("Lancer l'analyse"):
+                # Vérification de la matrice de similarité
                 if st.session_state['similarity_matrix'] is not None:
                     # Sélecteur d'URL et curseur pour le nombre de résultats
                     selected_url = st.selectbox("Sélectionnez une URL", urls)
