@@ -7,16 +7,16 @@ import ast
 def load_file(uploaded_file):
     file_type = uploaded_file.name.split('.')[-1]
     if file_type == 'xlsx':
-        # Load all sheets into a dictionary of DataFrames
+        # Charger toutes les feuilles dans un dictionnaire de DataFrames
         sheets_dict = pd.read_excel(uploaded_file, sheet_name=None, engine='openpyxl')
         return sheets_dict
     elif file_type == 'csv':
         df = pd.read_csv(uploaded_file)
-        return {'Sheet1': df}  # Simulate a single sheet for CSV
+        return {'Sheet1': df}  # Simuler une seule feuille pour les fichiers CSV
     return None
 
 def preprocess_embeddings(df, embedding_col):
-    # Convert strings to lists of numbers if necessary
+    # Convertir les chaînes de caractères en listes de nombres si nécessaire
     if isinstance(df[embedding_col].iloc[0], str):
         df[embedding_col] = df[embedding_col].apply(ast.literal_eval)
     return np.array(df[embedding_col].tolist())
@@ -25,7 +25,7 @@ def calculate_cosine_similarity(embeddings):
     similarities = cosine_similarity(embeddings)
     return similarities
 
-def generate_similarity_table(df_main, url_col_main, df_secondary, url_col_secondary, similarities, num_links):
+def generate_similarity_table(df_main, url_col_embedded, df_secondary, url_col_depart, url_col_destination, similarities, num_links):
     similarity_data = []
     for index, row in df_main.iterrows():
         similarity_scores = similarities[index]
@@ -33,11 +33,11 @@ def generate_similarity_table(df_main, url_col_main, df_secondary, url_col_secon
         similar_urls = []
         count = 0
         for idx in similar_indices:
-            if df_secondary[url_col_secondary].iloc[idx] != row[url_col_main] and count < num_links:
-                similar_urls.append(df_secondary[url_col_secondary].iloc[idx])
+            if df_secondary[url_col_depart].iloc[idx] != row[url_col_embedded] and count < num_links:
+                similar_urls.append(df_secondary[url_col_destination].iloc[idx])
                 count += 1
-        similarity_data.append([row[url_col_main]] + similar_urls)
-    columns = ["URL de départ"] + [f"URL similaire {i+1}" for i in range(num_links)]
+        similarity_data.append([row[url_col_embedded]] + similar_urls)
+    columns = ["URL embeddée"] + [f"URL similaire {i+1}" for i in range(num_links)]
     similarity_df = pd.DataFrame(similarity_data, columns=columns)
     return similarity_df
 
@@ -46,11 +46,11 @@ def app():
     uploaded_file = st.file_uploader("Choisissez un fichier Excel ou CSV", type=["xlsx", "csv"])
 
     if uploaded_file:
-        # Load the file and get sheet names
+        # Charger le fichier et obtenir les noms des feuilles
         sheets_dict = load_file(uploaded_file)
         sheet_names = list(sheets_dict.keys())
 
-        # Select main and secondary sheets
+        # Sélection de la feuille principale et secondaire
         main_sheet = st.selectbox("Sélectionner la feuille principale", sheet_names)
         secondary_sheet = st.selectbox("Sélectionner la feuille secondaire", sheet_names)
 
@@ -62,48 +62,49 @@ def app():
         st.write("Aperçu des données (feuille secondaire) :")
         st.write(df_secondary.head())
 
-        # Select URL columns for each sheet
-        url_column_main = st.selectbox("Sélectionner l'URL de départ", df_main.columns)
-        url_column_secondary = st.selectbox("Sélectionner l'URL de destination", df_secondary.columns)
-
-        # Select embeddings column
+        # Sélection des colonnes pour la feuille principale
         embedding_column = st.selectbox("Sélectionnez la colonne des Embeddings", df_main.columns)
+        url_column_embedded = st.selectbox("Sélectionner l'URL embeddée", df_main.columns)
+
+        # Sélection des colonnes pour la feuille secondaire
+        url_column_depart = st.selectbox("Sélectionner l'URL de départ", df_secondary.columns)
+        url_column_destination = st.selectbox("Sélectionner l'URL de destination", df_secondary.columns)
 
         if st.button("Calculer la similarité cosinus"):
             with st.spinner("Calcul de la similarité en cours..."):
                 embeddings_main = preprocess_embeddings(df_main, embedding_column)
-                embeddings_secondary = preprocess_embeddings(df_secondary, embedding_column)
 
-                # Calculate similarities only for the main embeddings against the secondary
+                # Calculer les similarités pour les embeddings de la feuille principale
                 similarities = calculate_cosine_similarity(embeddings_main)
 
                 st.session_state.similarities = similarities
                 st.session_state.df_main = df_main
                 st.session_state.df_secondary = df_secondary
-                st.session_state.url_column_main = url_column_main
-                st.session_state.url_column_secondary = url_column_secondary
-                st.session_state.embedding_column = embedding_column
-                st.session_state.num_links = 5  # 5 links
+                st.session_state.url_column_embedded = url_column_embedded
+                st.session_state.url_column_depart = url_column_depart
+                st.session_state.url_column_destination = url_column_destination
+                st.session_state.num_links = 5  # 5 liens
 
                 st.write("Calcul de la similarité terminé avec succès !")
 
     if 'similarities' in st.session_state:
         df_main = st.session_state.df_main
         df_secondary = st.session_state.df_secondary
-        url_column_main = st.session_state.url_column_main
-        url_column_secondary = st.session_state.url_column_secondary
+        url_column_embedded = st.session_state.url_column_embedded
+        url_column_depart = st.session_state.url_column_depart
+        url_column_destination = st.session_state.url_column_destination
         similarities = st.session_state.similarities
 
-        # Slider for the number of links to analyze
-        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=5, value=st.session_state.get('num_links', 5))  # 5 links
+        # Curseur pour le nombre de liens à analyser
+        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=5, value=st.session_state.get('num_links', 5))  # 5 liens
         st.session_state.num_links = num_links
 
-        # Generate the similarity table
-        similarity_df = generate_similarity_table(df_main, url_column_main, df_secondary, url_column_secondary, similarities, st.session_state.num_links)
+        # Générer le tableau de similarité
+        similarity_df = generate_similarity_table(df_main, url_column_embedded, df_secondary, url_column_depart, url_column_destination, similarities, st.session_state.num_links)
         st.write("Tableau de similarité :")
         st.write(similarity_df)
 
-        # Concatenate similar URLs
+        # Concaténer les URLs similaires
         similarity_df['concatener'] = similarity_df.apply(
             lambda row: f"Lien 1 : {row['URL similaire 1']} ; Lien 2 : {row['URL similaire 2']} ; Lien 3 : {row['URL similaire 3']} ; Lien 4 : {row['URL similaire 4']} ; Lien 5 : {row['URL similaire 5']} ; ", axis=1
         )
