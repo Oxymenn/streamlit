@@ -203,7 +203,7 @@ def app():
                 st.download_button(
                     label="Télécharger le tableau du maillage interne (CSV)",
                     data=csv_links,
-                    file_name=f'blabla_maillage_interne_{file_name}.csv',
+                    file_name=f'maillage_interne-{file_name}.csv',
                     mime='text/csv'
                 )
 
