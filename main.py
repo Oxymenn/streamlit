@@ -5,11 +5,12 @@ from scripts import audit_maillage_interne
 from scripts import cannibalisation_serp
 from scripts import categorisation_produit
 from scripts import test_cannibalisation
-from scripts import test_similarite
+from scripts import urls_similarite_all
 
 # Configuration des pages
 PAGES = {
     "Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)": embedding_script,
+    "Pages Similaires Sémantiquement - Pour toutes pages": urls_similarite_all,
     "Similarité Cosinus": similarite_cosinus,
     "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
