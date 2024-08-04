@@ -119,15 +119,17 @@ def app():
             if 'contents' not in st.session_state:
                 st.session_state['contents'] = []
                 st.session_state['embeddings'] = []
-                
+                st.session_state['valid_urls'] = []
+
                 # Extraire et traiter le contenu de chaque URL
                 for url in urls:
                     content = extract_and_clean_content(url)
                     if content:  # S'assurer que le contenu n'est pas None
-                        st.session_state['contents'].append(content)
                         embedding = get_embeddings(content)
                         if embedding:  # S'assurer que l'embedding n'est pas None
+                            st.session_state['contents'].append(content)
                             st.session_state['embeddings'].append(embedding)
+                            st.session_state['valid_urls'].append(url)
 
             # Calculer la matrice de similarité si non existante
             if 'similarity_matrix' not in st.session_state:
@@ -139,19 +141,22 @@ def app():
 
             # Vérification de la matrice de similarité
             if st.session_state['similarity_matrix'] is not None:
+                # Utiliser les URLs valides uniquement
+                valid_urls = st.session_state['valid_urls']
+
                 # Sélecteur d'URL et curseur pour le nombre de résultats
-                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
-                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
+                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", valid_urls)
+                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(valid_urls) - 1, 5)
 
                 # Trouver l'index de l'URL sélectionnée
-                selected_index = urls.tolist().index(selected_url)
+                selected_index = valid_urls.index(selected_url)
 
                 # Obtenir les similarités pour l'URL sélectionnée
                 selected_similarities = st.session_state['similarity_matrix'][selected_index]
 
                 # Créer un DataFrame des similarités
                 similarity_df = pd.DataFrame({
-                    'URL': urls,
+                    'URL': valid_urls,
                     'Similarité': selected_similarities
                 })
 
@@ -184,13 +189,13 @@ def app():
                     'Concatener': []
                 }
 
-                for i, url in enumerate(urls):
+                for i, url in enumerate(valid_urls):
                     # Obtenir les similarités pour l'URL en cours
                     similarities = st.session_state['similarity_matrix'][i]
                     
                     # Créer un DataFrame temporaire pour trier les similarités
                     temp_df = pd.DataFrame({
-                        'URL': urls,
+                        'URL': valid_urls,
                         'Similarité': similarities
                     })
 
