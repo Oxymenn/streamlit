@@ -146,7 +146,7 @@ def app():
                 st.dataframe(similarity_df.head(max_results))
 
                 # Télécharger le fichier CSV avec les résultats
-                csv = similarity_df.to_csv().encode('utf-8')
+                csv = similarity_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="Télécharger les résultats en CSV",
                     data=csv,
