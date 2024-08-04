@@ -150,7 +150,7 @@ def app():
                 st.download_button(
                     label="Télécharger les urls similaires à l'url filtrée (CSV)",
                     data=csv,
-                    file_name='similarity_results.csv',
+                    file_name='urls_similaires-{file_name}.csv',
                     mime='text/csv'
                 )
 
@@ -204,7 +204,7 @@ def app():
                 st.download_button(
                     label="Télécharger le tableau du maillage interne (CSV)",
                     data=csv_links,
-                    file_name='links_table.csv',
+                    file_name='maillage_interne-{file_name}.csv',
                     mime='text/csv'
                 )
 
