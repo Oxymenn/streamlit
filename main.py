@@ -1,4 +1,5 @@
 import streamlit as st
+from scripts import embedding_script
 from scripts import similarite_cosinus
 from scripts import audit_maillage_interne
 from scripts import cannibalisation_serp
@@ -8,6 +9,7 @@ from scripts import test_similarite
 
 # Configuration des pages
 PAGES = {
+    "Embeddings d'urls": embedding_script,
     "Similarité Cosinus": similarite_cosinus,
     "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
