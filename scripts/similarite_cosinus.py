@@ -25,8 +25,9 @@ def calculate_cosine_similarity(embeddings):
     similarities = cosine_similarity(embeddings)
     return similarities
 
-def generate_similarity_table(df_main, url_col_embedded, df_secondary, url_col_depart, url_col_destination, similarities, num_links):
+def generate_similarity_table(df_main, url_col_embedded, df_secondary, url_col_depart, url_col_destination, similarities):
     similarity_data = []
+    num_links = 5  # Fixer le nombre de liens similaires à 5
     for index, row in df_main.iterrows():
         similarity_scores = similarities[index]
         similar_indices = np.argsort(similarity_scores)[::-1]
@@ -83,7 +84,6 @@ def app():
                 st.session_state.url_column_embedded = url_column_embedded
                 st.session_state.url_column_depart = url_column_depart
                 st.session_state.url_column_destination = url_column_destination
-                st.session_state.num_links = 5  # 5 liens
 
                 st.write("Calcul de la similarité terminé avec succès !")
 
@@ -95,12 +95,8 @@ def app():
         url_column_destination = st.session_state.url_column_destination
         similarities = st.session_state.similarities
 
-        # Curseur pour le nombre de liens à analyser
-        num_links = st.slider("Nombre de liens à analyser", min_value=1, max_value=5, value=st.session_state.get('num_links', 5))  # 5 liens
-        st.session_state.num_links = num_links
-
         # Générer le tableau de similarité
-        similarity_df = generate_similarity_table(df_main, url_column_embedded, df_secondary, url_column_depart, url_column_destination, similarities, st.session_state.num_links)
+        similarity_df = generate_similarity_table(df_main, url_column_embedded, df_secondary, url_column_depart, url_column_destination, similarities)
         st.write("Tableau de similarité :")
         st.write(similarity_df)
 
