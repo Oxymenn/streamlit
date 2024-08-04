@@ -7,7 +7,7 @@ import re
 
 # Liste de stopwords en français
 stopwords_fr = {
-    "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
+    "alors", "boutique", "site", "collection", "gamme", "découvrez", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
     "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
     "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
