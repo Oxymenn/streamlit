@@ -26,9 +26,7 @@ stopwords_fr = {
 }
 
 # Configuration de la clé API OpenAI
-client = openai.OpenAI(
-    api_key=st.secrets.get("api_key", "default_key")
-)
+openai.api_key = st.secrets.get("api_key", "default_key")
 
 # Fonction pour extraire et nettoyer le contenu HTML
 def extract_and_clean_content(url):
@@ -64,11 +62,11 @@ def extract_and_clean_content(url):
 # Fonction pour obtenir les embeddings d'un texte
 def get_embeddings(text):
     try:
-        response = client.embeddings.create(
+        response = openai.Embedding.create(
             input=text,
-            model="text-embedding-ada-002"  # Assurez-vous que le modèle souhaité est disponible
+            model="text-embedding-ada-002"  # Remplacez par le modèle correct si nécessaire
         )
-        return response.embeddings[0].embedding
+        return response.data[0].embedding
     except Exception as e:
         st.error(f"Erreur lors de la création des embeddings: {e}")
         return None
