@@ -8,7 +8,7 @@ import re
 
 # Liste de stopwords en français
 stopwords_fr = {
-    "alors", "boutique", "site", "collection", "gamme", "découvrez", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
+    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
     "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
     "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
@@ -94,7 +94,7 @@ def calculate_similarity(embeddings):
 
 # Fonction principale de l'application
 def app():
-    st.title("Analyse de similarité de contenu Web")
+    st.title("Analyse sémantique - Pages similaires")
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
@@ -121,8 +121,8 @@ def app():
             # Vérification de la matrice de similarité
             if st.session_state['similarity_matrix'] is not None:
                 # Sélecteur d'URL et curseur pour le nombre de résultats
-                selected_url = st.selectbox("Sélectionnez une URL", urls)
-                max_results = st.slider("Nombre d'URLs les plus proches à afficher", 1, len(urls) - 1, 5)
+                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
+                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
 
                 # Trouver l'index de l'URL sélectionnée
                 selected_index = urls.tolist().index(selected_url)
@@ -146,9 +146,9 @@ def app():
                 st.dataframe(similarity_df.head(max_results))
 
                 # Télécharger le fichier CSV avec les résultats
-                csv = similarity_df.to_csv(index=False).encode('utf-8')
+                csv = similarity_df.to_csv().encode('utf-8')
                 st.download_button(
-                    label="Télécharger les résultats en CSV",
+                    label="Télécharger les urls similaires à l'url filtrée (CSV)",
                     data=csv,
                     file_name='similarity_results.csv',
                     mime='text/csv'
@@ -162,11 +162,8 @@ def app():
                     'URL similaire 3': [],
                     'URL similaire 4': [],
                     'URL similaire 5': [],
-                    'Concatener': [],
-                    'Occurrences': []
+                    'Concatener': []
                 }
-
-                all_similar_urls = []
 
                 for i, url in enumerate(urls):
                     # Obtenir les similarités pour l'URL en cours
@@ -184,9 +181,6 @@ def app():
                     # Trier et prendre les 5 meilleures similarités
                     top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(5)['URL'].tolist()
 
-                    # Ajouter ces URLs à la liste complète pour le comptage
-                    all_similar_urls.extend(top_similar_urls)
-
                     # Remplir les données dans le tableau
                     links_table['URL de départ'].append(url)
                     links_table['URL similaire 1'].append(top_similar_urls[0] if len(top_similar_urls) > 0 else None)
@@ -196,44 +190,8 @@ def app():
                     links_table['URL similaire 5'].append(top_similar_urls[4] if len(top_similar_urls) > 4 else None)
 
                     # Concatener les URLs
-                    concatenated = f"Lien 1 : {top_similar_urls[0] if len(top_similar_urls) > 0 else ''}; Lien 2 : {top_similar_urls[1] if len(top_similar_urls) > 1 else ''}; Lien 3 : {top_similar_urls[2] if len(top_similar_urls) > 2 else ''}; Lien 4 : {top_similar_urls[3] if len(top_similar_urls) > 3 else ''}; Lien 5 : {top_similar_urls[4] if len(top_similar_urls) > 4 else ''}"
+                    concatenated = f"Lien 1 : {top_similar_urls[0]}; Lien 2 : {top_similar_urls[1]}; Lien 3 : {top_similar_urls[2]}; Lien 4 : {top_similar_urls[3]}; Lien 5 : {top_similar_urls[4]}"
                     links_table['Concatener'].append(concatenated)
-
-                # Compter les occurrences de chaque URL de départ dans les URLs similaires
-                occurrences_count = {url: all_similar_urls.count(url) for url in urls}
-
-                # Ajouter les occurrences à la table des liens
-                links_table['Occurrences'] = [occurrences_count[url] for url in urls]
-
-                # Ajuster les URLs avec occurrence 0
-                for idx, (url, occurrence) in enumerate(zip(links_table['URL de départ'], links_table['Occurrences'])):
-                    if occurrence == 0:
-                        # Trouver une URL de départ avec similarité > 0.8 et ajouter l'URL en tant qu'URL similaire
-                        similarities = st.session_state['similarity_matrix'][idx]
-                        potential_indices = np.where((similarities > 0.8) & (similarities < 1))[0]
-
-                        for potential_index in potential_indices:
-                            if url not in links_table['URL similaire 1'][potential_index:]:
-                                for sim_idx in range(5):
-                                    similar_urls = [
-                                        links_table[f'URL similaire {i+1}'][potential_index] for i in range(5)
-                                    ]
-                                    if links_table[f'URL similaire {sim_idx+1}'][potential_index] is None:
-                                        links_table[f'URL similaire {sim_idx+1}'][potential_index] = url
-                                        break
-                                    elif links_table[f'URL similaire {sim_idx+1}'][potential_index] not in similar_urls:
-                                        links_table[f'URL similaire {sim_idx+1}'][potential_index] = url
-                                        break
-
-                # Mettre à jour les occurrences après ajustement
-                all_similar_urls = []
-                for i in range(len(urls)):
-                    for j in range(1, 6):
-                        if links_table[f'URL similaire {j}'][i]:
-                            all_similar_urls.append(links_table[f'URL similaire {j}'][i])
-
-                occurrences_count = {url: all_similar_urls.count(url) for url in urls}
-                links_table['Occurrences'] = [occurrences_count[url] for url in urls]
 
                 # Créer un DataFrame pour le second tableau
                 links_df = pd.DataFrame(links_table)
@@ -242,9 +200,9 @@ def app():
                 st.dataframe(links_df)
 
                 # Télécharger le second tableau en CSV
-                csv_links = links_df.to_csv(index=False).encode('utf-8')
+                csv_links = links_df.to_csv().encode('utf-8')
                 st.download_button(
-                    label="Télécharger le tableau des liens en CSV",
+                    label="Télécharger le tableau du maillage interne (CSV)",
                     data=csv_links,
                     file_name='links_table.csv',
                     mime='text/csv'
@@ -256,3 +214,4 @@ def app():
 # Assurez-vous que la fonction `app` est appelée ici
 if __name__ == "__main__":
     app()
+
