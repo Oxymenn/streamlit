@@ -9,9 +9,3 @@ beautifulsoup4
 tqdm
 unidecode
 openai
-plotly
-matplotlib
-transformers
-requests
-spacy
-thinc
