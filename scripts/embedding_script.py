@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
 import re
 
-# Définir une liste de stopwords en français
+# Liste de stopwords en français
 stopwords_fr = {
     "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
@@ -25,7 +25,7 @@ stopwords_fr = {
     "été", "être"
 }
 
-# Configure OpenAI API Key à partir de secret.toml
+# Configurez votre clé API OpenAI ici ou dans un fichier secret
 openai.api_key = st.secrets.get("api_key", "default_key")
 
 # Fonction pour extraire et nettoyer le contenu HTML
@@ -80,45 +80,50 @@ def calculate_similarity(embeddings):
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
-# Interface Streamlit
-st.title("Analyse de similarité de contenu Web")
-uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
+# Fonction principale de l'application
+def app():
+    st.title("Analyse de similarité de contenu Web")
+    uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
-if uploaded_file is not None:
-    # Lire le fichier importé
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
+    if uploaded_file is not None:
+        # Lire le fichier importé
+        try:
+            if uploaded_file.name.endswith('.csv'):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
 
-        if 'URL' not in df.columns:
-            st.error("Le fichier doit contenir une colonne nommée 'URL'")
-        else:
-            urls = df['URL']
+            if 'URL' not in df.columns:
+                st.error("Le fichier doit contenir une colonne nommée 'URL'")
+            else:
+                urls = df['URL']
 
-            # Extraire et nettoyer le contenu des URLs
-            contents = [extract_and_clean_content(url) for url in urls]
-            embeddings = [get_embeddings(content) for content in contents if content]
+                # Extraire et nettoyer le contenu des URLs
+                contents = [extract_and_clean_content(url) for url in urls]
+                embeddings = [get_embeddings(content) for content in contents if content]
 
-            if embeddings:
-                # Calculer la similarité cosinus
-                similarity_matrix = calculate_similarity(embeddings)
+                if embeddings:
+                    # Calculer la similarité cosinus
+                    similarity_matrix = calculate_similarity(embeddings)
 
-                if similarity_matrix is not None:
-                    # Création d'un DataFrame pour l'affichage
-                    similarity_df = pd.DataFrame(similarity_matrix, columns=urls, index=urls)
+                    if similarity_matrix is not None:
+                        # Création d'un DataFrame pour l'affichage
+                        similarity_df = pd.DataFrame(similarity_matrix, columns=urls, index=urls)
 
-                    # Affichage du tableau interactif
-                    st.dataframe(similarity_df)
+                        # Affichage du tableau interactif
+                        st.dataframe(similarity_df)
 
-                    # Télécharger le fichier CSV avec les résultats
-                    csv = similarity_df.to_csv().encode('utf-8')
-                    st.download_button(
-                        label="Télécharger les résultats en CSV",
-                        data=csv,
-                        file_name='similarity_results.csv',
-                        mime='text/csv'
-                    )
-    except Exception as e:
-        st.error(f"Erreur lors de la lecture du fichier: {e}")
+                        # Télécharger le fichier CSV avec les résultats
+                        csv = similarity_df.to_csv().encode('utf-8')
+                        st.download_button(
+                            label="Télécharger les résultats en CSV",
+                            data=csv,
+                            file_name='similarity_results.csv',
+                            mime='text/csv'
+                        )
+        except Exception as e:
+            st.error(f"Erreur lors de la lecture du fichier: {e}")
+
+# Assurez-vous que la fonction `app` est appelée ici
+if __name__ == "__main__":
+    app()
