@@ -8,20 +8,20 @@ import re
 
 # Liste de stopwords en français
 stopwords_fr = {
-    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
-    "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
-    "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
-    "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
-    "est", "et", "eu", "fait", "faites", "fois", "font", "force", "haut", 
-    "hors", "ici", "il", "ils", "je", "juste", "la", "le", "les", "leur", 
-    "là", "ma", "maintenant", "mais", "mes", "mien", "moins", "mon", "mot", 
-    "même", "ni", "nommés", "notre", "nous", "nouveaux", "ou", "où", "par", 
-    "parce", "parole", "pas", "personnes", "peut", "peu", "pièce", "plupart", 
-    "pour", "pourquoi", "quand", "que", "quel", "quelle", "quelles", "quels", 
-    "qui", "sa", "sans", "ses", "seulement", "si", "sien", "son", "sont", 
-    "sous", "soyez", "sujet", "sur", "ta", "tandis", "tellement", "tels", 
-    "tes", "ton", "tous", "tout", "trop", "très", "tu", "valeur", "voie", 
-    "voient", "vont", "votre", "vous", "vu", "ça", "étaient", "état", "étions", 
+    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon",
+    "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment",
+    "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit",
+    "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai",
+    "est", "et", "eu", "fait", "faites", "fois", "font", "force", "haut",
+    "hors", "ici", "il", "ils", "je", "juste", "la", "le", "les", "leur",
+    "là", "ma", "maintenant", "mais", "mes", "mien", "moins", "mon", "mot",
+    "même", "ni", "nommés", "notre", "nous", "nouveaux", "ou", "où", "par",
+    "parce", "parole", "pas", "personnes", "peut", "peu", "pièce", "plupart",
+    "pour", "pourquoi", "quand", "que", "quel", "quelle", "quelles", "quels",
+    "qui", "sa", "sans", "ses", "seulement", "si", "sien", "son", "sont",
+    "sous", "soyez", "sujet", "sur", "ta", "tandis", "tellement", "tels",
+    "tes", "ton", "tous", "tout", "trop", "très", "tu", "valeur", "voie",
+    "voient", "vont", "votre", "vous", "vu", "ça", "étaient", "état", "étions",
     "été", "être"
 }
 
@@ -115,21 +115,23 @@ def app():
 
             urls = df[column_option].dropna().unique()
 
-            # Initialiser les listes de contenus et d'embeddings si non existantes
+            # Initialiser les listes de contenus, embeddings, et URLs valides si non existantes
             if 'contents' not in st.session_state:
                 st.session_state['contents'] = []
+            if 'embeddings' not in st.session_state:
                 st.session_state['embeddings'] = []
+            if 'valid_urls' not in st.session_state:
                 st.session_state['valid_urls'] = []
 
-                # Extraire et traiter le contenu de chaque URL
-                for url in urls:
-                    content = extract_and_clean_content(url)
-                    if content:  # S'assurer que le contenu n'est pas None
-                        embedding = get_embeddings(content)
-                        if embedding:  # S'assurer que l'embedding n'est pas None
-                            st.session_state['contents'].append(content)
-                            st.session_state['embeddings'].append(embedding)
-                            st.session_state['valid_urls'].append(url)
+            # Extraire et traiter le contenu de chaque URL
+            for url in urls:
+                content = extract_and_clean_content(url)
+                if content:  # S'assurer que le contenu n'est pas None
+                    embedding = get_embeddings(content)
+                    if embedding:  # S'assurer que l'embedding n'est pas None
+                        st.session_state['contents'].append(content)
+                        st.session_state['embeddings'].append(embedding)
+                        st.session_state['valid_urls'].append(url)
 
             # Calculer la matrice de similarité si non existante
             if 'similarity_matrix' not in st.session_state:
