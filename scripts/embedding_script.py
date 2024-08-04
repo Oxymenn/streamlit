@@ -8,7 +8,7 @@ import re
 
 # Liste de stopwords en français
 stopwords_fr = {
-    "alors", "boutique", "site", "collection", "gamme", "découvrez", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
+    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
     "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
     "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
@@ -122,7 +122,7 @@ def app():
             if st.session_state['similarity_matrix'] is not None:
                 # Sélecteur d'URL et curseur pour le nombre de résultats
                 selected_url = st.selectbox("Sélectionnez une URL", urls)
-                max_results = st.slider("Nombre d'URLs les plus proches à afficher", 1, len(urls), 5)
+                max_results = st.slider("Nombre d'URLs les plus proches à afficher", 1, len(urls) - 1, 5)
 
                 # Trouver l'index de l'URL sélectionnée
                 selected_index = urls.tolist().index(selected_url)
@@ -135,6 +135,9 @@ def app():
                     'URL': urls,
                     'Similarité': selected_similarities
                 })
+
+                # Exclure l'URL sélectionnée
+                similarity_df = similarity_df[similarity_df['URL'] != selected_url]
 
                 # Trier le DataFrame par similarité décroissante
                 similarity_df = similarity_df.sort_values(by='Similarité', ascending=False)
