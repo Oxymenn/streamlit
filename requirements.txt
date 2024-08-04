@@ -12,5 +12,5 @@ openai
 plotly
 matplotlib
 transformers
-inflect
-unidecode
+requests
+nltk
