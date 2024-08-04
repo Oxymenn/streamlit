@@ -34,13 +34,9 @@ def extract_and_clean_content(url):
         response = requests.get(url)
         response.raise_for_status()  # Assure que la requête est réussie
         soup = BeautifulSoup(response.text, 'html.parser')
-        element = soup.find(class_='below-woocommerce-category')
         
-        if element:
-            content = element.get_text(separator=" ", strip=True)
-        else:
-            st.error(f"Élément non trouvé dans l'URL: {url}")
-            return None
+        # Extraire tout le texte de la page HTML
+        content = soup.get_text(separator=" ", strip=True)
 
         # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content)  # Nettoyer les espaces
@@ -105,6 +101,9 @@ def app():
             else:
                 df = pd.read_excel(uploaded_file)
 
+            # Extraire le nom du fichier sans extension
+            file_name = uploaded_file.name.rsplit('.', 1)[0]
+
             # Afficher les colonnes disponibles et permettre à l'utilisateur de sélectionner la colonne des URLs
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
 
@@ -146,11 +145,11 @@ def app():
                 st.dataframe(similarity_df.head(max_results))
 
                 # Télécharger le fichier CSV avec les résultats
-                csv = similarity_df.to_csv().encode('utf-8')
+                csv = similarity_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="Télécharger les urls similaires à l'url filtrée (CSV)",
                     data=csv,
-                    file_name='urls_similaires-{file_name}.csv',
+                    file_name=f'blabla_urls_similaires_{file_name}.csv',
                     mime='text/csv'
                 )
 
@@ -190,7 +189,7 @@ def app():
                     links_table['URL similaire 5'].append(top_similar_urls[4] if len(top_similar_urls) > 4 else None)
 
                     # Concatener les URLs
-                    concatenated = f"Lien 1 : {top_similar_urls[0]}; Lien 2 : {top_similar_urls[1]}; Lien 3 : {top_similar_urls[2]}; Lien 4 : {top_similar_urls[3]}; Lien 5 : {top_similar_urls[4]}"
+                    concatenated = f"Lien 1 : {top_similar_urls[0] if len(top_similar_urls) > 0 else ''}; Lien 2 : {top_similar_urls[1] if len(top_similar_urls) > 1 else ''}; Lien 3 : {top_similar_urls[2] if len(top_similar_urls) > 2 else ''}; Lien 4 : {top_similar_urls[3] if len(top_similar_urls) > 3 else ''}; Lien 5 : {top_similar_urls[4] if len(top_similar_urls) > 4 else ''}"
                     links_table['Concatener'].append(concatenated)
 
                 # Créer un DataFrame pour le second tableau
@@ -200,11 +199,11 @@ def app():
                 st.dataframe(links_df)
 
                 # Télécharger le second tableau en CSV
-                csv_links = links_df.to_csv().encode('utf-8')
+                csv_links = links_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="Télécharger le tableau du maillage interne (CSV)",
                     data=csv_links,
-                    file_name='maillage_interne-{file_name}.csv',
+                    file_name=f'blabla_maillage_interne_{file_name}.csv',
                     mime='text/csv'
                 )
 
@@ -214,4 +213,3 @@ def app():
 # Assurez-vous que la fonction `app` est appelée ici
 if __name__ == "__main__":
     app()
-
