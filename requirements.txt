@@ -13,4 +13,5 @@ plotly
 matplotlib
 nltk
 transformers
-requests-html
+inflect
+unidecode
