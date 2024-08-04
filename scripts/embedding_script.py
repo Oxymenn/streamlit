@@ -4,30 +4,25 @@ import requests
 from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
 import openai
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
+import spacy
 import re
 
-# Télécharger les ressources NLTK nécessaires
-nltk.download('stopwords')
-nltk.download('wordnet')
-
-# Initialisation du lemmatizer et des stop words
-lemmatizer = WordNetLemmatizer()
-stop_words = set(stopwords.words('english'))
+# Charger le modèle de langue anglaise de SpaCy
+nlp = spacy.load('en_core_web_sm')
 
 # Configuration de l'API OpenAI
 openai.api_key = st.secrets["openai"]["openai_api_key"]
 
-# Fonction pour nettoyer le texte
+# Fonction pour nettoyer le texte avec SpaCy
 def clean_text(text):
-    text = re.sub(r'<[^>]+>', ' ', text)  # Supprimer les balises HTML
-    text = re.sub(r'\W+', ' ', text)  # Supprimer les caractères spéciaux
-    text = text.lower()  # Convertir en minuscules
-    words = text.split()
-    words = [word for word in words if word not in stop_words]  # Supprimer les mots vides
-    words = [lemmatizer.lemmatize(word) for word in words]  # Lemmatisation
+    # Supprimer les balises HTML
+    text = re.sub(r'<[^>]+>', ' ', text)
+    # Supprimer les caractères spéciaux
+    text = re.sub(r'\W+', ' ', text)
+    # Analyser le texte avec SpaCy
+    doc = nlp(text.lower())
+    # Lemmatisation et suppression des stop words
+    words = [token.lemma_ for token in doc if not token.is_stop]
     return ' '.join(words)
 
 # Fonction pour extraire le contenu d'une URL
