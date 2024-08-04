@@ -28,13 +28,12 @@ def calculate_cosine_similarity(embedding_a, embedding_b):
 
 def evaluate_link_quality(similarity_score, threshold=0.75):
     # Déterminer si un lien est de qualité
-    if similarity_score >= threshold:
-        return "Qualité"
-    else:
-        return "Mauvaise qualité"
+    return "Qualité" if similarity_score >= threshold else "Mauvaise qualité"
 
-def generate_similarity_table(df, url_column, similarities, num_links):
+def generate_similarity_table(df, url_column, embeddings, num_links):
     similarity_data = []
+    similarities = cosine_similarity(embeddings)
+    
     for index, row in df.iterrows():
         similarity_scores = similarities[index]
         similar_indices = np.argsort(similarity_scores)[::-1]
@@ -45,6 +44,7 @@ def generate_similarity_table(df, url_column, similarities, num_links):
                 similar_urls.append(df[url_column].iloc[idx])
                 count += 1
         similarity_data.append([row[url_column]] + similar_urls)
+    
     columns = ["URL de départ"] + [f"URL similaire {i+1}" for i in range(num_links)]
     similarity_df = pd.DataFrame(similarity_data, columns=columns)
     return similarity_df
@@ -114,11 +114,8 @@ def app():
             with st.spinner("Analyse en cours..."):
                 embeddings_main = preprocess_embeddings(df_main, embedding_column)
 
-                # Calculer les similarités pour les embeddings de la feuille principale
-                similarities = calculate_cosine_similarity(embeddings_main)
-
                 # Générer le tableau de similarité
-                similarity_df = generate_similarity_table(df_main, url_column_embedded, similarities, num_links=5)
+                similarity_df = generate_similarity_table(df_main, url_column_embedded, embeddings_main, num_links=5)
                 st.write("Tableau de similarité :")
                 st.write(similarity_df)
 
