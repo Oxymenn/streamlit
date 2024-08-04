@@ -205,6 +205,36 @@ def app():
                 # Ajouter les occurrences à la table des liens
                 links_table['Occurrences'] = [occurrences_count[url] for url in urls]
 
+                # Ajuster les URLs avec occurrence 0
+                for idx, (url, occurrence) in enumerate(zip(links_table['URL de départ'], links_table['Occurrences'])):
+                    if occurrence == 0:
+                        # Trouver une URL de départ avec similarité > 0.8 et ajouter l'URL en tant qu'URL similaire
+                        similarities = st.session_state['similarity_matrix'][idx]
+                        potential_indices = np.where((similarities > 0.8) & (similarities < 1))[0]
+
+                        for potential_index in potential_indices:
+                            if url not in links_table['URL similaire 1'][potential_index:]:
+                                for sim_idx in range(5):
+                                    similar_urls = [
+                                        links_table[f'URL similaire {i+1}'][potential_index] for i in range(5)
+                                    ]
+                                    if links_table[f'URL similaire {sim_idx+1}'][potential_index] is None:
+                                        links_table[f'URL similaire {sim_idx+1}'][potential_index] = url
+                                        break
+                                    elif links_table[f'URL similaire {sim_idx+1}'][potential_index] not in similar_urls:
+                                        links_table[f'URL similaire {sim_idx+1}'][potential_index] = url
+                                        break
+
+                # Mettre à jour les occurrences après ajustement
+                all_similar_urls = []
+                for i in range(len(urls)):
+                    for j in range(1, 6):
+                        if links_table[f'URL similaire {j}'][i]:
+                            all_similar_urls.append(links_table[f'URL similaire {j}'][i])
+
+                occurrences_count = {url: all_similar_urls.count(url) for url in urls}
+                links_table['Occurrences'] = [occurrences_count[url] for url in urls]
+
                 # Créer un DataFrame pour le second tableau
                 links_df = pd.DataFrame(links_table)
 
