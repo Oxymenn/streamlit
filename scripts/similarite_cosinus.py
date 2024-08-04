@@ -21,9 +21,10 @@ def preprocess_embeddings(df, embedding_col):
         df[embedding_col] = df[embedding_col].apply(ast.literal_eval)
     return np.array(df[embedding_col].tolist())
 
-def calculate_cosine_similarity(embeddings):
-    similarities = cosine_similarity(embeddings)
-    return similarities
+def calculate_cosine_similarity(embedding_a, embedding_b):
+    # Calculer la similarité cosinus entre deux embeddings
+    similarity = cosine_similarity([embedding_a], [embedding_b])
+    return similarity[0][0]
 
 def evaluate_link_quality(similarity_score, threshold=0.75):
     # Déterminer si un lien est de qualité
@@ -66,7 +67,7 @@ def generate_link_analysis(df_main, url_col_embedded, embeddings_main, df_second
                 embedding_depart = embeddings_main[index_depart]
 
                 # Calculer le score de similarité entre l'URL de départ et l'URL de destination
-                similarity_score = calculate_cosine_similarity([embedding_depart], [embedding_dest])[0][0]
+                similarity_score = calculate_cosine_similarity(embedding_depart, embedding_dest)
 
                 # Évaluer la qualité du lien
                 link_quality = evaluate_link_quality(similarity_score)
