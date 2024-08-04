@@ -1,134 +1,134 @@
 import streamlit as st
 import pandas as pd
-import re
+import numpy as np
+import requests
 from bs4 import BeautifulSoup
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from transformers import BertModel, BertTokenizer
-import torch
+import inflect
+import unidecode
 
-def remove_html_tags(text):
-    if not isinstance(text, str):
-        return ''
-    return BeautifulSoup(text, "html.parser").get_text()
+# Liste de stopwords en français
+STOPWORDS_FR = {
+    'alors', 'au', 'aucuns', 'aussi', 'autre', 'avant', 'avec', 'avoir', 'bon', 'car', 'ce', 'cela',
+    'ces', 'ceux', 'chaque', 'ci', 'comme', 'comment', 'dans', 'des', 'du', 'dedans', 'dehors', 'depuis',
+    'devrait', 'doit', 'donc', 'dos', 'début', 'elle', 'elles', 'en', 'encore', 'essai', 'est', 'et', 'eu',
+    'fait', 'faites', 'fois', 'font', 'force', 'haut', 'hors', 'ici', 'il', 'ils', 'je', 'juste', 'la', 'le',
+    'les', 'leur', 'là', 'ma', 'maintenant', 'mais', 'mes', 'mine', 'moins', 'mon', 'mot', 'même', 'ni',
+    'nommés', 'notre', 'nous', 'nouveaux', 'ou', 'où', 'par', 'parce', 'parole', 'pas', 'personnes', 'peut',
+    'peu', 'pièce', 'plupart', 'pour', 'pourquoi', 'quand', 'que', 'quel', 'quelle', 'quelles', 'quels',
+    'qui', 'sa', 'sans', 'ses', 'seulement', 'si', 'sien', 'son', 'sont', 'sous', 'soyez', 'sujet', 'sur',
+    'ta', 'tandis', 'tellement', 'tels', 'tes', 'ton', 'tous', 'tout', 'trop', 'très', 'tu', 'valeur', 'voie',
+    'voient', 'vont', 'votre', 'vous', 'vu', 'ça', 'étaient', 'état', 'étions', 'été', 'être'
+}
 
+# Initialiser l'outil de singularisation
+p = inflect.engine()
+
+# Fonction pour nettoyer le texte
 def clean_text(text):
-    if not isinstance(text, str):
-        return ''
+    # Conversion en minuscules
     text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
+    # Suppression des accents
+    text = unidecode.unidecode(text)
+    # Suppression des stopwords en français
+    words = text.split()
+    words = [word for word in words if word not in STOPWORDS_FR]
+    # Mise au singulier
+    words = [p.singular_noun(word) if p.singular_noun(word) else word for word in words]
+    # Reconstruction du texte
+    text = ' '.join(words)
     return text
 
-def get_bert_embedding(text, model, tokenizer):
-    inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True)
-    with torch.no_grad():
-        outputs = model(**inputs)
-    return outputs.last_hidden_state.mean(dim=1).numpy()
+# Fonction pour tronquer le texte à une limite de tokens approximative
+def truncate_token_limit(text, limit=8000):
+    words = text.split()
+    token_count = 0
+    truncated_text = ''
+    for word in words:
+        # Estimation grossière : 1 mot = 1.3 tokens en moyenne
+        token_count += len(word) / 3
+        if token_count > limit:
+            break
+        truncated_text += word + ' '
+    return truncated_text
 
-def find_similarities(text1, text2, vectorizers, bert_model, bert_tokenizer):
-    vectors1 = [vectorizer.transform([text1]).toarray() for vectorizer in vectorizers]
-    vectors2 = [vectorizer.transform([text2]).toarray() for vectorizer in vectorizers]
+# Fonction pour récupérer et nettoyer le contenu HTML
+def get_and_clean_html(url):
+    try:
+        response = requests.get(url)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        content = soup.find_all(class_='below-woocommerce-category')
+        text = ' '.join([element.get_text() for element in content])
+        cleaned_text = clean_text(text)
+        return truncate_token_limit(cleaned_text)
+    except Exception as e:
+        st.error(f"Erreur lors de la récupération du contenu pour l'URL {url}: {e}")
+        return ""
 
-    bert_vector1 = get_bert_embedding(text1, bert_model, bert_tokenizer)
-    bert_vector2 = get_bert_embedding(text2, bert_model, bert_tokenizer)
-    bert_similarity = cosine_similarity(bert_vector1, bert_vector2)[0][0]
+# Fonction pour obtenir les embeddings
+def get_embeddings(text):
+    headers = {
+        "Authorization": f"Bearer {st.secrets['api_key']}",
+        "Content-Type": "application/json",
+    }
+    data = {
+        "model": "text-embedding-3-small",
+        "input": text,
+        "encoding_format": "float",
+    }
+    try:
+        response = requests.post("https://api.openai.com/v1/embeddings", headers=headers, json=data)
+        response.raise_for_status()
+        embedding = response.json()["data"][0]["embedding"]
+        return embedding
+    except requests.exceptions.HTTPError as err:
+        st.error(f"Erreur lors de la récupération des embeddings: {err}")
+        return []
 
-    similarities = [cosine_similarity(v1, v2)[0][0] for v1, v2 in zip(vectors1, vectors2)]
-    similarities.append(bert_similarity)
-    return sum(similarities) / len(similarities)
-
+# Fonction principale encapsulée dans 'app()'
 def app():
-    st.title('Application de Catégorisation de Produits')
-    uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xlsx"])
+    # Titre de l'application
+    st.title("Embedding d'URLs avec OpenAI")
+
+    # Téléchargement du fichier
+    uploaded_file = st.file_uploader("Choisissez un fichier CSV ou Excel", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
-        # Lire le fichier Excel et afficher les noms des feuilles
-        xls = pd.ExcelFile(uploaded_file)
-        sheet_names = xls.sheet_names
+        # Lire le fichier dans un DataFrame pandas
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
 
-        st.write("Feuilles disponibles :", sheet_names)
+        # Vérifier si le DataFrame est vide
+        if df.empty:
+            st.error("Le fichier téléchargé est vide ou n'a pas pu être lu correctement.")
+        else:
+            # Sélection de la colonne des URLs
+            url_column = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
 
-        # Sélection de la feuille principale et secondaire
-        primary_sheet = st.selectbox("Sélectionnez la feuille principale", sheet_names)
-        secondary_sheet = st.selectbox("Sélectionnez la feuille secondaire", sheet_names)
+            # Préparer une colonne pour les embeddings
+            df["Embeddings"] = np.nan
 
-        if primary_sheet and secondary_sheet:
-            df_primary = pd.read_excel(xls, sheet_name=primary_sheet)
-            df_secondary = pd.read_excel(xls, sheet_name=secondary_sheet)
+            # Processus d'embedding
+            with st.spinner("Traitement en cours..."):
+                for i, url in enumerate(df[url_column]):
+                    st.write(f"Traitement de l'URL {i+1}/{len(df)}: {url}")
+                    cleaned_text = get_and_clean_html(url)
+                    if cleaned_text:
+                        embedding = get_embeddings(cleaned_text)
+                        df.at[i, "Embeddings"] = str(embedding)
 
-            st.write("Aperçu des données de la feuille principale :", df_primary.head())
-            st.write("Aperçu des données de la feuille secondaire :", df_secondary.head())
+            # Affichage du DataFrame
+            st.write(df)
 
-            # Sélection des colonnes
-            product_title_col = st.selectbox("Sélectionnez la colonne pour le titre du produit", df_primary.columns)
-            product_desc_col = st.selectbox("Sélectionnez la colonne pour la description du produit", df_primary.columns)
-            collection_name_col = st.selectbox("Sélectionnez la colonne pour le nom de collection", df_secondary.columns)
+            # Téléchargement du fichier modifié
+            def convert_df_to_csv(df):
+                return df.to_csv(index=False).encode('utf-8')
 
-            if st.button("Catégoriser les produits"):
-                df_primary['Catégorisation'] = ''
-
-                # Obtenir les noms de collections tels quels
-                collections = df_secondary[collection_name_col].dropna().tolist()
-
-                # Nettoyer la colonne de description
-                df_primary[product_desc_col] = df_primary[product_desc_col].apply(remove_html_tags)
-
-                # Combiner les titres et descriptions pour chaque produit
-                df_primary['combined_text'] = df_primary[product_title_col] + " " + df_primary[product_desc_col]
-
-                # Nettoyer les textes combinés
-                df_primary['combined_text'] = df_primary['combined_text'].apply(clean_text)
-
-                # Nettoyer les noms de collections
-                cleaned_collections = [clean_text(collection) for collection in collections]
-
-                # Préparer les vectorizers TF-IDF et Count Vectorizer
-                tfidf_vectorizer = TfidfVectorizer().fit(df_primary['combined_text'].tolist() + cleaned_collections)
-                count_vectorizer = CountVectorizer().fit(df_primary['combined_text'].tolist() + cleaned_collections)
-                vectorizers = [tfidf_vectorizer, count_vectorizer]
-
-                # Charger BERT
-                bert_model = BertModel.from_pretrained('bert-base-uncased')
-                bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-
-                # Calculer les embeddings BERT pour les collections
-                collection_embeddings = [get_bert_embedding(collection, bert_model, bert_tokenizer) for collection in cleaned_collections]
-
-                for i, row in df_primary.iterrows():
-                    combined_text = row['combined_text']
-                    matched_collections = []
-                    product_bert_embedding = get_bert_embedding(combined_text, bert_model, bert_tokenizer)
-                    
-                    for collection, cleaned_collection, collection_embedding in zip(collections, cleaned_collections, collection_embeddings):
-                        similarity = find_similarities(combined_text, cleaned_collection, vectorizers, bert_model, bert_tokenizer)
-                        bert_similarity = cosine_similarity(product_bert_embedding, collection_embedding)[0][0]
-                        final_similarity = (similarity + bert_similarity) / 2  # Moyenne des similarités
-                        
-                        if final_similarity > 0.1:  # Seuil de similarité (ajustable)
-                            matched_collections.append(collection)
-
-                    if matched_collections:
-                        df_primary.at[i, 'Catégorisation'] = ', '.join(matched_collections)
-
-                # S'assurer que chaque collection est associée au moins une fois
-                for collection in collections:
-                    if collection not in df_primary['Catégorisation'].str.cat(sep=', '):
-                        st.warning(f"La collection '{collection}' n'a pas été associée à un produit.")
-
-                st.write("Données après catégorisation :", df_primary.head())
-
-                @st.cache
-                def convert_df(df):
-                    return df.to_csv(index=False).encode('utf-8')
-
-                csv = convert_df(df_primary)
-
-                st.download_button(
-                    label="Télécharger les données avec catégorisation",
-                    data=csv,
-                    file_name='produits_categorises.csv',
-                    mime='text/csv',
-                )
-
-# Assurez-vous d'installer les packages nécessaires :
-# pip install streamlit pandas scikit-learn beautifulsoup4 openpyxl transformers torch
+            csv = convert_df_to_csv(df)
+            st.download_button(
+                label="Télécharger le fichier avec embeddings",
+                data=csv,
+                file_name='embedded_urls.csv',
+                mime='text/csv',
+            )
