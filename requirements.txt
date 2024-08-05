@@ -13,3 +13,4 @@ opencv-python-headless
 pillow
 torch
 torchvision
+rembg
