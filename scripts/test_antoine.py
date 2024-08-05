@@ -55,7 +55,66 @@ def extract_and_clean_content(url, exclude_classes, include_classes):
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
     return None
 
-# Les autres fonctions restent inchangées...
+def get_embeddings(text):
+    try:
+        response = requests.post(
+            'https://api.openai.com/v1/embeddings',
+            headers={
+                'Authorization': f'Bearer {OPENAI_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': 'text-embedding-3-small',
+                'input': text,
+                'encoding_format': 'float'
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()['data'][0]['embedding']
+    except requests.exceptions.HTTPError as http_err:
+        st.error(f"HTTP error occurred: {http_err}")
+    except Exception as e:
+        st.error(f"Erreur lors de la création des embeddings: {e}")
+    return None
+
+def calculate_similarity(embeddings):
+    try:
+        return cosine_similarity(embeddings)
+    except Exception as e:
+        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
+        return None
+
+def create_similarity_df(urls, similarity_matrix, selected_url, max_results):
+    selected_index = urls.tolist().index(selected_url)
+    selected_similarities = similarity_matrix[selected_index]
+    similarity_df = pd.DataFrame({
+        'URL': urls,
+        'Similarité': selected_similarities
+    })
+    similarity_df = similarity_df[similarity_df['URL'] != selected_url]
+    return similarity_df.sort_values(by='Similarité', ascending=False).head(max_results)
+
+def create_links_table(urls, similarity_matrix, max_results):
+    links_table = {'URL de départ': []}
+    for n in range(1, max_results + 1):
+        links_table[f'URL similaire {n}'] = []
+    links_table['Concatener'] = []
+
+    for i, url in enumerate(urls):
+        similarities = similarity_matrix[i]
+        temp_df = pd.DataFrame({'URL': urls, 'Similarité': similarities})
+        temp_df = temp_df[temp_df['URL'] != url]
+        top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(max_results)['URL'].tolist()
+
+        links_table['URL de départ'].append(url)
+        for n in range(1, max_results + 1):
+            links_table[f'URL similaire {n}'].append(top_similar_urls[n - 1] if len(top_similar_urls) >= n else None)
+
+        concatenated = '; '.join([f"Lien {n} : {top_similar_urls[n - 1]}" if len(top_similar_urls) >= n else f"Lien {n} : " for n in range(1, max_results + 1)])
+        links_table['Concatener'].append(concatenated)
+
+    return pd.DataFrame(links_table)
 
 def app():
     st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
