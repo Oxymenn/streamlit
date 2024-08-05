@@ -37,23 +37,25 @@ def app():
 
     if uploaded_file is not None:
         # Lire le fichier CSV
-        df = pd.read_csv(uploaded_file)
-        
-        # Sélectionner la colonne des URLs
-        column = st.selectbox("Sélectionnez la colonne des URLs d'images", df.columns)
-        
-        # Traitement des images
-        for index, url in enumerate(df[column]):
-            try:
-                # Télécharger l'image
-                response = requests.get(url)
-                image = Image.open(BytesIO(response.content))
-                
-                # Supprimer l'arrière-plan et ajouter un fond rouge
-                processed_image = remove_background_and_add_red(image)
-                
-                # Afficher l'image traitée
-                st.image(processed_image, caption=f"Image {index + 1} traitée", use_column_width=True)
+        df = pd.read_csv(uploaded_file, header=None)  # Pas d'en-tête car les données sont toutes dans une ligne
+
+        # Parcourir chaque ligne du DataFrame
+        for index, row in df.iterrows():
+            # Extraire les URLs de la ligne
+            urls = row.dropna().tolist()  # Supprime les valeurs manquantes et transforme en liste
             
-            except Exception as e:
-                st.error(f"Erreur lors du traitement de l'image {index + 1}: {e}")
+            # Traiter chaque URL
+            for url_index, url in enumerate(urls):
+                try:
+                    # Télécharger l'image
+                    response = requests.get(url)
+                    image = Image.open(BytesIO(response.content))
+                    
+                    # Supprimer l'arrière-plan et ajouter un fond rouge
+                    processed_image = remove_background_and_add_red(image)
+                    
+                    # Afficher l'image traitée
+                    st.image(processed_image, caption=f"Ligne {index + 1}, Image {url_index + 1}", use_column_width=True)
+                
+                except Exception as e:
+                    st.error(f"Erreur lors du traitement de l'image de la ligne {index + 1}, URL {url_index + 1}: {e}")
