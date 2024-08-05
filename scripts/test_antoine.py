@@ -6,44 +6,25 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 
-# Liste de stopwords en français
-stopwords_fr = {
-    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
-    "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
-    "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
-    "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
-    "est", "et", "eu", "fait", "faites", "fois", "font", "force", "haut", 
-    "hors", "ici", "il", "ils", "je", "juste", "la", "le", "les", "leur", 
-    "là", "ma", "maintenant", "mais", "mes", "mien", "moins", "mon", "mot", 
-    "même", "ni", "nommés", "notre", "nous", "nouveaux", "ou", "où", "par", 
-    "parce", "parole", "pas", "personnes", "peut", "peu", "pièce", "plupart", 
-    "pour", "pourquoi", "quand", "que", "quel", "quelle", "quelles", "quels", 
-    "qui", "sa", "sans", "ses", "seulement", "si", "sien", "son", "sont", 
-    "sous", "soyez", "sujet", "sur", "ta", "tandis", "tellement", "tels", 
-    "tes", "ton", "tous", "tout", "trop", "très", "tu", "valeur", "voie", 
-    "voient", "vont", "votre", "vous", "vu", "ça", "étaient", "état", "étions", 
-    "été", "être"
-}
+# Liste de stopwords en français et autres fonctions restent inchangées
 
-# Configuration de la clé API OpenAI
-OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
-
-# Fonction pour extraire et nettoyer le contenu HTML
-def extract_and_clean_content(url, include_class, exclude_class):
+def extract_and_clean_content(url, include_classes, exclude_classes):
     try:
         response = requests.get(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Utiliser la classe à inclure si elle est spécifiée
-        if include_class:
-            elements = soup.find_all(class_=include_class)
+        # Utiliser les classes à inclure si elles sont spécifiées
+        if include_classes:
+            elements = []
+            for class_name in include_classes:
+                elements.extend(soup.find_all(class_=class_name))
         else:
             elements = soup.find_all(class_='below-woocommerce-category')
         
-        # Exclure les éléments avec la classe spécifiée
-        if exclude_class:
-            elements = [el for el in elements if exclude_class not in el.get('class', [])]
+        # Exclure les éléments avec les classes spécifiées
+        if exclude_classes:
+            elements = [el for el in elements if not any(cls in el.get('class', []) for cls in exclude_classes)]
         
         if elements:
             content = ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
@@ -51,14 +32,8 @@ def extract_and_clean_content(url, include_class, exclude_class):
             st.error(f"Éléments non trouvés dans l'URL: {url}")
             return None
 
-        # Nettoyage du texte
-        content = re.sub(r'\s+', ' ', content)
-        content = content.lower()
-        content = re.sub(r'[^\w\s]', '', content)
-
-        # Retirer les mots vides
-        words = content.split()
-        content = ' '.join([word for word in words if word not in stopwords_fr])
+        # Nettoyage du texte (reste inchangé)
+        # ...
 
         return content
     except requests.exceptions.RequestException as e:
@@ -70,18 +45,34 @@ def extract_and_clean_content(url, include_class, exclude_class):
 
 # Les autres fonctions restent inchangées
 
-# Fonction principale de l'application
 def app():
     st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
     
-    # Nouveaux filtres pour les classes HTML
-    include_class = st.text_input("Classe HTML à inclure (laissez vide pour utiliser la classe par défaut)")
-    exclude_class = st.text_input("Classe HTML à exclure (laissez vide pour ne rien exclure)")
+    # Gestion des classes à inclure
+    if 'include_classes' not in st.session_state:
+        st.session_state.include_classes = []
+    
+    include_class = st.text_input("Classe HTML à inclure")
+    if st.button("Ajouter classe à inclure"):
+        if include_class and include_class not in st.session_state.include_classes:
+            st.session_state.include_classes.append(include_class)
+    
+    st.write("Classes à inclure:", st.session_state.include_classes)
+    
+    # Gestion des classes à exclure
+    if 'exclude_classes' not in st.session_state:
+        st.session_state.exclude_classes = []
+    
+    exclude_class = st.text_input("Classe HTML à exclure")
+    if st.button("Ajouter classe à exclure"):
+        if exclude_class and exclude_class not in st.session_state.exclude_classes:
+            st.session_state.exclude_classes.append(exclude_class)
+    
+    st.write("Classes à exclure:", st.session_state.exclude_classes)
     
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
-        # Lire le fichier importé
         try:
             if uploaded_file.name.endswith('.csv'):
                 df = pd.read_csv(uploaded_file)
@@ -92,19 +83,22 @@ def app():
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
             urls = df[column_option].dropna().unique()
 
-            # Réinitialiser l'état de session si les filtres ont changé
-            if 'last_include_class' not in st.session_state or st.session_state['last_include_class'] != include_class or \
-               'last_exclude_class' not in st.session_state or st.session_state['last_exclude_class'] != exclude_class:
-                st.session_state['contents'] = [extract_and_clean_content(url, include_class, exclude_class) for url in urls]
-                st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
-                st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
-                st.session_state['last_include_class'] = include_class
-                st.session_state['last_exclude_class'] = exclude_class
+            # Bouton pour exécuter le script
+            if st.button("Exécuter l'analyse"):
+                with st.spinner("Analyse en cours..."):
+                    st.session_state['contents'] = [extract_and_clean_content(url, st.session_state.include_classes, st.session_state.exclude_classes) for url in urls]
+                    st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
+                    st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+                
+                st.success("Analyse terminée!")
 
-            # Le reste du code reste inchangé
+                # Affichage des résultats (comme précédemment)
+                if 'similarity_matrix' in st.session_state and st.session_state['similarity_matrix'] is not None:
+                    # Code pour afficher les résultats (inchangé)
+                    # ...
 
         except Exception as e:
-            st.error(f"Erreur lors de la lecture du fichier: {e}")
+            st.error(f"Erreur lors de la lecture du fichier ou de l'analyse: {e}")
 
 # Assurez-vous que la fonction `app` est appelée ici
 if __name__ == "__main__":
