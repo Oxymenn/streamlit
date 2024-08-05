@@ -7,26 +7,56 @@ import cv2
 from PIL import Image
 import requests
 from io import BytesIO
+import torch
+from torchvision import transforms
+from torch.autograd import Variable
+from u2net import U2NET # Assuming you have U2NET model defined or imported from a file
+
+# Charger le modèle U^2-Net
+@st.cache_resource
+def load_model():
+    model = U2NET(3, 1)
+    model.load_state_dict(torch.load("u2net.pth", map_location=torch.device('cpu')))
+    model.eval()
+    return model
+
+model = load_model()
+
+# Transformation pour préparer l'image pour U^2-Net
+transform = transforms.Compose([
+    transforms.Resize((320, 320)),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+])
 
 def remove_background_and_add_gray(image):
-    # Convertir l'image en tableau numpy
+    image = image.convert("RGB")
+    image_tensor = transform(image)
+    image_tensor = image_tensor.unsqueeze(0)
+    
+    # Passer l'image à travers le modèle
+    with torch.no_grad():
+        d1, *_ = model(Variable(image_tensor))
+        pred = d1[:, 0, :, :]
+        pred = norm_pred(pred)
+        
+        mask = pred.squeeze().cpu().numpy() > 0.5
+        mask = np.expand_dims(mask, axis=2).astype(np.uint8) * 255  # Convert to binary mask
+
+    # Convertir l'image et le masque en tableaux numpy
     np_image = np.array(image)
-    
-    # Convertir en espace de couleur HSV
-    hsv = cv2.cvtColor(np_image, cv2.COLOR_RGB2HSV)
-    
-    # Définir le seuil pour la couleur blanche
-    lower_white = np.array([0, 0, 200])
-    upper_white = np.array([180, 20, 255])
-    mask = cv2.inRange(hsv, lower_white, upper_white)
-    
-    # Créer une image avec un fond gris clair
     gray_background = np.full(np_image.shape, [211, 211, 211], dtype=np.uint8)  # Gris clair
-    
-    # Combiner l'image originale avec le fond gris
-    result = np.where(mask[:, :, np.newaxis] == 255, gray_background, np_image)
+
+    # Appliquer le masque sur l'image originale
+    result = np.where(mask, np_image, gray_background)
     
     return Image.fromarray(result)
+
+def norm_pred(d):
+    ma = torch.max(d)
+    mi = torch.min(d)
+    dn = (d - mi) / (ma - mi)
+    return dn
 
 def app():
     # Titre de l'application
