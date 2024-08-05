@@ -105,6 +105,18 @@ def app():
     st.title("Analyse sémantique - Pages similaires")
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
+    # Initialiser les listes et variables dans le session_state si elles ne le sont pas déjà
+    if 'contents' not in st.session_state:
+        st.session_state['contents'] = []
+    if 'embeddings' not in st.session_state:
+        st.session_state['embeddings'] = []
+    if 'valid_urls' not in st.session_state:
+        st.session_state['valid_urls'] = []
+    if 'similarity_matrix' not in st.session_state:
+        st.session_state['similarity_matrix'] = None
+    if 'analysis_done' not in st.session_state:
+        st.session_state['analysis_done'] = False
+
     if uploaded_file is not None:
         # Lire le fichier importé
         try:
@@ -126,9 +138,9 @@ def app():
             exclude_class = st.text_input("Classe HTML à exclure (optionnel)")
 
             # Bouton pour exécuter l'analyse
-            if st.button("Exécuter l'analyse"):
-                # Initialiser les listes de contenus, embeddings, et URLs valides si non existantes
-                if 'contents' not in st.session_state or st.session_state.get('reset', True):
+            if st.button("Exécuter l'analyse") or st.session_state['analysis_done']:
+                if not st.session_state['analysis_done']:
+                    # Réinitialiser les listes et matrices
                     st.session_state['contents'] = []
                     st.session_state['embeddings'] = []
                     st.session_state['valid_urls'] = []
@@ -151,8 +163,8 @@ def app():
                         st.error("Certains embeddings n'ont pas pu être calculés. Vérifiez les URLs pour des erreurs potentielles.")
                         return
 
-                    # Marquer l'état comme non réinitialisé
-                    st.session_state['reset'] = False
+                    # Marquer l'analyse comme terminée
+                    st.session_state['analysis_done'] = True
 
                 # Vérification de la matrice de similarité
                 if st.session_state.get('similarity_matrix') is not None:
