@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
-import time
+from sentence_transformers import SentenceTransformer
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -26,8 +26,9 @@ stopwords_fr = {
     "été", "être"
 }
 
-# Configuration de la clé API OpenAI
-OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
+@st.cache_resource
+def load_model():
+    return SentenceTransformer('all-MiniLM-L6-v2')
 
 @st.cache_data
 def extract_and_clean_content(url, include_classes, exclude_classes):
@@ -78,26 +79,9 @@ def get_embeddings(text):
     if not text:
         return None
     try:
-        response = requests.post(
-            'https://api.openai.com/v1/embeddings',
-            headers={
-                'Authorization': f'Bearer {OPENAI_API_KEY}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': 'text-embedding-3-small',
-                'input': text,
-                'encoding_format': 'float'
-            },
-            timeout=10
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data['data'][0]['embedding']
-    except requests.exceptions.HTTPError as http_err:
-        st.warning(f"HTTP error occurred: {http_err}")
-        time.sleep(1)  # Attendre 1 seconde avant de réessayer
-        return None
+        model = load_model()
+        embedding = model.encode(text)
+        return embedding.tolist()
     except Exception as e:
         st.warning(f"Erreur lors de la création des embeddings: {e}")
         return None
