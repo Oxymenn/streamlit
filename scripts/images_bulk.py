@@ -1,3 +1,5 @@
+# scripts/images_bulk.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,7 +8,6 @@ from PIL import Image
 import requests
 from io import BytesIO
 
-# Fonction pour supprimer l'arrière-plan et ajouter un fond rouge
 def remove_background_and_add_red(image):
     # Convertir l'image en tableau numpy
     np_image = np.array(image)
@@ -27,31 +28,32 @@ def remove_background_and_add_red(image):
     
     return Image.fromarray(result)
 
-# Titre de l'application
-st.title("Traitement d'images avec arrière-plan rouge")
+def app():
+    # Titre de l'application
+    st.title("Traitement d'images avec arrière-plan rouge")
 
-# Télécharger le fichier CSV
-uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
+    # Télécharger le fichier CSV
+    uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
 
-if uploaded_file is not None:
-    # Lire le fichier CSV
-    df = pd.read_csv(uploaded_file)
-    
-    # Sélectionner la colonne des URLs
-    column = st.selectbox("Sélectionnez la colonne des URLs d'images", df.columns)
-    
-    # Traitement des images
-    for index, url in enumerate(df[column]):
-        try:
-            # Télécharger l'image
-            response = requests.get(url)
-            image = Image.open(BytesIO(response.content))
-            
-            # Supprimer l'arrière-plan et ajouter un fond rouge
-            processed_image = remove_background_and_add_red(image)
-            
-            # Afficher l'image traitée
-            st.image(processed_image, caption=f"Image {index + 1} traitée", use_column_width=True)
+    if uploaded_file is not None:
+        # Lire le fichier CSV
+        df = pd.read_csv(uploaded_file)
         
-        except Exception as e:
-            st.write(f"Erreur lors du traitement de l'image {index + 1}: {e}")
+        # Sélectionner la colonne des URLs
+        column = st.selectbox("Sélectionnez la colonne des URLs d'images", df.columns)
+        
+        # Traitement des images
+        for index, url in enumerate(df[column]):
+            try:
+                # Télécharger l'image
+                response = requests.get(url)
+                image = Image.open(BytesIO(response.content))
+                
+                # Supprimer l'arrière-plan et ajouter un fond rouge
+                processed_image = remove_background_and_add_red(image)
+                
+                # Afficher l'image traitée
+                st.image(processed_image, caption=f"Image {index + 1} traitée", use_column_width=True)
+            
+            except Exception as e:
+                st.error(f"Erreur lors du traitement de l'image {index + 1}: {e}")
