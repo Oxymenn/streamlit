@@ -34,13 +34,17 @@ def extract_and_clean_content(url):
         response = requests.get(url)
         response.raise_for_status()  # Assure que la requête est réussie
         soup = BeautifulSoup(response.text, 'html.parser')
-        element = soup.find('div', class_='content-area')  # Modified to target content-area
         
-        if element:
-            content = element.get_text(separator=" ", strip=True)
-        else:
-            st.error(f"Élément non trouvé dans l'URL: {url}")
+        # Tentative pour trouver l'élément par classe et ID
+        element = soup.find('div', {'class': 'content-area', 'id': 'primary'})
+
+        if element is None:
+            # Si l'élément n'est pas trouvé, afficher le début du contenu HTML pour débogage
+            st.error(f"Élément non trouvé dans l'URL: {url}. Voici un extrait du contenu HTML : {soup.prettify()[:500]}")
             return None
+        
+        # Extraction du texte
+        content = element.get_text(separator=" ", strip=True)
 
         # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content)  # Nettoyer les espaces
