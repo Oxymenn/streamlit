@@ -29,7 +29,6 @@ stopwords_fr = {
 # Configuration de la clé API OpenAI
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
-@lru_cache(maxsize=None)
 def extract_and_clean_content(url, exclude_classes):
     try:
         response = requests.get(url, timeout=10)
