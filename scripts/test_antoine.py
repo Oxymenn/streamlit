@@ -7,7 +7,7 @@ import numpy as np
 import re
 
 # Liste de stopwords en français (inchangée)
-stopwords_fr = {
+default_stopwords_fr = {
     "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
     "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
@@ -28,7 +28,7 @@ stopwords_fr = {
 # Configuration de la clé API OpenAI
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
-def extract_and_clean_content(url, exclude_classes, include_classes):
+def extract_and_clean_content(url, exclude_classes, include_classes, stopwords):
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -48,7 +48,7 @@ def extract_and_clean_content(url, exclude_classes, include_classes):
         # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content.lower())
         content = re.sub(r'[^\w\s]', '', content)
-        return ' '.join([word for word in content.split() if word not in stopwords_fr])
+        return ' '.join([word for word in content.split() if word not in stopwords])
     except requests.exceptions.RequestException as e:
         st.error(f"Erreur lors de l'accès à {url}: {e}")
     except Exception as e:
@@ -128,6 +128,13 @@ def app():
     include_classes = st.text_input("Classes HTML à inclure exclusivement (séparées par des virgules)", "")
     include_classes = [cls.strip() for cls in include_classes.split(',')] if include_classes else []
 
+    # Ajout d'un champ pour les stopwords supplémentaires
+    additional_stopwords = st.text_input("Stopwords supplémentaires à exclure (séparés par des virgules)", "")
+    additional_stopwords = [word.strip().lower() for word in additional_stopwords.split(',')] if additional_stopwords else []
+
+    # Combinaison des stopwords par défaut et supplémentaires
+    stopwords = default_stopwords_fr.union(set(additional_stopwords))
+
     # Ajout du bouton Exécuter
     execute_button = st.button("Exécuter")
 
@@ -138,7 +145,7 @@ def app():
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
             urls = df[column_option].dropna().unique()
 
-            st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes, include_classes) for url in urls]
+            st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes, include_classes, stopwords) for url in urls]
             st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
             st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
             st.session_state['urls'] = urls
