@@ -2,61 +2,35 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np
-import cv2
-from PIL import Image
+from wand.image import Image as WandImage
 import requests
 from io import BytesIO
-import torch
-from torchvision import transforms
-from torch.autograd import Variable
-from u2net import U2NET # Assuming you have U2NET model defined or imported from a file
 
-# Charger le modèle U^2-Net
-@st.cache_resource
-def load_model():
-    model = U2NET(3, 1)
-    model.load_state_dict(torch.load("u2net.pth", map_location=torch.device('cpu')))
-    model.eval()
-    return model
+def remove_background_and_add_gray(image_url):
+    # Télécharger l'image
+    response = requests.get(image_url)
+    if response.status_code != 200:
+        raise Exception(f"Failed to download image: {response.status_code}")
 
-model = load_model()
-
-# Transformation pour préparer l'image pour U^2-Net
-transform = transforms.Compose([
-    transforms.Resize((320, 320)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
-
-def remove_background_and_add_gray(image):
-    image = image.convert("RGB")
-    image_tensor = transform(image)
-    image_tensor = image_tensor.unsqueeze(0)
-    
-    # Passer l'image à travers le modèle
-    with torch.no_grad():
-        d1, *_ = model(Variable(image_tensor))
-        pred = d1[:, 0, :, :]
-        pred = norm_pred(pred)
+    # Ouvrir l'image avec Wand
+    with WandImage(file=BytesIO(response.content)) as img:
+        img.format = 'png'  # Assurez-vous que l'image est au format PNG pour la transparence
+        img.alpha_channel = 'remove'
         
-        mask = pred.squeeze().cpu().numpy() > 0.5
-        mask = np.expand_dims(mask, axis=2).astype(np.uint8) * 255  # Convert to binary mask
+        # Assurez-vous que l'image a un canal alpha pour la transparence
+        img.alpha_channel = 'set'
 
-    # Convertir l'image et le masque en tableaux numpy
-    np_image = np.array(image)
-    gray_background = np.full(np_image.shape, [211, 211, 211], dtype=np.uint8)  # Gris clair
+        # Supprimer l'arrière-plan (nous supposons un fond blanc à supprimer)
+        img.transparent_color('white', alpha=0.0, fuzz=0.10 * img.quantum_range)
 
-    # Appliquer le masque sur l'image originale
-    result = np.where(mask, np_image, gray_background)
+        # Créer un nouveau fond gris clair
+        with WandImage(width=img.width, height=img.height, background=(211, 211, 211)) as bg:
+            bg.composite(img, 0, 0)
+
+            # Convertir en bytes pour Streamlit
+            img_bytes = bg.make_blob('png')
     
-    return Image.fromarray(result)
-
-def norm_pred(d):
-    ma = torch.max(d)
-    mi = torch.min(d)
-    dn = (d - mi) / (ma - mi)
-    return dn
+    return img_bytes
 
 def app():
     # Titre de l'application
@@ -90,25 +64,11 @@ def app():
                         new_url = urls[0]  # Nouvelle première URL
 
                         try:
-                            # Télécharger l'image
-                            response = requests.get(new_url)
+                            # Traiter l'image avec ImageMagick
+                            processed_image_bytes = remove_background_and_add_gray(new_url)
                             
-                            # Vérifier que la requête a réussi
-                            if response.status_code == 200:
-                                # Vérifier le type de contenu
-                                content_type = response.headers['Content-Type']
-                                if 'image' in content_type:
-                                    image = Image.open(BytesIO(response.content))
-                                    
-                                    # Supprimer l'arrière-plan et ajouter un fond gris
-                                    processed_image = remove_background_and_add_gray(image)
-                                    
-                                    # Afficher l'image traitée
-                                    st.image(processed_image, caption=f"Ligne {cell_index + 1}, Image modifiée", use_column_width=True)
-                                else:
-                                    st.error(f"Le contenu de l'URL dans la ligne {cell_index + 1} n'est pas une image (type: {content_type}).")
-                            else:
-                                st.error(f"Erreur HTTP pour l'URL dans la ligne {cell_index + 1}: {response.status_code}")
+                            # Afficher l'image traitée
+                            st.image(processed_image_bytes, caption=f"Ligne {cell_index + 1}, Image modifiée", use_column_width=True)
                         
                         except Exception as e:
                             st.error(f"Erreur lors du traitement de l'image dans la ligne {cell_index + 1}: {e}")
