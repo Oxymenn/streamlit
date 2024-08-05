@@ -35,13 +35,11 @@ def extract_and_clean_content(url):
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        element = soup.find(class_='below-woocommerce-category')
         
-        if not element:
-            st.error(f"Élément non trouvé dans l'URL: {url}")
-            return None
-
-        content = element.get_text(separator=" ", strip=True)
+        # Extraction de tout le contenu visible du body
+        content = soup.body.get_text(separator=" ", strip=True)
+        
+        # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content.lower())
         content = re.sub(r'[^\w\s]', '', content)
         return ' '.join([word for word in content.split() if word not in stopwords_fr])
