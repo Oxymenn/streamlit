@@ -149,39 +149,45 @@ def app():
 
             urls = df[column_option].dropna().unique()
 
-            # Initialiser l'état de session pour les contenus, embeddings, et URLs valides
-            st.session_state['contents'] = []
-            st.session_state['embeddings'] = []
-            st.session_state['valid_urls'] = []
+            # Extraire et traiter le contenu de chaque URL uniquement si les filtres ont changé ou si c'est la première fois
+            if 'last_include_classes' not in st.session_state or st.session_state['last_include_classes'] != st.session_state['include_classes'] or st.session_state['last_exclude_classes'] != st.session_state['exclude_classes']:
+                st.session_state['contents'] = []
+                st.session_state['embeddings'] = []
+                st.session_state['valid_urls'] = []
 
-            # Extraire et traiter le contenu de chaque URL
-            for url in urls:
-                content = extract_and_clean_content(url, st.session_state['include_classes'], st.session_state['exclude_classes'])
-                if content:  # S'assurer que le contenu n'est pas None
-                    embedding = get_embeddings(content)
-                    if embedding:  # S'assurer que l'embedding n'est pas None
-                        st.session_state['contents'].append(content)
-                        st.session_state['embeddings'].append(embedding)
-                        st.session_state['valid_urls'].append(url)
+                for url in urls:
+                    content = extract_and_clean_content(url, st.session_state['include_classes'], st.session_state['exclude_classes'])
+                    if content:  # S'assurer que le contenu n'est pas None
+                        embedding = get_embeddings(content)
+                        if embedding:  # S'assurer que l'embedding n'est pas None
+                            st.session_state['contents'].append(content)
+                            st.session_state['embeddings'].append(embedding)
+                            st.session_state['valid_urls'].append(url)
 
-            # Calculer la matrice de similarité
-            st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+                # Mettre à jour les filtres appliqués
+                st.session_state['last_include_classes'] = st.session_state['include_classes']
+                st.session_state['last_exclude_classes'] = st.session_state['exclude_classes']
+
+            # Calculer la matrice de similarité uniquement si les embeddings ont changé
+            if 'similarity_matrix' not in st.session_state or st.session_state['last_embeddings'] != st.session_state['embeddings']:
+                st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+                st.session_state['last_embeddings'] = st.session_state['embeddings']
 
             # Vérification de la matrice de similarité
             if st.session_state['similarity_matrix'] is not None:
                 # Sélecteur d'URL et curseur pour le nombre de résultats
-                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
-                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
+                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", st.session_state['valid_urls'])
+                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(st.session_state['valid_urls']) - 1, 5)
 
                 # Trouver l'index de l'URL sélectionnée
-                selected_index = urls.tolist().index(selected_url)
+                selected_index = st.session_state['valid_urls'].index(selected_url)
 
                 # Obtenir les similarités pour l'URL sélectionnée
                 selected_similarities = st.session_state['similarity_matrix'][selected_index]
 
                 # Créer un DataFrame des similarités
                 similarity_df = pd.DataFrame({
-                    'URL': urls,
+                    'URL': st.session_state['valid_urls'],
                     'Similarité': selected_similarities
                 })
 
@@ -212,13 +218,13 @@ def app():
 
                 links_table['Concatener'] = []
 
-                for i, url in enumerate(urls):
+                for i, url in enumerate(st.session_state['valid_urls']):
                     # Obtenir les similarités pour l'URL en cours
                     similarities = st.session_state['similarity_matrix'][i]
                     
                     # Créer un DataFrame temporaire pour trier les similarités
                     temp_df = pd.DataFrame({
-                        'URL': urls,
+                        'URL': st.session_state['valid_urls'],
                         'Similarité': similarities
                     })
 
