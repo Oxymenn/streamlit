@@ -53,8 +53,9 @@ def app():
                     # Diviser la cellule en URLs individuelles
                     urls = [url.strip() for url in cell.split(',') if url.strip().startswith(('http', 'https'))]
 
-                    # Traiter chaque URL
-                    for url_index, url in enumerate(urls):
+                    # Traiter seulement la deuxième URL
+                    if len(urls) > 1:
+                        url = urls[1]  # Sélectionner la deuxième URL
                         try:
                             # Télécharger l'image
                             response = requests.get(url)
@@ -70,11 +71,13 @@ def app():
                                     processed_image = remove_background_and_add_red(image)
                                     
                                     # Afficher l'image traitée
-                                    st.image(processed_image, caption=f"Ligne {cell_index + 1}, Image {url_index + 1}", use_column_width=True)
+                                    st.image(processed_image, caption=f"Ligne {cell_index + 1}, Deuxième Image", use_column_width=True)
                                 else:
-                                    st.error(f"L'URL {url_index + 1} dans la ligne {cell_index + 1} ne contient pas une image (type: {content_type}).")
+                                    st.error(f"Le contenu de l'URL dans la ligne {cell_index + 1} n'est pas une image (type: {content_type}).")
                             else:
-                                st.error(f"Erreur HTTP pour l'URL {url_index + 1} dans la ligne {cell_index + 1}: {response.status_code}")
+                                st.error(f"Erreur HTTP pour l'URL dans la ligne {cell_index + 1}: {response.status_code}")
                         
                         except Exception as e:
-                            st.error(f"Erreur lors du traitement de l'image URL {url_index + 1} dans la ligne {cell_index + 1}: {e}")
+                            st.error(f"Erreur lors du traitement de l'image dans la ligne {cell_index + 1}: {e}")
+                    else:
+                        st.error(f"La ligne {cell_index + 1} ne contient pas assez d'URLs pour traiter la deuxième image.")
