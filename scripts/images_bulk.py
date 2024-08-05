@@ -46,23 +46,35 @@ def app():
         if st.button("Traiter les images"):
             # Vérifier que la colonne sélectionnée est valide
             if column:
-                urls = df[column].dropna().tolist()  # Extraire les URLs, en supprimant les valeurs manquantes
+                all_urls = df[column].dropna().tolist()  # Extraire les lignes de la colonne, en supprimant les valeurs manquantes
 
-                # Traiter chaque URL
-                for url_index, url in enumerate(urls):
-                    if isinstance(url, str) and url.startswith(('http', 'https')):
+                # Traiter chaque cellule (ligne) de la colonne
+                for cell_index, cell in enumerate(all_urls):
+                    # Diviser la cellule en URLs individuelles
+                    urls = [url.strip() for url in cell.split(',') if url.strip().startswith(('http', 'https'))]
+
+                    # Traiter chaque URL
+                    for url_index, url in enumerate(urls):
                         try:
                             # Télécharger l'image
                             response = requests.get(url)
-                            image = Image.open(BytesIO(response.content))
                             
-                            # Supprimer l'arrière-plan et ajouter un fond rouge
-                            processed_image = remove_background_and_add_red(image)
-                            
-                            # Afficher l'image traitée
-                            st.image(processed_image, caption=f"Image {url_index + 1}", use_column_width=True)
+                            # Vérifier que la requête a réussi
+                            if response.status_code == 200:
+                                # Vérifier le type de contenu
+                                content_type = response.headers['Content-Type']
+                                if 'image' in content_type:
+                                    image = Image.open(BytesIO(response.content))
+                                    
+                                    # Supprimer l'arrière-plan et ajouter un fond rouge
+                                    processed_image = remove_background_and_add_red(image)
+                                    
+                                    # Afficher l'image traitée
+                                    st.image(processed_image, caption=f"Ligne {cell_index + 1}, Image {url_index + 1}", use_column_width=True)
+                                else:
+                                    st.error(f"L'URL {url_index + 1} dans la ligne {cell_index + 1} ne contient pas une image (type: {content_type}).")
+                            else:
+                                st.error(f"Erreur HTTP pour l'URL {url_index + 1} dans la ligne {cell_index + 1}: {response.status_code}")
                         
                         except Exception as e:
-                            st.error(f"Erreur lors du traitement de l'image URL {url_index + 1}: {e}")
-                    else:
-                        st.error(f"L'URL à l'index {url_index + 1} n'est pas valide.")
+                            st.error(f"Erreur lors du traitement de l'image URL {url_index + 1} dans la ligne {cell_index + 1}: {e}")
