@@ -36,14 +36,14 @@ def app():
     uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
 
     if uploaded_file is not None:
-        # Lire le fichier CSV
-        df = pd.read_csv(uploaded_file, header=None)  # Pas d'en-tête car les données sont toutes dans une ligne
+        # Lire le fichier CSV et ignorer les lignes d'en-tête si nécessaire
+        df = pd.read_csv(uploaded_file, header=None)  # Utilisez `header=0` si vous avez des en-têtes à ignorer
 
         # Parcourir chaque ligne du DataFrame
         for index, row in df.iterrows():
-            # Extraire les URLs de la ligne
-            urls = row.dropna().tolist()  # Supprime les valeurs manquantes et transforme en liste
-            
+            # Extraire les URLs de la ligne, en vérifiant que ce sont des chaînes de caractères
+            urls = [url.strip() for url in row if isinstance(url, str) and url.startswith('http')]
+
             # Traiter chaque URL
             for url_index, url in enumerate(urls):
                 try:
