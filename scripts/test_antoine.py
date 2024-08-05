@@ -8,20 +8,20 @@ import re
 
 # Liste de stopwords en français
 stopwords_fr = {
-    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
-    "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
-    "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
-    "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
-    "est", "et", "eu", "fait", "faites", "fois", "font", "force", "haut", 
-    "hors", "ici", "il", "ils", "je", "juste", "la", "le", "les", "leur", 
-    "là", "ma", "maintenant", "mais", "mes", "mien", "moins", "mon", "mot", 
-    "même", "ni", "nommés", "notre", "nous", "nouveaux", "ou", "où", "par", 
-    "parce", "parole", "pas", "personnes", "peut", "peu", "pièce", "plupart", 
-    "pour", "pourquoi", "quand", "que", "quel", "quelle", "quelles", "quels", 
-    "qui", "sa", "sans", "ses", "seulement", "si", "sien", "son", "sont", 
-    "sous", "soyez", "sujet", "sur", "ta", "tandis", "tellement", "tels", 
-    "tes", "ton", "tous", "tout", "trop", "très", "tu", "valeur", "voie", 
-    "voient", "vont", "votre", "vous", "vu", "ça", "étaient", "état", "étions", 
+    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon",
+    "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment",
+    "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit",
+    "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai",
+    "est", "et", "eu", "fait", "faites", "fois", "font", "force", "haut",
+    "hors", "ici", "il", "ils", "je", "juste", "la", "le", "les", "leur",
+    "là", "ma", "maintenant", "mais", "mes", "mien", "moins", "mon", "mot",
+    "même", "ni", "nommés", "notre", "nous", "nouveaux", "ou", "où", "par",
+    "parce", "parole", "pas", "personnes", "peut", "peu", "pièce", "plupart",
+    "pour", "pourquoi", "quand", "que", "quel", "quelle", "quelles", "quels",
+    "qui", "sa", "sans", "ses", "seulement", "si", "sien", "son", "sont",
+    "sous", "soyez", "sujet", "sur", "ta", "tandis", "tellement", "tels",
+    "tes", "ton", "tous", "tout", "trop", "très", "tu", "valeur", "voie",
+    "voient", "vont", "votre", "vous", "vu", "ça", "étaient", "état", "étions",
     "été", "être"
 }
 
@@ -33,20 +33,15 @@ def extract_and_clean_content(url):
     try:
         response = requests.get(url)
         response.raise_for_status()  # Assure que la requête est réussie
-
-        # Afficher un extrait du HTML pour débogage
         soup = BeautifulSoup(response.text, 'html.parser')
-        print(f"HTML extrait pour {url} :\n{soup.prettify()[:500]}")  # Debug: Afficher les premiers 500 caractères
 
-        # Vérifier la présence de la classe 'pt-cv-wrapper'
-        pt_cv_present = soup.find(class_='pt-cv-wrapper') is not None
+        # Supprimer le contenu du header et du footer
+        for header in soup.find_all('header'):
+            header.decompose()
+        for footer in soup.find_all('footer'):
+            footer.decompose()
 
-        # Si 'pt-cv-wrapper' est présent, l'exclure du contenu
-        if pt_cv_present:
-            for wrapper in soup.find_all(class_='pt-cv-wrapper'):
-                wrapper.decompose()  # Supprime l'élément du DOM
-
-        # Extraire tout le contenu restant
+        # Extraire le texte du reste du document HTML
         content = soup.get_text(separator=" ", strip=True)
 
         # Nettoyage du texte
@@ -101,7 +96,7 @@ def calculate_similarity(embeddings):
 
 # Fonction principale de l'application
 def app():
-    st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
+    st.title("Analyse sémantique - Pages similaires")
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
     if uploaded_file is not None:
@@ -112,34 +107,55 @@ def app():
             else:
                 df = pd.read_excel(uploaded_file)
 
+            # Extraire le nom du fichier sans extension
+            file_name = uploaded_file.name.rsplit('.', 1)[0]
+
             # Afficher les colonnes disponibles et permettre à l'utilisateur de sélectionner la colonne des URLs
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
 
             urls = df[column_option].dropna().unique()
 
-            # Initialiser l'état de session si nécessaire
+            # Initialiser les listes de contenus, embeddings, et URLs valides si non existantes
             if 'contents' not in st.session_state:
-                st.session_state['contents'] = [extract_and_clean_content(url) for url in urls]
-            if 'embeddings' not in st.session_state:
-                st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
-            if 'similarity_matrix' not in st.session_state:
-                st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+                st.session_state['contents'] = []
+                st.session_state['embeddings'] = []
+                st.session_state['valid_urls'] = []
+
+                # Extraire et traiter le contenu de chaque URL
+                for url in urls:
+                    content = extract_and_clean_content(url)
+                    if content:  # S'assurer que le contenu n'est pas None
+                        embedding = get_embeddings(content)
+                        if embedding:  # S'assurer que l'embedding n'est pas None
+                            st.session_state['contents'].append(content)
+                            st.session_state['embeddings'].append(embedding)
+                            st.session_state['valid_urls'].append(url)
+
+                # Calculer la matrice de similarité
+                if len(st.session_state['contents']) == len(st.session_state['embeddings']):
+                    st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+                else:
+                    st.error("Certains embeddings n'ont pas pu être calculés. Vérifiez les URLs pour des erreurs potentielles.")
+                    return
 
             # Vérification de la matrice de similarité
-            if st.session_state['similarity_matrix'] is not None:
+            if st.session_state.get('similarity_matrix') is not None:
+                # Utiliser les URLs valides uniquement
+                valid_urls = st.session_state['valid_urls']
+
                 # Sélecteur d'URL et curseur pour le nombre de résultats
-                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
-                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
+                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", valid_urls)
+                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(valid_urls) - 1, 5)
 
                 # Trouver l'index de l'URL sélectionnée
-                selected_index = urls.tolist().index(selected_url)
+                selected_index = valid_urls.index(selected_url)
 
                 # Obtenir les similarités pour l'URL sélectionnée
                 selected_similarities = st.session_state['similarity_matrix'][selected_index]
 
                 # Créer un DataFrame des similarités
                 similarity_df = pd.DataFrame({
-                    'URL': urls,
+                    'URL': valid_urls,
                     'Similarité': selected_similarities
                 })
 
@@ -157,45 +173,47 @@ def app():
                 st.download_button(
                     label="Télécharger les urls similaires à l'url filtrée (CSV)",
                     data=csv,
-                    file_name='test_antoine.csv',
+                    file_name=f'blabla_urls_similaires_{file_name}.csv',
                     mime='text/csv'
                 )
 
                 # Créer le second tableau pour toutes les URLs de départ
-                links_table = {'URL de départ': []}
+                links_table = {
+                    'URL de départ': [],
+                    'URL similaire 1': [],
+                    'URL similaire 2': [],
+                    'URL similaire 3': [],
+                    'URL similaire 4': [],
+                    'URL similaire 5': [],
+                    'Concatener': []
+                }
 
-                # Ajouter dynamiquement les colonnes pour les URLs similaires
-                for n in range(1, max_results + 1):
-                    links_table[f'URL similaire {n}'] = []
-
-                links_table['Concatener'] = []
-
-                for i, url in enumerate(urls):
+                for i, url in enumerate(valid_urls):
                     # Obtenir les similarités pour l'URL en cours
                     similarities = st.session_state['similarity_matrix'][i]
                     
                     # Créer un DataFrame temporaire pour trier les similarités
                     temp_df = pd.DataFrame({
-                        'URL': urls,
+                        'URL': valid_urls,
                         'Similarité': similarities
                     })
 
                     # Exclure l'URL de départ
                     temp_df = temp_df[temp_df['URL'] != url]
 
-                    # Trier et prendre les meilleurs résultats selon max_results
-                    top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(max_results)['URL'].tolist()
+                    # Trier et prendre les 5 meilleures similarités
+                    top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(5)['URL'].tolist()
 
                     # Remplir les données dans le tableau
                     links_table['URL de départ'].append(url)
-                    for n in range(1, max_results + 1):
-                        if len(top_similar_urls) >= n:
-                            links_table[f'URL similaire {n}'].append(top_similar_urls[n - 1])
-                        else:
-                            links_table[f'URL similaire {n}'].append(None)
+                    links_table['URL similaire 1'].append(top_similar_urls[0] if len(top_similar_urls) > 0 else None)
+                    links_table['URL similaire 2'].append(top_similar_urls[1] if len(top_similar_urls) > 1 else None)
+                    links_table['URL similaire 3'].append(top_similar_urls[2] if len(top_similar_urls) > 2 else None)
+                    links_table['URL similaire 4'].append(top_similar_urls[3] if len(top_similar_urls) > 3 else None)
+                    links_table['URL similaire 5'].append(top_similar_urls[4] if len(top_similar_urls) > 4 else None)
 
                     # Concatener les URLs
-                    concatenated = '; '.join([f"Lien {n} : {top_similar_urls[n - 1]}" if len(top_similar_urls) >= n else f"Lien {n} : " for n in range(1, max_results + 1)])
+                    concatenated = f"Lien 1 : {top_similar_urls[0] if len(top_similar_urls) > 0 else ''}; Lien 2 : {top_similar_urls[1] if len(top_similar_urls) > 1 else ''}; Lien 3 : {top_similar_urls[2] if len(top_similar_urls) > 2 else ''}; Lien 4 : {top_similar_urls[3] if len(top_similar_urls) > 3 else ''}; Lien 5 : {top_similar_urls[4] if len(top_similar_urls) > 4 else ''}"
                     links_table['Concatener'].append(concatenated)
 
                 # Créer un DataFrame pour le second tableau
@@ -209,7 +227,7 @@ def app():
                 st.download_button(
                     label="Télécharger le tableau du maillage interne (CSV)",
                     data=csv_links,
-                    file_name='test_antoine.csv',
+                    file_name=f'blabla_maillage_interne_{file_name}.csv',
                     mime='text/csv'
                 )
 
