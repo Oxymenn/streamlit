@@ -29,6 +29,7 @@ stopwords_fr = {
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
 # Fonction pour extraire et nettoyer le contenu HTML
+@st.cache_data
 def extract_and_clean_content(url):
     try:
         response = requests.get(url)
@@ -62,6 +63,7 @@ def extract_and_clean_content(url):
         return None
 
 # Fonction pour obtenir les embeddings d'un texte en utilisant l'API OpenAI
+@st.cache_data
 def get_embeddings(text):
     try:
         response = requests.post(
@@ -86,6 +88,7 @@ def get_embeddings(text):
     return None
 
 # Fonction pour calculer la similarité cosinus
+@st.cache_data
 def calculate_similarity(embeddings):
     try:
         similarity_matrix = cosine_similarity(embeddings)
@@ -120,6 +123,7 @@ def app():
                 st.session_state['contents'] = []
                 st.session_state['embeddings'] = []
                 st.session_state['valid_urls'] = []
+                st.session_state['similarity_matrix'] = None
 
                 # Extraire et traiter le contenu de chaque URL
                 for url in urls:
@@ -144,8 +148,8 @@ def app():
                 valid_urls = st.session_state['valid_urls']
 
                 # Sélecteur d'URL et curseur pour le nombre de résultats
-                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", valid_urls)
-                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(valid_urls) - 1, 5)
+                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", valid_urls, key='url_select')
+                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(valid_urls) - 1, 5, key='result_slider')
 
                 # Trouver l'index de l'URL sélectionnée
                 selected_index = valid_urls.index(selected_url)
@@ -234,6 +238,6 @@ def app():
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier: {e}")
 
-# Assurez-vous que la fonction `app` est appelée ici
+# Assurez-vous que la fonction app est appelée ici
 if __name__ == "__main__":
     app()
