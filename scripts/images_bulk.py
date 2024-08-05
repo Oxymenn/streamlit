@@ -36,26 +36,33 @@ def app():
     uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
 
     if uploaded_file is not None:
-        # Lire le fichier CSV et ignorer les lignes d'en-tête si nécessaire
-        df = pd.read_csv(uploaded_file, header=None)  # Utilisez `header=0` si vous avez des en-têtes à ignorer
+        # Lire le fichier CSV
+        df = pd.read_csv(uploaded_file)
+        
+        # Permettre à l'utilisateur de sélectionner la colonne d'URLs
+        column = st.selectbox("Sélectionnez la colonne des URLs d'images", df.columns)
 
-        # Parcourir chaque ligne du DataFrame
-        for index, row in df.iterrows():
-            # Extraire les URLs de la ligne, en vérifiant que ce sont des chaînes de caractères
-            urls = [url.strip() for url in row if isinstance(url, str) and url.startswith('http')]
+        # Ajouter un bouton pour exécuter le traitement
+        if st.button("Traiter les images"):
+            # Vérifier que la colonne sélectionnée est valide
+            if column:
+                urls = df[column].dropna().tolist()  # Extraire les URLs, en supprimant les valeurs manquantes
 
-            # Traiter chaque URL
-            for url_index, url in enumerate(urls):
-                try:
-                    # Télécharger l'image
-                    response = requests.get(url)
-                    image = Image.open(BytesIO(response.content))
-                    
-                    # Supprimer l'arrière-plan et ajouter un fond rouge
-                    processed_image = remove_background_and_add_red(image)
-                    
-                    # Afficher l'image traitée
-                    st.image(processed_image, caption=f"Ligne {index + 1}, Image {url_index + 1}", use_column_width=True)
-                
-                except Exception as e:
-                    st.error(f"Erreur lors du traitement de l'image de la ligne {index + 1}, URL {url_index + 1}: {e}")
+                # Traiter chaque URL
+                for url_index, url in enumerate(urls):
+                    if isinstance(url, str) and url.startswith(('http', 'https')):
+                        try:
+                            # Télécharger l'image
+                            response = requests.get(url)
+                            image = Image.open(BytesIO(response.content))
+                            
+                            # Supprimer l'arrière-plan et ajouter un fond rouge
+                            processed_image = remove_background_and_add_red(image)
+                            
+                            # Afficher l'image traitée
+                            st.image(processed_image, caption=f"Image {url_index + 1}", use_column_width=True)
+                        
+                        except Exception as e:
+                            st.error(f"Erreur lors du traitement de l'image URL {url_index + 1}: {e}")
+                    else:
+                        st.error(f"L'URL à l'index {url_index + 1} n'est pas valide.")
