@@ -30,11 +30,16 @@ stopwords_fr = {
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
 @lru_cache(maxsize=None)
-def extract_and_clean_content(url):
+def extract_and_clean_content(url, exclude_classes):
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Supprimer les éléments avec les classes à exclure
+        for class_name in exclude_classes:
+            for element in soup.find_all(class_=class_name):
+                element.decompose()
         
         # Extraction de tout le contenu visible du body
         content = soup.body.get_text(separator=" ", strip=True)
@@ -115,6 +120,10 @@ def app():
     st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
+    # Ajout d'un champ pour les classes à exclure
+    exclude_classes = st.text_input("Classes HTML à exclure (séparées par des virgules)", "")
+    exclude_classes = [cls.strip() for cls in exclude_classes.split(',')] if exclude_classes else []
+
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
@@ -122,8 +131,9 @@ def app():
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
             urls = df[column_option].dropna().unique()
 
-            if 'contents' not in st.session_state:
-                st.session_state['contents'] = [extract_and_clean_content(url) for url in urls]
+            if 'contents' not in st.session_state or st.session_state.get('exclude_classes') != exclude_classes:
+                st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes) for url in urls]
+                st.session_state['exclude_classes'] = exclude_classes
             if 'embeddings' not in st.session_state:
                 st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
             if 'similarity_matrix' not in st.session_state:
