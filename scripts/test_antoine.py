@@ -33,14 +33,21 @@ def extract_and_clean_content(url):
     try:
         response = requests.get(url)
         response.raise_for_status()  # Assure que la requête est réussie
+
+        # Afficher un extrait du HTML pour débogage
         soup = BeautifulSoup(response.text, 'html.parser')
-        element = soup.find(class_='entry-content')
-        
-        if element:
-            content = element.get_text(separator=" ", strip=True)
-        else:
-            st.error(f"Élément non trouvé dans l'URL: {url}")
-            return None
+        print(f"HTML extrait pour {url} :\n{soup.prettify()[:500]}")  # Debug: Afficher les premiers 500 caractères
+
+        # Vérifier la présence de la classe 'pt-cv-wrapper'
+        pt_cv_present = soup.find(class_='pt-cv-wrapper') is not None
+
+        # Si 'pt-cv-wrapper' est présent, l'exclure du contenu
+        if pt_cv_present:
+            for wrapper in soup.find_all(class_='pt-cv-wrapper'):
+                wrapper.decompose()  # Supprime l'élément du DOM
+
+        # Extraire tout le contenu restant
+        content = soup.get_text(separator=" ", strip=True)
 
         # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content)  # Nettoyer les espaces
@@ -105,9 +112,6 @@ def app():
             else:
                 df = pd.read_excel(uploaded_file)
 
-            # Extraire le nom du fichier sans extension
-            file_name = uploaded_file.name.rsplit('.', 1)[0]
-
             # Afficher les colonnes disponibles et permettre à l'utilisateur de sélectionner la colonne des URLs
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
 
@@ -153,7 +157,7 @@ def app():
                 st.download_button(
                     label="Télécharger les urls similaires à l'url filtrée (CSV)",
                     data=csv,
-                    file_name=f'urls_similaires-{file_name}.csv',
+                    file_name='test_antoine.csv',
                     mime='text/csv'
                 )
 
@@ -205,7 +209,7 @@ def app():
                 st.download_button(
                     label="Télécharger le tableau du maillage interne (CSV)",
                     data=csv_links,
-                    file_name=f'maillage_interne-{file_name}.csv',
+                    file_name='test_antoine.csv',
                     mime='text/csv'
                 )
 
