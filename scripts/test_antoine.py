@@ -35,16 +35,16 @@ def extract_and_clean_content(url):
         response.raise_for_status()  # Assure que la requête est réussie
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Tentative pour trouver l'élément par la classe 'entry-content'
-        element = soup.find('div', class_='entry-content')
+        # Vérifier la présence de la classe 'pt-cv-wrapper'
+        pt_cv_present = soup.find(class_='pt-cv-wrapper') is not None
 
-        if element is None:
-            # Si l'élément n'est pas trouvé, afficher le début du contenu HTML pour débogage
-            st.error(f"Élément non trouvé dans l'URL: {url}. Voici un extrait du contenu HTML : {soup.prettify()[:500]}")
-            return None
-        
-        # Extraction du texte
-        content = element.get_text(separator=" ", strip=True)
+        # Si 'pt-cv-wrapper' est présent, l'exclure du contenu
+        if pt_cv_present:
+            for wrapper in soup.find_all(class_='pt-cv-wrapper'):
+                wrapper.decompose()  # Supprime l'élément du DOM
+
+        # Extraire tout le contenu restant
+        content = soup.get_text(separator=" ", strip=True)
 
         # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content)  # Nettoyer les espaces
