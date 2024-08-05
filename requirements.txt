@@ -10,3 +10,5 @@ tqdm
 unidecode
 openai
 pillow
+tqdm
+unidecode
