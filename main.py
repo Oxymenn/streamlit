@@ -6,6 +6,7 @@ from scripts import cannibalisation_serp
 from scripts import categorisation_produit
 from scripts import test_cannibalisation
 from scripts import urls_similarite_all
+from scripts import test_antoine
 
 # Configuration des pages
 PAGES = {
@@ -15,7 +16,8 @@ PAGES = {
     "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
     "Catégorisation des produits": categorisation_produit,
-    "Test Cannibalisation": test_cannibalisation
+    "Test Cannibalisation": test_cannibalisation,
+    "Test Antoine": test_antoine
 }
 
 # Titre principal
