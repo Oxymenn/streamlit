@@ -11,5 +11,4 @@ unidecode
 openai
 opencv-python-headless
 pillow
-torch
-torchvision
+Wand
