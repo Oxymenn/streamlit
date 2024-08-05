@@ -1,21 +1,17 @@
 import streamlit as st
-from scripts import embedding_script
+from scripts import proposition_maillage
 from scripts import similarite_cosinus
 from scripts import audit_maillage_interne
 from scripts import cannibalisation_serp
 from scripts import test_cannibalisation
-from scripts import urls_similarite_all
-from scripts import test_antoine
 
 # Configuration des pages
 PAGES = {
-    "Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)": embedding_script,
-    "Pages Similaires Sémantiquement - Pour toutes pages": urls_similarite_all,
+    "Pages Similaires Sémantiquement - Proposition de Maillage Interne": proposition_maillage,
     "Similarité Cosinus": similarite_cosinus,
     "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
-    "Test Cannibalisation": test_cannibalisation,
-    "Test Antoine": test_antoine
+    "Test Cannibalisation": test_cannibalisation
 }
 
 # Titre principal
