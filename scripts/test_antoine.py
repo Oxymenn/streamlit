@@ -29,7 +29,6 @@ stopwords_fr = {
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
 # Fonction pour extraire et nettoyer le contenu HTML
-@st.cache_data
 def extract_and_clean_content(url, include_class=None, exclude_class=None):
     try:
         response = requests.get(url)
@@ -69,7 +68,6 @@ def extract_and_clean_content(url, include_class=None, exclude_class=None):
         return None
 
 # Fonction pour obtenir les embeddings d'un texte en utilisant l'API OpenAI
-@st.cache_data
 def get_embeddings(text):
     try:
         response = requests.post(
@@ -94,7 +92,6 @@ def get_embeddings(text):
     return None
 
 # Fonction pour calculer la similarité cosinus
-@st.cache_data
 def calculate_similarity(embeddings):
     try:
         similarity_matrix = cosine_similarity(embeddings)
@@ -131,7 +128,7 @@ def app():
             # Bouton pour exécuter l'analyse
             if st.button("Exécuter l'analyse"):
                 # Initialiser les listes de contenus, embeddings, et URLs valides si non existantes
-                if 'contents' not in st.session_state:
+                if 'contents' not in st.session_state or st.session_state.get('reset', True):
                     st.session_state['contents'] = []
                     st.session_state['embeddings'] = []
                     st.session_state['valid_urls'] = []
@@ -153,6 +150,9 @@ def app():
                     else:
                         st.error("Certains embeddings n'ont pas pu être calculés. Vérifiez les URLs pour des erreurs potentielles.")
                         return
+
+                    # Marquer l'état comme non réinitialisé
+                    st.session_state['reset'] = False
 
                 # Vérification de la matrice de similarité
                 if st.session_state.get('similarity_matrix') is not None:
