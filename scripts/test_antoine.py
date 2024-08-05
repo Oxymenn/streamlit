@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
+import time
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -31,7 +32,7 @@ OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 @st.cache_data
 def extract_and_clean_content(url, include_classes, exclude_classes):
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -55,7 +56,7 @@ def extract_and_clean_content(url, include_classes, exclude_classes):
         if elements:
             content = ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
         else:
-            st.error(f"Éléments non trouvés dans l'URL: {url}")
+            st.warning(f"Éléments non trouvés dans l'URL: {url}")
             return None
 
         content = re.sub(r'\s+', ' ', content)
@@ -67,13 +68,15 @@ def extract_and_clean_content(url, include_classes, exclude_classes):
 
         return content
     except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de l'accès à {url}: {e}")
+        st.warning(f"Erreur lors de l'accès à {url}: {e}")
         return None
     except Exception as e:
-        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
+        st.warning(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
 def get_embeddings(text):
+    if not text:
+        return None
     try:
         response = requests.post(
             'https://api.openai.com/v1/embeddings',
@@ -85,23 +88,33 @@ def get_embeddings(text):
                 'model': 'text-embedding-3-small',
                 'input': text,
                 'encoding_format': 'float'
-            }
+            },
+            timeout=10
         )
         response.raise_for_status()
         data = response.json()
         return data['data'][0]['embedding']
     except requests.exceptions.HTTPError as http_err:
-        st.error(f"HTTP error occurred: {http_err}")
+        st.warning(f"HTTP error occurred: {http_err}")
+        time.sleep(1)  # Attendre 1 seconde avant de réessayer
+        return None
     except Exception as e:
-        st.error(f"Erreur lors de la création des embeddings: {e}")
-    return None
+        st.warning(f"Erreur lors de la création des embeddings: {e}")
+        return None
 
 def calculate_similarity(embeddings):
     try:
-        similarity_matrix = cosine_similarity(embeddings)
+        embeddings = [emb for emb in embeddings if emb is not None]
+        if not embeddings:
+            st.warning("Aucun embedding valide trouvé.")
+            return None
+        embeddings_array = np.array(embeddings)
+        if embeddings_array.ndim == 1:
+            embeddings_array = embeddings_array.reshape(1, -1)
+        similarity_matrix = cosine_similarity(embeddings_array)
         return similarity_matrix
     except Exception as e:
-        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
+        st.warning(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
 def app():
@@ -147,11 +160,14 @@ def app():
                         embeddings = [get_embeddings(content) for content in contents if content]
                         similarity_matrix = calculate_similarity(embeddings)
                         
-                        st.session_state.urls = urls
-                        st.session_state.similarity_matrix = similarity_matrix
-                        st.session_state.analysis_complete = True
-                    
-                    st.success("Analyse terminée!")
+                        if similarity_matrix is not None:
+                            st.session_state.urls = urls
+                            st.session_state.similarity_matrix = similarity_matrix
+                            st.session_state.analysis_complete = True
+                            st.success("Analyse terminée!")
+                        else:
+                            st.error("L'analyse n'a pas pu être complétée en raison d'erreurs.")
+                            return
                 
                 similarity_matrix = st.session_state.similarity_matrix
                 urls = st.session_state.urls
