@@ -3,7 +3,6 @@ from scripts import embedding_script
 from scripts import similarite_cosinus
 from scripts import audit_maillage_interne
 from scripts import cannibalisation_serp
-from scripts import categorisation_produit
 from scripts import test_cannibalisation
 from scripts import urls_similarite_all
 from scripts import test_antoine
@@ -15,7 +14,6 @@ PAGES = {
     "Similarité Cosinus": similarite_cosinus,
     "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
-    "Catégorisation des produits": categorisation_produit,
     "Test Cannibalisation": test_cannibalisation,
     "Test Antoine": test_antoine
 }
