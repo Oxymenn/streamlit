@@ -108,18 +108,32 @@ def app():
     col1, col2 = st.columns(2)
     
     with col1:
+        st.subheader("Classes à inclure")
         include_class = st.text_input("Classe HTML à inclure")
         if st.button("Ajouter classe à inclure"):
             if include_class and include_class not in st.session_state.include_classes:
                 st.session_state.include_classes.append(include_class)
-        st.write("Classes à inclure:", st.session_state.include_classes)
+        
+        for idx, cls in enumerate(st.session_state.include_classes):
+            col1, col2 = st.columns([3, 1])
+            col1.write(cls)
+            if col2.button(f"Supprimer {cls}", key=f"del_include_{idx}"):
+                st.session_state.include_classes.remove(cls)
+                st.experimental_rerun()
     
     with col2:
+        st.subheader("Classes à exclure")
         exclude_class = st.text_input("Classe HTML à exclure")
         if st.button("Ajouter classe à exclure"):
             if exclude_class and exclude_class not in st.session_state.exclude_classes:
                 st.session_state.exclude_classes.append(exclude_class)
-        st.write("Classes à exclure:", st.session_state.exclude_classes)
+        
+        for idx, cls in enumerate(st.session_state.exclude_classes):
+            col1, col2 = st.columns([3, 1])
+            col1.write(cls)
+            if col2.button(f"Supprimer {cls}", key=f"del_exclude_{idx}"):
+                st.session_state.exclude_classes.remove(cls)
+                st.experimental_rerun()
     
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
