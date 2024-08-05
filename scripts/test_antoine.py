@@ -35,15 +35,22 @@ def extract_and_clean_content(url, include_classes, exclude_classes):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        if include_classes:
+        if include_classes and not exclude_classes:
             elements = []
             for class_name in include_classes:
                 elements.extend(soup.find_all(class_=class_name.strip()))
-        else:
-            elements = soup.find_all(class_='below-woocommerce-category')
-        
-        if exclude_classes:
+        elif exclude_classes and not include_classes:
+            elements = soup.find_all()
+            for class_name in exclude_classes:
+                for element in soup.find_all(class_=class_name.strip()):
+                    element.extract()
+        elif include_classes and exclude_classes:
+            elements = []
+            for class_name in include_classes:
+                elements.extend(soup.find_all(class_=class_name.strip()))
             elements = [el for el in elements if not any(cls.strip() in el.get('class', []) for cls in exclude_classes)]
+        else:
+            elements = soup.find_all()
         
         if elements:
             content = ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
