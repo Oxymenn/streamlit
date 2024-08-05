@@ -28,25 +28,74 @@ stopwords_fr = {
 # Configuration de la clé API OpenAI
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
-import streamlit as st
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
-import re
-
-# Liste de stopwords en français et configuration de la clé API OpenAI restent inchangées
-
 @st.cache_data
 def extract_and_clean_content(url, include_classes, exclude_classes):
-    # Le contenu de cette fonction reste inchangé
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        if include_classes:
+            elements = []
+            for class_name in include_classes:
+                elements.extend(soup.find_all(class_=class_name.strip()))
+        else:
+            elements = soup.find_all(class_='below-woocommerce-category')
+        
+        if exclude_classes:
+            elements = [el for el in elements if not any(cls.strip() in el.get('class', []) for cls in exclude_classes)]
+        
+        if elements:
+            content = ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
+        else:
+            st.error(f"Éléments non trouvés dans l'URL: {url}")
+            return None
+
+        content = re.sub(r'\s+', ' ', content)
+        content = content.lower()
+        content = re.sub(r'[^\w\s]', '', content)
+
+        words = content.split()
+        content = ' '.join([word for word in words if word not in stopwords_fr])
+
+        return content
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erreur lors de l'accès à {url}: {e}")
+        return None
+    except Exception as e:
+        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
+        return None
 
 def get_embeddings(text):
-    # Le contenu de cette fonction reste inchangé
+    try:
+        response = requests.post(
+            'https://api.openai.com/v1/embeddings',
+            headers={
+                'Authorization': f'Bearer {OPENAI_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': 'text-embedding-3-small',
+                'input': text,
+                'encoding_format': 'float'
+            }
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data['data'][0]['embedding']
+    except requests.exceptions.HTTPError as http_err:
+        st.error(f"HTTP error occurred: {http_err}")
+    except Exception as e:
+        st.error(f"Erreur lors de la création des embeddings: {e}")
+    return None
 
 def calculate_similarity(embeddings):
-    # Le contenu de cette fonction reste inchangé
+    try:
+        similarity_matrix = cosine_similarity(embeddings)
+        return similarity_matrix
+    except Exception as e:
+        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
+        return None
 
 def app():
     st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
