@@ -1,19 +1,20 @@
+# scripts/images_bulk.py
+
 import streamlit as st
 import torch
 from torchvision import transforms
 from PIL import Image
 from io import BytesIO
 import requests
+from modnet.src.models.modnet import MODNet  # Assurez-vous que le chemin est correct
 
-# Chargement du modèle MODNet
-from modnet import MODNet
-
+# Charger le modèle MODNet
 @st.cache_resource
 def load_modnet():
     # Charger le modèle pré-entraîné
     modnet = MODNet(backbone_pretrained=False)
     modnet = torch.nn.DataParallel(modnet)
-    modnet.load_state_dict(torch.load('modnet_photographic_portrait_matting.ckpt'))
+    modnet.load_state_dict(torch.load('modnet_photographic_portrait_matting.ckpt', map_location=torch.device('cpu')))
     modnet.eval()
     return modnet
 
@@ -30,7 +31,7 @@ def remove_background_with_modnet(image):
 
     # Passer l'image dans le modèle
     with torch.no_grad():
-        matte = modnet(image)
+        matte = modnet(image, True)[0]
         matte = matte[0][0].cpu().numpy()
 
     # Appliquer le masque pour remplacer l'arrière-plan
