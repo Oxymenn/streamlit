@@ -5,7 +5,6 @@ from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
-from functools import lru_cache
 
 # Liste de stopwords en français (inchangée)
 stopwords_fr = {
@@ -53,7 +52,6 @@ def extract_and_clean_content(url, exclude_classes):
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
     return None
 
-@lru_cache(maxsize=None)
 def get_embeddings(text):
     try:
         response = requests.post(
@@ -123,20 +121,19 @@ def app():
     exclude_classes = st.text_input("Classes HTML à exclure (séparées par des virgules)", "")
     exclude_classes = [cls.strip() for cls in exclude_classes.split(',')] if exclude_classes else []
 
-    if uploaded_file is not None:
+    # Ajout du bouton Exécuter
+    execute_button = st.button("Exécuter")
+
+    if uploaded_file is not None and execute_button:
         try:
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
             file_name = uploaded_file.name.rsplit('.', 1)[0]
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
             urls = df[column_option].dropna().unique()
 
-            if 'contents' not in st.session_state or st.session_state.get('exclude_classes') != exclude_classes:
-                st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes) for url in urls]
-                st.session_state['exclude_classes'] = exclude_classes
-            if 'embeddings' not in st.session_state:
-                st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
-            if 'similarity_matrix' not in st.session_state:
-                st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+            st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes) for url in urls]
+            st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
+            st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
 
             if st.session_state['similarity_matrix'] is not None:
                 selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
