@@ -105,6 +105,9 @@ def app():
     if 'exclude_classes' not in st.session_state:
         st.session_state.exclude_classes = []
     
+    if 'analysis_done' not in st.session_state:
+        st.session_state.analysis_done = False
+    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -113,13 +116,14 @@ def app():
         if st.button("Ajouter classe à inclure"):
             if include_class and include_class not in st.session_state.include_classes:
                 st.session_state.include_classes.append(include_class)
+                st.session_state.analysis_done = False
         
         for idx, cls in enumerate(st.session_state.include_classes):
             col1, col2 = st.columns([3, 1])
             col1.write(cls)
             if col2.button(f"Supprimer {cls}", key=f"del_include_{idx}"):
                 st.session_state.include_classes.remove(cls)
-                st.experimental_rerun()
+                st.session_state.analysis_done = False
     
     with col2:
         st.subheader("Classes à exclure")
@@ -127,13 +131,14 @@ def app():
         if st.button("Ajouter classe à exclure"):
             if exclude_class and exclude_class not in st.session_state.exclude_classes:
                 st.session_state.exclude_classes.append(exclude_class)
+                st.session_state.analysis_done = False
         
         for idx, cls in enumerate(st.session_state.exclude_classes):
             col1, col2 = st.columns([3, 1])
             col1.write(cls)
             if col2.button(f"Supprimer {cls}", key=f"del_exclude_{idx}"):
                 st.session_state.exclude_classes.remove(cls)
-                st.experimental_rerun()
+                st.session_state.analysis_done = False
     
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
@@ -148,73 +153,73 @@ def app():
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
             urls = df[column_option].dropna().unique()
 
-            if st.button("Exécuter l'analyse"):
-                with st.spinner("Analyse en cours..."):
-                    st.session_state['contents'] = [extract_and_clean_content(url, st.session_state.include_classes, st.session_state.exclude_classes) for url in urls]
-                    st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
-                    st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
-                
-                st.success("Analyse terminée!")
+            if st.button("Exécuter l'analyse") or (st.session_state.analysis_done and 'similarity_matrix' in st.session_state):
+                if not st.session_state.analysis_done:
+                    with st.spinner("Analyse en cours..."):
+                        st.session_state['contents'] = [extract_and_clean_content(url, st.session_state.include_classes, st.session_state.exclude_classes) for url in urls]
+                        st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
+                        st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+                    st.session_state.analysis_done = True
+                    st.success("Analyse terminée!")
 
-                if st.session_state['similarity_matrix'] is not None:
-                    selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
-                    max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
+                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
+                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
 
-                    selected_index = urls.tolist().index(selected_url)
-                    selected_similarities = st.session_state['similarity_matrix'][selected_index]
+                selected_index = urls.tolist().index(selected_url)
+                selected_similarities = st.session_state['similarity_matrix'][selected_index]
 
-                    similarity_df = pd.DataFrame({
+                similarity_df = pd.DataFrame({
+                    'URL': urls,
+                    'Similarité': selected_similarities
+                })
+
+                similarity_df = similarity_df[similarity_df['URL'] != selected_url]
+                similarity_df = similarity_df.sort_values(by='Similarité', ascending=False)
+
+                st.dataframe(similarity_df.head(max_results))
+
+                csv = similarity_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Télécharger les urls similaires à l'url filtrée (CSV)",
+                    data=csv,
+                    file_name=f'urls_similaires-{file_name}.csv',
+                    mime='text/csv'
+                )
+
+                links_table = {'URL de départ': []}
+                for n in range(1, max_results + 1):
+                    links_table[f'URL similaire {n}'] = []
+                links_table['Concatener'] = []
+
+                for i, url in enumerate(urls):
+                    similarities = st.session_state['similarity_matrix'][i]
+                    temp_df = pd.DataFrame({
                         'URL': urls,
-                        'Similarité': selected_similarities
+                        'Similarité': similarities
                     })
+                    temp_df = temp_df[temp_df['URL'] != url]
+                    top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(max_results)['URL'].tolist()
 
-                    similarity_df = similarity_df[similarity_df['URL'] != selected_url]
-                    similarity_df = similarity_df.sort_values(by='Similarité', ascending=False)
-
-                    st.dataframe(similarity_df.head(max_results))
-
-                    csv = similarity_df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="Télécharger les urls similaires à l'url filtrée (CSV)",
-                        data=csv,
-                        file_name=f'urls_similaires-{file_name}.csv',
-                        mime='text/csv'
-                    )
-
-                    links_table = {'URL de départ': []}
+                    links_table['URL de départ'].append(url)
                     for n in range(1, max_results + 1):
-                        links_table[f'URL similaire {n}'] = []
-                    links_table['Concatener'] = []
+                        if len(top_similar_urls) >= n:
+                            links_table[f'URL similaire {n}'].append(top_similar_urls[n - 1])
+                        else:
+                            links_table[f'URL similaire {n}'].append(None)
 
-                    for i, url in enumerate(urls):
-                        similarities = st.session_state['similarity_matrix'][i]
-                        temp_df = pd.DataFrame({
-                            'URL': urls,
-                            'Similarité': similarities
-                        })
-                        temp_df = temp_df[temp_df['URL'] != url]
-                        top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(max_results)['URL'].tolist()
+                    concatenated = '; '.join([f"Lien {n} : {top_similar_urls[n - 1]}" if len(top_similar_urls) >= n else f"Lien {n} : " for n in range(1, max_results + 1)])
+                    links_table['Concatener'].append(concatenated)
 
-                        links_table['URL de départ'].append(url)
-                        for n in range(1, max_results + 1):
-                            if len(top_similar_urls) >= n:
-                                links_table[f'URL similaire {n}'].append(top_similar_urls[n - 1])
-                            else:
-                                links_table[f'URL similaire {n}'].append(None)
+                links_df = pd.DataFrame(links_table)
+                st.dataframe(links_df)
 
-                        concatenated = '; '.join([f"Lien {n} : {top_similar_urls[n - 1]}" if len(top_similar_urls) >= n else f"Lien {n} : " for n in range(1, max_results + 1)])
-                        links_table['Concatener'].append(concatenated)
-
-                    links_df = pd.DataFrame(links_table)
-                    st.dataframe(links_df)
-
-                    csv_links = links_df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="Télécharger le tableau du maillage interne (CSV)",
-                        data=csv_links,
-                        file_name=f'maillage_interne-{file_name}.csv',
-                        mime='text/csv'
-                    )
+                csv_links = links_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Télécharger le tableau du maillage interne (CSV)",
+                    data=csv_links,
+                    file_name=f'maillage_interne-{file_name}.csv',
+                    mime='text/csv'
+                )
 
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier ou de l'analyse: {e}")
