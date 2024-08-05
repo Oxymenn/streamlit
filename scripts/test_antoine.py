@@ -134,35 +134,37 @@ def app():
             st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes) for url in urls]
             st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
             st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
-
-            if st.session_state['similarity_matrix'] is not None:
-                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
-                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
-
-                similarity_df = create_similarity_df(urls, st.session_state['similarity_matrix'], selected_url, max_results)
-                st.dataframe(similarity_df)
-
-                csv = similarity_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Télécharger les urls similaires à l'url filtrée (CSV)",
-                    data=csv,
-                    file_name=f'urls_similaires-{file_name}.csv',
-                    mime='text/csv'
-                )
-
-                links_df = create_links_table(urls, st.session_state['similarity_matrix'], max_results)
-                st.dataframe(links_df)
-
-                csv_links = links_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Télécharger le tableau du maillage interne (CSV)",
-                    data=csv_links,
-                    file_name=f'maillage_interne-{file_name}.csv',
-                    mime='text/csv'
-                )
+            st.session_state['urls'] = urls
+            st.session_state['file_name'] = file_name
 
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier: {e}")
+
+    if 'similarity_matrix' in st.session_state and st.session_state['similarity_matrix'] is not None:
+        selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", st.session_state['urls'])
+        max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(st.session_state['urls']) - 1, 5)
+
+        similarity_df = create_similarity_df(st.session_state['urls'], st.session_state['similarity_matrix'], selected_url, max_results)
+        st.dataframe(similarity_df)
+
+        csv = similarity_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Télécharger les urls similaires à l'url filtrée (CSV)",
+            data=csv,
+            file_name=f'urls_similaires-{st.session_state["file_name"]}.csv',
+            mime='text/csv'
+        )
+
+        links_df = create_links_table(st.session_state['urls'], st.session_state['similarity_matrix'], max_results)
+        st.dataframe(links_df)
+
+        csv_links = links_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Télécharger le tableau du maillage interne (CSV)",
+            data=csv_links,
+            file_name=f'maillage_interne-{st.session_state["file_name"]}.csv',
+            mime='text/csv'
+        )
 
 if __name__ == "__main__":
     app()
