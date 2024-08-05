@@ -1,49 +1,31 @@
 # scripts/images_bulk.py
 
 import streamlit as st
-import torch
-from torchvision import transforms
-from PIL import Image
+from rembg import remove
+from PIL import Image, ImageOps
 from io import BytesIO
 import requests
-from modnet.src.models.modnet import MODNet  # Assurez-vous que le chemin est correct
 
-# Charger le modèle MODNet
-@st.cache_resource
-def load_modnet():
-    # Charger le modèle pré-entraîné
-    modnet = MODNet(backbone_pretrained=False)
-    modnet = torch.nn.DataParallel(modnet)
-    modnet.load_state_dict(torch.load('modnet_photographic_portrait_matting.ckpt', map_location=torch.device('cpu')))
-    modnet.eval()
-    return modnet
+def remove_background_with_rembg(image):
+    # Supprimer l'arrière-plan de l'image
+    output = remove(image)
 
-modnet = load_modnet()
+    # Charger l'image résultante avec Pillow
+    result_image = Image.open(BytesIO(output)).convert("RGBA")
 
-# Transformation de l'image
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Resize((512, 512))
-])
+    # Créer un fond gris clair
+    background = Image.new('RGBA', result_image.size, (211, 211, 211, 255))
 
-def remove_background_with_modnet(image):
-    image = transform(image).unsqueeze(0)
+    # Combiner l'image avec le fond
+    final_image = Image.alpha_composite(background, result_image)
 
-    # Passer l'image dans le modèle
-    with torch.no_grad():
-        matte = modnet(image, True)[0]
-        matte = matte[0][0].cpu().numpy()
+    # Convertir en RGB pour supprimer le canal alpha
+    final_image = final_image.convert("RGB")
 
-    # Appliquer le masque pour remplacer l'arrière-plan
-    matte = Image.fromarray((matte * 255).astype('uint8')).resize(image.size[1:], Image.BILINEAR)
-
-    # Fusionner avec un fond gris clair
-    background = Image.new('RGB', image.size[1:], (211, 211, 211))
-    output = Image.composite(image, background, matte)
-    return output
+    return final_image
 
 def app():
-    st.title("Suppression d'Arrière-Plan avec MODNet")
+    st.title("Suppression d'Arrière-Plan avec RemBG")
 
     uploaded_file = st.file_uploader("Téléchargez une image", type=["jpg", "jpeg", "png"])
     if uploaded_file:
@@ -51,7 +33,7 @@ def app():
         st.image(image, caption="Image Originale", use_column_width=True)
 
         if st.button("Traiter l'image"):
-            processed_image = remove_background_with_modnet(image)
+            processed_image = remove_background_with_rembg(image)
             st.image(processed_image, caption="Image avec Arrière-Plan Gris Clair", use_column_width=True)
 
 if __name__ == "__main__":
