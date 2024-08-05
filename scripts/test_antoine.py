@@ -35,8 +35,8 @@ def extract_and_clean_content(url):
         response.raise_for_status()  # Assure que la requête est réussie
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Tentative pour trouver l'élément par classe et ID
-        element = soup.find('div', {'class': 'content-area', 'id': 'primary'})
+        # Tentative pour trouver l'élément par la classe 'entry-content'
+        element = soup.find('div', class_='entry-content')
 
         if element is None:
             # Si l'élément n'est pas trouvé, afficher le début du contenu HTML pour débogage
