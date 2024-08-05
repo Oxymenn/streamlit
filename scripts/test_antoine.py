@@ -114,24 +114,24 @@ def app():
     if 'exclude_classes' not in st.session_state:
         st.session_state['exclude_classes'] = []
 
- # Ajouter des filtres pour les classes à inclure et exclure
-st.subheader("Filtres de Classe HTML")
+    # Ajouter des filtres pour les classes à inclure et exclure
+    st.subheader("Filtres de Classe HTML")
 
-# Ajout pour inclure des classes
-include_input = st.text_input("Ajouter une classe HTML à inclure")
-if st.button("Ajouter à inclure"):
-    if include_input and include_input not in st.session_state['include_classes']:
-        st.session_state['include_classes'].append(include_input)
+    # Ajout pour inclure des classes
+    include_input = st.text_input("Ajouter une classe HTML à inclure")
+    if st.button("Ajouter à inclure"):
+        if include_input and include_input not in st.session_state['include_classes']:
+            st.session_state['include_classes'].append(include_input)
 
-# Ajout pour exclure des classes
-exclude_input = st.text_input("Ajouter une classe HTML à exclure")
-if st.button("Ajouter à exclure"):
-    if exclude_input and exclude_input not in st.session_state['exclude_classes']:
-        st.session_state['exclude_classes'].append(exclude_input)
+    # Ajout pour exclure des classes
+    exclude_input = st.text_input("Ajouter une classe HTML à exclure")
+    if st.button("Ajouter à exclure"):
+        if exclude_input and exclude_input not in st.session_state['exclude_classes']:
+            st.session_state['exclude_classes'].append(exclude_input)
 
-# Afficher les classes à inclure et exclure
-st.write("Classes à inclure:", st.session_state['include_classes'])
-st.write("Classes à exclure:", st.session_state['exclude_classes'])
+    # Afficher les classes à inclure et exclure
+    st.write("Classes à inclure:", st.session_state['include_classes'])
+    st.write("Classes à exclure:", st.session_state['exclude_classes'])
 
     if uploaded_file is not None:
         # Lire le fichier importé
@@ -149,11 +149,27 @@ st.write("Classes à exclure:", st.session_state['exclude_classes'])
 
             urls = df[column_option].dropna().unique()
 
-# Initialiser l'état de session pour les classes à inclure et exclure
-if 'include_classes' not in st.session_state:
-    st.session_state['include_classes'] = []
-if 'exclude_classes' not in st.session_state:
-    st.session_state['exclude_classes'] = []
+            # Initialiser l'état de session pour les contenus, embeddings, et URLs valides
+            if 'contents' not in st.session_state:
+                st.session_state['contents'] = []
+            if 'embeddings' not in st.session_state:
+                st.session_state['embeddings'] = []
+            if 'valid_urls' not in st.session_state:
+                st.session_state['valid_urls'] = []
+
+            # Extraire et traiter le contenu de chaque URL
+            for url in urls:
+                content = extract_and_clean_content(url, st.session_state['include_classes'], st.session_state['exclude_classes'])
+                if content:  # S'assurer que le contenu n'est pas None
+                    embedding = get_embeddings(content)
+                    if embedding:  # S'assurer que l'embedding n'est pas None
+                        st.session_state['contents'].append(content)
+                        st.session_state['embeddings'].append(embedding)
+                        st.session_state['valid_urls'].append(url)
+
+            # Calculer la matrice de similarité si elle n'existe pas encore
+            if 'similarity_matrix' not in st.session_state:
+                st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
 
             # Vérification de la matrice de similarité
             if st.session_state['similarity_matrix'] is not None:
