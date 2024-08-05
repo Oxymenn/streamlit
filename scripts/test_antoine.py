@@ -118,12 +118,7 @@ def app():
                 st.session_state.include_classes.append(include_class)
                 st.session_state.analysis_done = False
         
-        for idx, cls in enumerate(st.session_state.include_classes):
-            col1, col2 = st.columns([3, 1])
-            col1.write(cls)
-            if col2.button(f"Supprimer {cls}", key=f"del_include_{idx}"):
-                st.session_state.include_classes.remove(cls)
-                st.session_state.analysis_done = False
+        st.write("Classes à inclure:", ", ".join(st.session_state.include_classes))
     
     with col2:
         st.subheader("Classes à exclure")
@@ -133,12 +128,7 @@ def app():
                 st.session_state.exclude_classes.append(exclude_class)
                 st.session_state.analysis_done = False
         
-        for idx, cls in enumerate(st.session_state.exclude_classes):
-            col1, col2 = st.columns([3, 1])
-            col1.write(cls)
-            if col2.button(f"Supprimer {cls}", key=f"del_exclude_{idx}"):
-                st.session_state.exclude_classes.remove(cls)
-                st.session_state.analysis_done = False
+        st.write("Classes à exclure:", ", ".join(st.session_state.exclude_classes))
     
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
