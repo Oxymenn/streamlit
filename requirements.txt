@@ -10,3 +10,4 @@ tqdm
 unidecode
 openai
 pillow
+opencv-python-headless
