@@ -6,32 +6,45 @@ from PIL import Image
 from io import BytesIO
 import base64
 from sklearn.cluster import KMeans
+import cv2
 
 def remove_background(image):
     # Convertir l'image en array numpy
     np_image = np.array(image)
     
-    # Reshape l'image pour le clustering
-    pixels = np_image.reshape((-1, 3))
+    # Convertir en LAB color space
+    lab = cv2.cvtColor(np_image, cv2.COLOR_RGB2LAB)
+    
+    # Appliquer un flou gaussien pour réduire le bruit
+    lab_blur = cv2.GaussianBlur(lab, (5, 5), 0)
     
     # Appliquer K-means clustering
-    kmeans = KMeans(n_clusters=2, random_state=42)
+    pixels = lab_blur.reshape((-1, 3))
+    kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
     kmeans.fit(pixels)
     
     # Créer un masque basé sur les clusters
     mask = kmeans.labels_.reshape(np_image.shape[:2])
     
-    # Déterminer quel cluster représente l'arrière-plan (supposons que c'est le cluster le plus fréquent)
-    background_label = np.bincount(kmeans.labels_).argmax()
+    # Déterminer quel cluster représente l'arrière-plan
+    background_label = 1 if np.mean(np_image[mask == 1]) > np.mean(np_image[mask == 0]) else 0
     
-    # Inverser le masque si nécessaire
-    if background_label == 1:
-        mask = 1 - mask
+    # Créer le masque final
+    mask = np.uint8(mask != background_label) * 255
+    
+    # Appliquer des opérations morphologiques pour améliorer le masque
+    kernel = np.ones((5,5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    
+    # Appliquer un flou gaussien au masque pour adoucir les bords
+    mask = cv2.GaussianBlur(mask, (5, 5), 0)
     
     # Créer une image RGBA
-    rgba = np.concatenate([np_image, np.expand_dims(mask, axis=2) * 255], axis=2)
+    rgba = cv2.cvtColor(np_image, cv2.COLOR_RGB2RGBA)
+    rgba[:, :, 3] = mask
     
-    return Image.fromarray(rgba.astype('uint8'), 'RGBA')
+    return Image.fromarray(rgba)
 
 def process_image(url):
     try:
@@ -61,7 +74,7 @@ def app():
     st.title("Traitement d'images en masse")
     
     st.write("Ce script permet d'importer un fichier CSV, de sélectionner une colonne contenant des URLs d'images, "
-             "puis de tenter de supprimer l'arrière-plan de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
+             "puis de supprimer l'arrière-plan de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
              "et de l'échanger avec la première.")
 
     # Upload du fichier CSV
