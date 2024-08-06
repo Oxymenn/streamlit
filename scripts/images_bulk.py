@@ -1,67 +1,18 @@
 import streamlit as st
 import pandas as pd
 import requests
-import numpy as np
-import cv2
 from PIL import Image
 from io import BytesIO
 import base64
-
-def remove_background_advanced(image):
-    # Convertir l'image PIL en array numpy
-    np_image = np.array(image)
-    
-    # Créer un masque
-    mask = np.zeros(np_image.shape[:2], np.uint8)
-    
-    # Définir les rectangles pour le premier plan et l'arrière-plan
-    rect = (10, 10, np_image.shape[1]-20, np_image.shape[0]-20)
-    
-    # Initialiser les modèles pour l'algorithme GrabCut
-    bgdModel = np.zeros((1,65), np.float64)
-    fgdModel = np.zeros((1,65), np.float64)
-    
-    # Appliquer GrabCut
-    cv2.grabCut(np_image, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
-    
-    # Modifier le masque
-    mask2 = np.where((mask==2)|(mask==0), 0, 1).astype('uint8')
-    
-    # Appliquer la détection de contours
-    gray = cv2.cvtColor(np_image, cv2.COLOR_RGB2GRAY)
-    edges = cv2.Canny(gray, 50, 150)
-    
-    # Dilater les contours
-    kernel = np.ones((3,3), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=1)
-    
-    # Combiner le masque GrabCut avec les contours
-    mask2 = np.maximum(mask2, edges // 255)
-    
-    # Appliquer un masque de couleur pour préserver les détails
-    hsv = cv2.cvtColor(np_image, cv2.COLOR_RGB2HSV)
-    lower_color = np.array([0, 40, 40])
-    upper_color = np.array([180, 255, 255])
-    color_mask = cv2.inRange(hsv, lower_color, upper_color)
-    mask2 = np.maximum(mask2, color_mask // 255)
-    
-    # Appliquer le masque final
-    result = np_image * mask2[:,:,np.newaxis]
-    
-    # Créer une image avec canal alpha
-    alpha = np.where(mask2 == 1, 255, 0).astype(np.uint8)
-    result = cv2.cvtColor(result, cv2.COLOR_RGB2RGBA)
-    result[:, :, 3] = alpha
-    
-    return Image.fromarray(result)
+from rembg import remove
 
 def process_image(url):
     try:
         response = requests.get(url, timeout=10)
         img = Image.open(BytesIO(response.content))
         
-        # Supprimer l'arrière-plan
-        img_no_bg = remove_background_advanced(img)
+        # Supprimer l'arrière-plan avec rembg
+        img_no_bg = remove(img)
         
         # Créer un nouveau fond gris clair
         background = Image.new('RGBA', img_no_bg.size, (220, 220, 220, 255))
