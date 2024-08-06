@@ -4,21 +4,25 @@ import requests
 from PIL import Image
 from io import BytesIO
 import base64
+from rembg import remove
 
 def process_image(url):
     try:
         response = requests.get(url, timeout=10)
         img = Image.open(BytesIO(response.content))
         
-        # Créer un nouveau fond gris clair
-        background = Image.new('RGB', img.size, (220, 220, 220))
+        # Retirer le fond de l'image
+        img_no_bg = remove(img)
         
-        # Coller l'image originale sur le fond gris
-        background.paste(img, (0, 0), img if img.mode == 'RGBA' else None)
+        # Créer un nouveau fond gris clair
+        background = Image.new('RGBA', img_no_bg.size, (220, 220, 220, 255))
+        
+        # Coller l'image sans fond sur le fond gris
+        background.paste(img_no_bg, (0, 0), img_no_bg)
         
         # Convertir l'image en base64
         buffered = BytesIO()
-        background.save(buffered, format="PNG")
+        background.save(buffered, format="PNG", quality=100)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
         return f"data:image/png;base64,{img_str}"
@@ -30,7 +34,8 @@ def app():
     st.title("Traitement d'images en masse")
     
     st.write("Ce script permet d'importer un fichier CSV, de sélectionner une colonne contenant des URLs d'images, "
-             "puis d'ajouter un arrière-plan gris clair à la deuxième image de chaque cellule et de l'échanger avec la première.")
+             "puis de retirer le fond de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
+             "et de l'échanger avec la première.")
 
     # Upload du fichier CSV
     uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
@@ -48,7 +53,7 @@ def app():
                 status_text = st.empty()
 
                 # Créer des colonnes pour l'affichage
-                col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns(2)
 
                 # Traiter chaque cellule de la colonne sélectionnée
                 for index, cell in enumerate(df[image_column]):
@@ -59,18 +64,15 @@ def app():
                         url1 = urls[0].strip()
                         url2 = urls[1].strip()
                         
-                        # Afficher l'image originale url1
-                        col1.image(url1, caption=f"Original URL1 - Cellule {index+1}", use_column_width=True)
-                        
                         # Afficher l'image originale url2
-                        col2.image(url2, caption=f"Original URL2 - Cellule {index+1}", use_column_width=True)
+                        col1.image(url2, caption=f"Original URL2 - Cellule {index+1}", use_column_width=True)
                         
                         # Traiter l'image url2
                         processed_img = process_image(url2)
                         
                         if processed_img:
                             # Afficher l'image traitée
-                            col3.image(processed_img, caption=f"URL2 Traitée - Cellule {index+1}", use_column_width=True)
+                            col2.image(processed_img, caption=f"URL2 Traitée - Cellule {index+1}", use_column_width=True)
                             
                             # Échanger url1 et url2 traitée
                             urls[0] = processed_img
@@ -79,7 +81,7 @@ def app():
                             # Mettre à jour la cellule avec les nouvelles URLs
                             df.at[index, image_column] = ','.join(urls)
                         else:
-                            col3.error(f"Erreur de traitement pour la cellule {index+1}, URL2")
+                            col2.error(f"Erreur de traitement pour la cellule {index+1}, URL2")
 
                     progress_bar.progress((index + 1) / len(df))
 
