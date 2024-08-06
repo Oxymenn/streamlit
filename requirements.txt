@@ -9,6 +9,3 @@ beautifulsoup4
 tqdm
 unidecode
 openai
-pillow
-torch
-torchvision
