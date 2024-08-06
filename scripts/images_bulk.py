@@ -1,24 +1,49 @@
 import streamlit as st
 import pandas as pd
 import requests
+import numpy as np
+import cv2
 from PIL import Image
 from io import BytesIO
 import base64
+
+def remove_background(image):
+    # Convertir l'image en RGB si elle est en RGBA
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
+    
+    # Convertir l'image PIL en array numpy
+    np_image = np.array(image)
+    
+    # Convertir l'image en grayscale
+    gray = cv2.cvtColor(np_image, cv2.COLOR_RGB2GRAY)
+    
+    # Appliquer un seuillage pour créer un masque
+    _, mask = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)
+    
+    # Appliquer une dilatation pour améliorer le masque
+    kernel = np.ones((3,3), np.uint8)
+    mask = cv2.dilate(mask, kernel, iterations=2)
+    
+    # Créer une image avec canal alpha
+    result = cv2.cvtColor(np_image, cv2.COLOR_RGB2RGBA)
+    result[:, :, 3] = mask
+    
+    return Image.fromarray(result)
 
 def process_image(url):
     try:
         response = requests.get(url, timeout=10)
         img = Image.open(BytesIO(response.content))
         
-        # Convertir l'image en mode RGBA si ce n'est pas déjà le cas
-        if img.mode != 'RGBA':
-            img = img.convert('RGBA')
+        # Supprimer l'arrière-plan
+        img_no_bg = remove_background(img)
         
         # Créer un nouveau fond gris clair
-        background = Image.new('RGBA', img.size, (220, 220, 220, 255))
+        background = Image.new('RGBA', img_no_bg.size, (220, 220, 220, 255))
         
-        # Coller l'image originale sur le fond gris
-        background.paste(img, (0, 0), img)
+        # Coller l'image sans fond sur le fond gris
+        background.paste(img_no_bg, (0, 0), img_no_bg)
         
         # Convertir l'image en base64
         buffered = BytesIO()
@@ -34,7 +59,7 @@ def app():
     st.title("Traitement d'images en masse")
     
     st.write("Ce script permet d'importer un fichier CSV, de sélectionner une colonne contenant des URLs d'images, "
-             "puis d'ajouter un arrière-plan gris clair à la deuxième image de chaque cellule "
+             "puis de tenter de supprimer l'arrière-plan de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
              "et de l'échanger avec la première.")
 
     # Upload du fichier CSV
