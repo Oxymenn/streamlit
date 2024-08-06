@@ -5,68 +5,41 @@ import numpy as np
 from PIL import Image
 from io import BytesIO
 import base64
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import transforms
+from sklearn.cluster import KMeans
 
-# Définition du modèle U2Net (version simplifiée)
-class U2NET(nn.Module):
-    def __init__(self):
-        super(U2NET, self).__init__()
-        # Définition simplifiée du modèle
-        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
-        self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.conv3 = nn.Conv2d(64, 1, 3, padding=1)
-
-    def forward(self, x):
-        x1 = F.relu(self.conv1(x))
-        x2 = self.pool(x1)
-        x2 = F.relu(self.conv2(x2))
-        x3 = self.up(x2)
-        out = self.conv3(x3)
-        return torch.sigmoid(out)
-
-# Chargement du modèle pré-entraîné
-@st.cache_resource
-def load_model():
-    model = U2NET()
-    model.load_state_dict(torch.load('u2net.pth', map_location='cpu'))
-    model.eval()
-    return model
-
-# Prétraitement de l'image
-def preprocess(image):
-    transform = transforms.Compose([
-        transforms.Resize((320, 320)),
-        transforms.ToTensor(),
-    ])
-    return transform(image).unsqueeze(0)
-
-# Suppression de l'arrière-plan
-def remove_background(image, model):
-    input_tensor = preprocess(image)
-    with torch.no_grad():
-        output = model(input_tensor)
+def remove_background(image):
+    # Convertir l'image en array numpy
+    np_image = np.array(image)
     
-    mask = output[0][0].cpu().numpy()
-    mask = (mask * 255).astype(np.uint8)
-    mask = Image.fromarray(mask).resize(image.size, Image.LANCZOS)
+    # Reshape l'image pour le clustering
+    pixels = np_image.reshape((-1, 3))
     
-    image = image.convert("RGBA")
-    image.putalpha(mask)
+    # Appliquer K-means clustering
+    kmeans = KMeans(n_clusters=2, random_state=42)
+    kmeans.fit(pixels)
     
-    return image
+    # Créer un masque basé sur les clusters
+    mask = kmeans.labels_.reshape(np_image.shape[:2])
+    
+    # Déterminer quel cluster représente l'arrière-plan (supposons que c'est le cluster le plus fréquent)
+    background_label = np.bincount(kmeans.labels_).argmax()
+    
+    # Inverser le masque si nécessaire
+    if background_label == 1:
+        mask = 1 - mask
+    
+    # Créer une image RGBA
+    rgba = np.concatenate([np_image, np.expand_dims(mask, axis=2) * 255], axis=2)
+    
+    return Image.fromarray(rgba.astype('uint8'), 'RGBA')
 
-def process_image(url, model):
+def process_image(url):
     try:
         response = requests.get(url, timeout=10)
         img = Image.open(BytesIO(response.content))
         
         # Supprimer l'arrière-plan
-        img_no_bg = remove_background(img, model)
+        img_no_bg = remove_background(img)
         
         # Créer un nouveau fond gris clair
         background = Image.new('RGBA', img_no_bg.size, (220, 220, 220, 255))
@@ -88,11 +61,8 @@ def app():
     st.title("Traitement d'images en masse")
     
     st.write("Ce script permet d'importer un fichier CSV, de sélectionner une colonne contenant des URLs d'images, "
-             "puis de supprimer l'arrière-plan de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
+             "puis de tenter de supprimer l'arrière-plan de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
              "et de l'échanger avec la première.")
-
-    # Chargement du modèle
-    model = load_model()
 
     # Upload du fichier CSV
     uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
@@ -125,7 +95,7 @@ def app():
                         col1.image(url2, caption=f"Original URL2 - Cellule {index+1}", use_column_width=True)
                         
                         # Traiter l'image url2
-                        processed_img = process_image(url2, model)
+                        processed_img = process_image(url2)
                         
                         if processed_img:
                             # Afficher l'image traitée
