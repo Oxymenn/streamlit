@@ -7,27 +7,34 @@ from PIL import Image
 from io import BytesIO
 import base64
 
-def remove_background(image):
-    # Convertir l'image en RGB si elle est en RGBA
-    if image.mode == 'RGBA':
-        image = image.convert('RGB')
-    
+def remove_background_grabcut(image):
     # Convertir l'image PIL en array numpy
     np_image = np.array(image)
     
-    # Convertir l'image en grayscale
-    gray = cv2.cvtColor(np_image, cv2.COLOR_RGB2GRAY)
+    # Créer un masque
+    mask = np.zeros(np_image.shape[:2], np.uint8)
     
-    # Appliquer un seuillage pour créer un masque
-    _, mask = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)
+    # Définir les rectangles pour le premier plan et l'arrière-plan
+    rect = (10, 10, np_image.shape[1]-20, np_image.shape[0]-20)
     
-    # Appliquer une dilatation pour améliorer le masque
-    kernel = np.ones((3,3), np.uint8)
-    mask = cv2.dilate(mask, kernel, iterations=2)
+    # Initialiser les modèles pour l'algorithme GrabCut
+    bgdModel = np.zeros((1,65), np.float64)
+    fgdModel = np.zeros((1,65), np.float64)
+    
+    # Appliquer GrabCut
+    cv2.grabCut(np_image, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
+    
+    # Modifier le masque
+    mask2 = np.where((mask==2)|(mask==0), 0, 1).astype('uint8')
+    
+    # Obtenir l'image résultante
+    result = np_image * mask2[:,:,np.newaxis]
     
     # Créer une image avec canal alpha
-    result = cv2.cvtColor(np_image, cv2.COLOR_RGB2RGBA)
-    result[:, :, 3] = mask
+    alpha = np.zeros(np_image.shape[:2], np.uint8)
+    alpha[mask2 == 1] = 255
+    result = cv2.cvtColor(result, cv2.COLOR_RGB2RGBA)
+    result[:, :, 3] = alpha
     
     return Image.fromarray(result)
 
@@ -37,7 +44,7 @@ def process_image(url):
         img = Image.open(BytesIO(response.content))
         
         # Supprimer l'arrière-plan
-        img_no_bg = remove_background(img)
+        img_no_bg = remove_background_grabcut(img)
         
         # Créer un nouveau fond gris clair
         background = Image.new('RGBA', img_no_bg.size, (220, 220, 220, 255))
@@ -59,7 +66,7 @@ def app():
     st.title("Traitement d'images en masse")
     
     st.write("Ce script permet d'importer un fichier CSV, de sélectionner une colonne contenant des URLs d'images, "
-             "puis de tenter de supprimer l'arrière-plan de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
+             "puis de supprimer l'arrière-plan de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
              "et de l'échanger avec la première.")
 
     # Upload du fichier CSV
