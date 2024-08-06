@@ -7,7 +7,7 @@ import base64
 
 def process_image(url):
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         img = Image.open(BytesIO(response.content))
         
         # Créer un nouveau fond gris clair
@@ -23,12 +23,16 @@ def process_image(url):
         
         return f"data:image/png;base64,{img_str}"
     except Exception as e:
-        st.error(f"Erreur lors du traitement de l'image: {str(e)}")
+        st.error(f"Erreur lors du traitement de l'image {url}: {str(e)}")
         return url
 
-def main():
-    st.title("Traitement d'images CSV")
+def app():
+    st.title("Traitement d'images en masse")
     
+    st.write("Ce script permet d'importer un fichier CSV, de sélectionner une colonne contenant des URLs d'images, "
+             "puis de traiter ces images en déplaçant l'URL 2 à la position 1 et en changeant le fond de l'image 1 "
+             "(anciennement 2) en gris clair.")
+
     # Upload du fichier CSV
     uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
     
@@ -41,22 +45,30 @@ def main():
             image_column = st.selectbox("Sélectionnez la colonne des images", df.columns)
             
             if st.button("Exécuter"):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
                 # Traiter chaque cellule de la colonne sélectionnée
                 for index, cell in enumerate(df[image_column]):
+                    status_text.text(f"Traitement de la ligne {index+1}/{len(df)}")
                     urls = cell.split(',')
                     if len(urls) >= 2:
                         # Déplacer l'URL 2 à la position 1
-                        urls[0], urls[1] = urls[1], urls[0]
+                        urls[0], urls[1] = urls[1].strip(), urls[0].strip()
                         
                         # Traiter l'image 1 (anciennement 2)
-                        processed_img_url = process_image(urls[0].strip())
+                        processed_img_url = process_image(urls[0])
                         
-                        # Mettre à jour l'URL avec l'image encodée en base64
+                        # Mettre à jour l'URL avec l'image traitée
                         urls[0] = processed_img_url
                         
                         # Mettre à jour la cellule avec les nouvelles URLs
                         df.at[index, image_column] = ','.join(urls)
-                
+
+                    progress_bar.progress((index + 1) / len(df))
+
+                status_text.text("Traitement terminé !")
+
                 # Afficher le DataFrame mis à jour
                 st.dataframe(df)
                 
@@ -69,7 +81,7 @@ def main():
                     mime="text/csv",
                 )
         except Exception as e:
-            st.error(f"Une erreur s'est produite : {str(e)}")
+            st.error(f"Une erreur s'est produite lors du traitement : {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    app()
