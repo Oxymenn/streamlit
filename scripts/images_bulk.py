@@ -4,21 +4,21 @@ import requests
 from PIL import Image
 from io import BytesIO
 import base64
-from rembg import remove
 
 def process_image(url):
     try:
         response = requests.get(url, timeout=10)
         img = Image.open(BytesIO(response.content))
         
-        # Retirer le fond de l'image
-        img_no_bg = remove(img)
+        # Convertir l'image en mode RGBA si ce n'est pas déjà le cas
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
         
         # Créer un nouveau fond gris clair
-        background = Image.new('RGBA', img_no_bg.size, (220, 220, 220, 255))
+        background = Image.new('RGBA', img.size, (220, 220, 220, 255))
         
-        # Coller l'image sans fond sur le fond gris
-        background.paste(img_no_bg, (0, 0), img_no_bg)
+        # Coller l'image originale sur le fond gris
+        background.paste(img, (0, 0), img)
         
         # Convertir l'image en base64
         buffered = BytesIO()
@@ -34,7 +34,7 @@ def app():
     st.title("Traitement d'images en masse")
     
     st.write("Ce script permet d'importer un fichier CSV, de sélectionner une colonne contenant des URLs d'images, "
-             "puis de retirer le fond de la deuxième image de chaque cellule, d'ajouter un arrière-plan gris clair "
+             "puis d'ajouter un arrière-plan gris clair à la deuxième image de chaque cellule "
              "et de l'échanger avec la première.")
 
     # Upload du fichier CSV
