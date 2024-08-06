@@ -30,7 +30,7 @@ def app():
     st.title("Traitement d'images en masse")
     
     st.write("Ce script permet d'importer un fichier CSV, de sélectionner une colonne contenant des URLs d'images, "
-             "puis d'ajouter un arrière-plan gris clair à chaque image.")
+             "puis d'ajouter un arrière-plan gris clair à la deuxième image de chaque cellule et de l'échanger avec la première.")
 
     # Upload du fichier CSV
     uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
@@ -48,31 +48,54 @@ def app():
                 status_text = st.empty()
 
                 # Créer des colonnes pour l'affichage
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
 
                 # Traiter chaque cellule de la colonne sélectionnée
                 for index, cell in enumerate(df[image_column]):
-                    status_text.text(f"Traitement de l'image {index+1}/{len(df)}")
+                    status_text.text(f"Traitement de la cellule {index+1}/{len(df)}")
                     
                     urls = cell.split(',')
-                    for i, url in enumerate(urls):
-                        url = url.strip()
+                    if len(urls) >= 2:
+                        url1 = urls[0].strip()
+                        url2 = urls[1].strip()
                         
-                        # Afficher l'image originale
-                        col1.image(url, caption=f"Original - Image {index+1}, URL {i+1}", use_column_width=True)
+                        # Afficher l'image originale url1
+                        col1.image(url1, caption=f"Original URL1 - Cellule {index+1}", use_column_width=True)
                         
-                        # Traiter l'image
-                        processed_img = process_image(url)
+                        # Afficher l'image originale url2
+                        col2.image(url2, caption=f"Original URL2 - Cellule {index+1}", use_column_width=True)
+                        
+                        # Traiter l'image url2
+                        processed_img = process_image(url2)
                         
                         if processed_img:
                             # Afficher l'image traitée
-                            col2.image(processed_img, caption=f"Traitée - Image {index+1}, URL {i+1}", use_column_width=True)
+                            col3.image(processed_img, caption=f"URL2 Traitée - Cellule {index+1}", use_column_width=True)
+                            
+                            # Échanger url1 et url2 traitée
+                            urls[0] = processed_img
+                            urls[1] = url1
+                            
+                            # Mettre à jour la cellule avec les nouvelles URLs
+                            df.at[index, image_column] = ','.join(urls)
                         else:
-                            col2.error(f"Erreur de traitement pour l'image {index+1}, URL {i+1}")
+                            col3.error(f"Erreur de traitement pour la cellule {index+1}, URL2")
 
                     progress_bar.progress((index + 1) / len(df))
 
                 status_text.text("Traitement terminé !")
+
+                # Afficher le DataFrame mis à jour
+                st.dataframe(df)
+                
+                # Offrir un téléchargement du fichier CSV mis à jour
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="Télécharger le CSV mis à jour",
+                    data=csv,
+                    file_name="updated_images.csv",
+                    mime="text/csv",
+                )
 
         except Exception as e:
             st.error(f"Une erreur s'est produite lors du traitement : {str(e)}")
