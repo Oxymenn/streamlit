@@ -10,6 +10,6 @@ tqdm
 unidecode
 openai
 pillow
-rembg==2.0.30
+rembg
 onnxruntime
 pooch
