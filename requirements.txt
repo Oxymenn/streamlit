@@ -10,4 +10,6 @@ tqdm
 unidecode
 openai
 pillow
-opencv-python-headless
+rembg
+onnxruntime
+pooch
