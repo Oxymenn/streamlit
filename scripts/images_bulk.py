@@ -16,17 +16,17 @@ def remove_background(image):
     lab = cv2.cvtColor(np_image, cv2.COLOR_RGB2LAB)
     
     # Appliquer un flou gaussien léger pour réduire le bruit
-    lab_blur = cv2.GaussianBlur(lab, (3, 3), 0)
+    lab_blur = cv2.GaussianBlur(lab, (5, 5), 0)
     
     # Normaliser les valeurs LAB
     lab_norm = lab_blur.astype(float) / 255.0
     
     # Augmenter le poids des canaux a et b pour une meilleure distinction des couleurs
-    lab_norm[:,:,1:] *= 2.0
+    lab_norm[:,:,1:] *= 1.5
     
-    # Appliquer K-means clustering avec plus de clusters
+    # Appliquer K-means clustering
     pixels = lab_norm.reshape((-1, 3))
-    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+    kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
     kmeans.fit(pixels)
     
     # Créer un masque basé sur les clusters
@@ -45,14 +45,7 @@ def remove_background(image):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
     
     # Appliquer un flou gaussien au masque pour adoucir les bords
-    mask = cv2.GaussianBlur(mask, (3, 3), 0)
-    
-    # Augmenter le contraste du masque
-    mask = cv2.normalize(mask, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-    _, mask = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    
-    # Appliquer un nouveau flou gaussien pour lisser les bords
-    mask = cv2.GaussianBlur(mask, (3, 3), 0)
+    mask = cv2.GaussianBlur(mask, (5, 5), 0)
     
     # Créer une image RGBA
     rgba = cv2.cvtColor(np_image, cv2.COLOR_RGB2RGBA)
