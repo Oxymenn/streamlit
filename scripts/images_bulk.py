@@ -7,7 +7,7 @@ def swap_first_two_urls(url_string):
         urls[0], urls[1] = urls[1], urls[0]
     return ','.join(urls)
 
-def images_bulk():
+def app():
     st.title('Inverseur d\'URLs d\'images')
 
     uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
@@ -37,22 +37,3 @@ def images_bulk():
                 )
             else:
                 st.error("La colonne sélectionnée n'existe pas dans le fichier CSV.")
-
-# Configuration des pages
-PAGES = {
-    "Images Bulk": images_bulk
-}
-
-# Titre principal
-st.sidebar.title("Scripts de Pirates")
-
-# Sous-titre et choix des scripts
-st.sidebar.subheader("Les scripts")
-selection = st.sidebar.radio("", list(PAGES.keys()), index=0)
-
-# Affichage du script sélectionné
-page = PAGES[selection]
-page()
-
-# Copyright
-st.sidebar.markdown("© 2024 | by PirateSEO")
