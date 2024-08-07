@@ -5,116 +5,42 @@ from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
+from io import BytesIO
 
-# Liste de stopwords en français (inchangée)
-default_stopwords_fr = {
-    "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
-    "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
-    "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
-    "donc", "dos", "droite", "début", "elle", "elles", "en", "encore", "essai", 
-    "est", "et", "eu", "fait", "faites", "fois", "font", "force", "haut", 
-    "hors", "ici", "il", "ils", "je", "juste", "la", "le", "les", "leur", 
-    "là", "ma", "maintenant", "mais", "mes", "mien", "moins", "mon", "mot", 
-    "même", "ni", "nommés", "notre", "nous", "nouveaux", "ou", "où", "par", 
-    "parce", "parole", "pas", "personnes", "peut", "peu", "pièce", "plupart", 
-    "pour", "pourquoi", "quand", "que", "quel", "quelle", "quelles", "quels", 
-    "qui", "sa", "sans", "ses", "seulement", "si", "sien", "son", "sont", 
-    "sous", "soyez", "sujet", "sur", "ta", "tandis", "tellement", "tels", 
-    "tes", "ton", "tous", "tout", "trop", "très", "tu", "valeur", "voie", 
-    "voient", "vont", "votre", "vous", "vu", "ça", "étaient", "état", "étions", 
-    "été", "être"
-}
+# ... (Le reste du code reste inchangé jusqu'à la fonction create_links_table)
 
-# Configuration de la clé API OpenAI
-OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
-
-def extract_and_clean_content(url, exclude_classes, include_classes, stopwords):
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+def analyze_existing_links(df_maillage, url_depart_column, url_destination_column, similarity_matrix, urls):
+    analysis_results = []
+    
+    for _, row in df_maillage.iterrows():
+        url_depart = row[url_depart_column]
+        url_destination = row[url_destination_column]
         
-        # Supprimer les éléments avec les classes à exclure
-        for class_name in exclude_classes:
-            for element in soup.find_all(class_=class_name):
-                element.decompose()
-        
-        # Si des classes à inclure sont spécifiées, extraire seulement ces éléments
-        if include_classes:
-            content = ' '.join([element.get_text(separator=" ", strip=True) for class_name in include_classes for element in soup.find_all(class_=class_name)])
+        if url_depart in urls and url_destination in urls:
+            depart_index = urls.tolist().index(url_depart)
+            destination_index = urls.tolist().index(url_destination)
+            similarity_score = similarity_matrix[depart_index][destination_index]
+            
+            if similarity_score >= 0.75:
+                decision = "À garder"
+            else:
+                decision = "À supprimer"
+            
+            analysis_results.append({
+                "URL de départ": url_depart,
+                "URL de destination": url_destination,
+                "Score de similarité": similarity_score,
+                "Décision": decision
+            })
         else:
-            content = soup.body.get_text(separator=" ", strip=True)
-        
-        # Nettoyage du texte
-        content = re.sub(r'\s+', ' ', content.lower())
-        content = re.sub(r'[^\w\s]', '', content)
-        return ' '.join([word for word in content.split() if word not in stopwords])
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de l'accès à {url}: {e}")
-    except Exception as e:
-        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
-    return None
-
-def get_embeddings(text):
-    try:
-        response = requests.post(
-            'https://api.openai.com/v1/embeddings',
-            headers={
-                'Authorization': f'Bearer {OPENAI_API_KEY}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': 'text-embedding-3-small',
-                'input': text,
-                'encoding_format': 'float'
-            },
-            timeout=10
-        )
-        response.raise_for_status()
-        return response.json()['data'][0]['embedding']
-    except requests.exceptions.HTTPError as http_err:
-        st.error(f"HTTP error occurred: {http_err}")
-    except Exception as e:
-        st.error(f"Erreur lors de la création des embeddings: {e}")
-    return None
-
-def calculate_similarity(embeddings):
-    try:
-        return cosine_similarity(embeddings)
-    except Exception as e:
-        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
-        return None
-
-def create_similarity_df(urls, similarity_matrix, selected_url, max_results):
-    selected_index = urls.tolist().index(selected_url)
-    selected_similarities = similarity_matrix[selected_index]
-    similarity_df = pd.DataFrame({
-        'URL': urls,
-        'Similarité': selected_similarities
-    })
-    similarity_df = similarity_df[similarity_df['URL'] != selected_url]
-    return similarity_df.sort_values(by='Similarité', ascending=False).head(max_results)
-
-def create_links_table(urls, similarity_matrix, max_results):
-    links_table = {'URL de départ': []}
-    for n in range(1, max_results + 1):
-        links_table[f'URL similaire {n}'] = []
-    links_table['Concatener'] = []
-
-    for i, url in enumerate(urls):
-        similarities = similarity_matrix[i]
-        temp_df = pd.DataFrame({'URL': urls, 'Similarité': similarities})
-        temp_df = temp_df[temp_df['URL'] != url]
-        top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(max_results)['URL'].tolist()
-
-        links_table['URL de départ'].append(url)
-        for n in range(1, max_results + 1):
-            links_table[f'URL similaire {n}'].append(top_similar_urls[n - 1] if len(top_similar_urls) >= n else None)
-
-        concatenated = '; '.join([f"Lien {n} : {top_similar_urls[n - 1]}" if len(top_similar_urls) >= n else f"Lien {n} : " for n in range(1, max_results + 1)])
-        links_table['Concatener'].append(concatenated)
-
-    return pd.DataFrame(links_table)
+            analysis_results.append({
+                "URL de départ": url_depart,
+                "URL de destination": url_destination,
+                "Score de similarité": "N/A (URL non trouvée)",
+                "Décision": "À vérifier manuellement"
+            })
+    
+    return pd.DataFrame(analysis_results)
 
 def app():
     st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
@@ -124,40 +50,17 @@ def app():
         xls = pd.ExcelFile(uploaded_file)
         sheet_names = xls.sheet_names
 
-        # Nouveau filtre pour sélectionner la feuille contenant les URLs à embedder
         urls_sheet = st.selectbox("Sélectionnez la feuille contenant les URLs à embedder", sheet_names)
-
-        # Nouveau filtre pour sélectionner la feuille contenant le maillage interne existant
         maillage_sheet = st.selectbox("Sélectionnez la feuille contenant le maillage interne existant", sheet_names)
 
-        # Lire les données des feuilles sélectionnées
         df_urls = pd.read_excel(uploaded_file, sheet_name=urls_sheet)
         df_maillage = pd.read_excel(uploaded_file, sheet_name=maillage_sheet)
 
-        # Nouveau filtre pour sélectionner la colonne des URLs dans la feuille 1
         url_column = st.selectbox("Sélectionnez la colonne contenant les URLs à embedder", df_urls.columns)
-
-        # Nouveaux filtres pour sélectionner les colonnes des URLs de départ et de destination
         url_depart_column = st.selectbox("Sélectionnez la colonne des URLs de départ", df_maillage.columns)
         url_destination_column = st.selectbox("Sélectionnez la colonne des URLs de destination", df_maillage.columns)
 
-        # Ajout d'un champ pour les classes à exclure
-        exclude_classes = st.text_input("Classes HTML à exclure (séparées par des virgules)", "")
-        exclude_classes = [cls.strip() for cls in exclude_classes.split(',')] if exclude_classes else []
-
-        # Ajout d'un champ pour les classes à inclure exclusivement
-        include_classes = st.text_input("Classes HTML à inclure exclusivement (séparées par des virgules)", "")
-        include_classes = [cls.strip() for cls in include_classes.split(',')] if include_classes else []
-
-        # Ajout d'un champ pour les stopwords supplémentaires
-        additional_stopwords = st.text_input("Stopwords supplémentaires à exclure (séparés par des virgules)", "")
-        additional_stopwords = [word.strip().lower() for word in additional_stopwords.split(',')] if additional_stopwords else []
-
-        # Combinaison des stopwords par défaut et supplémentaires
-        stopwords = default_stopwords_fr.union(set(additional_stopwords))
-
-        # Ajout du bouton Exécuter
-        execute_button = st.button("Exécuter")
+        # ... (Le reste du code reste inchangé jusqu'au bouton Exécuter)
 
         if execute_button:
             try:
@@ -170,34 +73,26 @@ def app():
                 st.session_state['urls'] = urls
                 st.session_state['file_name'] = file_name
 
+                # Analyse du maillage existant
+                analysis_df = analyze_existing_links(df_maillage, url_depart_column, url_destination_column, st.session_state['similarity_matrix'], urls)
+                
+                # Ajout de la nouvelle feuille au fichier Excel
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    xls.to_excel(writer, index=False, sheet_name='Original')
+                    analysis_df.to_excel(writer, index=False, sheet_name='Analyse maillage existant')
+                
+                st.download_button(
+                    label="Télécharger le fichier Excel avec l'analyse du maillage",
+                    data=output.getvalue(),
+                    file_name=f'analyse_maillage-{file_name}.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+
             except Exception as e:
-                st.error(f"Erreur lors de la lecture du fichier: {e}")
+                st.error(f"Erreur lors de l'analyse : {e}")
 
-        if 'similarity_matrix' in st.session_state and st.session_state['similarity_matrix'] is not None:
-            selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", st.session_state['urls'])
-            max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(st.session_state['urls']) - 1, 5)
-
-            similarity_df = create_similarity_df(st.session_state['urls'], st.session_state['similarity_matrix'], selected_url, max_results)
-            st.dataframe(similarity_df)
-
-            csv = similarity_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Télécharger les urls similaires à l'url filtrée (CSV)",
-                data=csv,
-                file_name=f'urls_similaires-{st.session_state["file_name"]}.csv',
-                mime='text/csv'
-            )
-
-            links_df = create_links_table(st.session_state['urls'], st.session_state['similarity_matrix'], max_results)
-            st.dataframe(links_df)
-
-            csv_links = links_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Télécharger le tableau du maillage interne (CSV)",
-                data=csv_links,
-                file_name=f'maillage_interne-{st.session_state["file_name"]}.csv',
-                mime='text/csv'
-            )
+        # ... (Le reste du code reste inchangé)
 
 if __name__ == "__main__":
     app()
