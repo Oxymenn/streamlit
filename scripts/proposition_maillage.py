@@ -212,53 +212,39 @@ def app():
                     st.session_state['urls'] = valid_urls
                     st.session_state['file_name'] = file_name
 
+                    # Création du DataFrame pour les URLs similaires
+                    max_results = 5  # Vous pouvez ajuster ce nombre si nécessaire
+                    links_df = create_links_table(st.session_state['urls'], st.session_state['similarity_matrix'], max_results)
+
                     # Analyse du maillage existant
                     analysis_df = analyze_existing_links(df_maillage, url_depart_column, url_destination_column, st.session_state['similarity_matrix'], valid_urls)
                     
-                    # Ajout de la nouvelle feuille au fichier Excel
+                    # Création du fichier Excel avec les deux feuilles
                     output = BytesIO()
                     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        xls.to_excel(writer, index=False, sheet_name='Original')
-                        analysis_df.to_excel(writer, index=False, sheet_name='Analyse maillage existant')
+                        links_df.to_excel(writer, index=False, sheet_name='URLs Similaires')
+                        analysis_df.to_excel(writer, index=False, sheet_name='Analyse Maillage Existant')
                     
                     st.download_button(
-                        label="Télécharger le fichier Excel avec l'analyse du maillage",
+                        label="Télécharger le fichier Excel avec les résultats",
                         data=output.getvalue(),
-                        file_name=f'analyse_maillage-{file_name}.xlsx',
+                        file_name=f'resultats_maillage-{file_name}.xlsx',
                         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                     )
+
+                    # Affichage des DataFrames dans l'interface
+                    st.subheader("URLs Similaires")
+                    st.dataframe(links_df)
+
+                    st.subheader("Analyse du Maillage Existant")
+                    st.dataframe(analysis_df)
+
                 else:
                     st.error("Impossible de calculer la matrice de similarité. Veuillez vérifier vos données.")
 
             except Exception as e:
                 st.error(f"Erreur lors de l'analyse : {e}")
                 st.error("Détails de l'erreur :", exc_info=True)
-
-        if 'similarity_matrix' in st.session_state and st.session_state['similarity_matrix'] is not None:
-            selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", st.session_state['urls'])
-            max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(st.session_state['urls']) - 1, 5)
-
-            similarity_df = create_similarity_df(st.session_state['urls'], st.session_state['similarity_matrix'], selected_url, max_results)
-            st.dataframe(similarity_df)
-
-            csv = similarity_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Télécharger les urls similaires à l'url filtrée (CSV)",
-                data=csv,
-                file_name=f'urls_similaires-{st.session_state["file_name"]}.csv',
-                mime='text/csv'
-            )
-
-            links_df = create_links_table(st.session_state['urls'], st.session_state['similarity_matrix'], max_results)
-            st.dataframe(links_df)
-
-            csv_links = links_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Télécharger le tableau du maillage interne (CSV)",
-                data=csv_links,
-                file_name=f'maillage_interne-{st.session_state["file_name"]}.csv',
-                mime='text/csv'
-            )
 
 if __name__ == "__main__":
     app()
