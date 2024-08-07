@@ -35,18 +35,15 @@ def extract_and_clean_content(url, exclude_classes, include_classes, stopwords):
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Supprimer les éléments avec les classes à exclure
         for class_name in exclude_classes:
             for element in soup.find_all(class_=class_name):
                 element.decompose()
         
-        # Si des classes à inclure sont spécifiées, extraire seulement ces éléments
         if include_classes:
             content = ' '.join([element.get_text(separator=" ", strip=True) for class_name in include_classes for element in soup.find_all(class_=class_name)])
         else:
             content = soup.body.get_text(separator=" ", strip=True)
         
-        # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content.lower())
         content = re.sub(r'[^\w\s]', '', content)
         return ' '.join([word for word in content.split() if word not in stopwords])
@@ -87,8 +84,17 @@ def calculate_similarity(embeddings):
         return None
 
 def create_similarity_df(urls, similarity_matrix, selected_url, max_results):
+    if selected_url not in urls:
+        st.error(f"L'URL sélectionnée '{selected_url}' n'est pas dans la liste des URLs.")
+        return pd.DataFrame()  # Retourner un DataFrame vide en cas d'erreur
+    
     selected_index = urls.tolist().index(selected_url)
     selected_similarities = similarity_matrix[selected_index]
+    
+    if len(urls) != len(selected_similarities):
+        st.error(f"Incohérence dans les tailles : {len(urls)} URLs vs {len(selected_similarities)} similarités.")
+        return pd.DataFrame()  # Retourner un DataFrame vide en cas d'erreur
+    
     similarity_df = pd.DataFrame({
         'URL': urls,
         'Similarité': selected_similarities
@@ -119,12 +125,13 @@ def create_links_table(urls, similarity_matrix, max_results):
 
 def analyze_existing_links(df_maillage, url_depart_column, url_destination_column, similarity_matrix, urls):
     analysis_results = []
+    urls_set = set(urls)  # Pour une recherche plus rapide
     
     for _, row in df_maillage.iterrows():
         url_depart = row[url_depart_column]
         url_destination = row[url_destination_column]
         
-        if url_depart in urls and url_destination in urls:
+        if url_depart in urls_set and url_destination in urls_set:
             depart_index = urls.tolist().index(url_depart)
             destination_index = urls.tolist().index(url_destination)
             similarity_score = similarity_matrix[depart_index][destination_index]
@@ -188,6 +195,10 @@ def app():
 
                 st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes, include_classes, stopwords) for url in urls]
                 st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
+                
+                if len(st.session_state['embeddings']) != len(urls):
+                    st.error(f"Attention : {len(urls) - len(st.session_state['embeddings'])} URLs n'ont pas pu être traitées.")
+                
                 st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
                 st.session_state['urls'] = urls
                 st.session_state['file_name'] = file_name
@@ -210,6 +221,7 @@ def app():
 
             except Exception as e:
                 st.error(f"Erreur lors de l'analyse : {e}")
+                st.error("Détails de l'erreur :", exc_info=True)
 
         if 'similarity_matrix' in st.session_state and st.session_state['similarity_matrix'] is not None:
             selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", st.session_state['urls'])
