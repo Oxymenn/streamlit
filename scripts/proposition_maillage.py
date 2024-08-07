@@ -171,16 +171,21 @@ def app():
         xls = pd.ExcelFile(uploaded_file)
         sheet_names = xls.sheet_names
 
+        st.subheader("Sélection des feuilles")
         urls_sheet = st.selectbox("Sélectionnez la feuille contenant les URLs à embedder", sheet_names)
         maillage_sheet = st.selectbox("Sélectionnez la feuille contenant le maillage interne existant", sheet_names)
 
         df_urls = pd.read_excel(uploaded_file, sheet_name=urls_sheet)
         df_maillage = pd.read_excel(uploaded_file, sheet_name=maillage_sheet)
 
+        st.subheader("Sélection de la colonne URLs")
         url_column = st.selectbox("Sélectionnez la colonne contenant les URLs à embedder", df_urls.columns)
+
+        st.subheader("Sélection des colonnes de maillage")
         url_depart_column = st.selectbox("Sélectionnez la colonne des URLs de départ", df_maillage.columns)
         url_destination_column = st.selectbox("Sélectionnez la colonne des URLs de destination", df_maillage.columns)
 
+        st.subheader("Filtres d'exclusion et d'inclusion")
         exclude_classes = st.text_input("Classes HTML à exclure (séparées par des virgules)", "")
         exclude_classes = [cls.strip() for cls in exclude_classes.split(',')] if exclude_classes else []
 
@@ -211,33 +216,9 @@ def app():
                     valid_urls = urls[:len(st.session_state['similarity_matrix'])]
                     st.session_state['urls'] = valid_urls
                     st.session_state['file_name'] = file_name
-
-                    # Création du DataFrame pour les URLs similaires
-                    max_results = 5  # Vous pouvez ajuster ce nombre si nécessaire
-                    links_df = create_links_table(st.session_state['urls'], st.session_state['similarity_matrix'], max_results)
-
-                    # Analyse du maillage existant
-                    analysis_df = analyze_existing_links(df_maillage, url_depart_column, url_destination_column, st.session_state['similarity_matrix'], valid_urls)
-                    
-                    # Création du fichier Excel avec les deux feuilles
-                    output = BytesIO()
-                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                        links_df.to_excel(writer, index=False, sheet_name='URLs Similaires')
-                        analysis_df.to_excel(writer, index=False, sheet_name='Analyse Maillage Existant')
-                    
-                    st.download_button(
-                        label="Télécharger le fichier Excel avec les résultats",
-                        data=output.getvalue(),
-                        file_name=f'resultats_maillage-{file_name}.xlsx',
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                    )
-
-                    # Affichage des DataFrames dans l'interface
-                    st.subheader("URLs Similaires")
-                    st.dataframe(links_df)
-
-                    st.subheader("Analyse du Maillage Existant")
-                    st.dataframe(analysis_df)
+                    st.session_state['df_maillage'] = df_maillage
+                    st.session_state['url_depart_column'] = url_depart_column
+                    st.session_state['url_destination_column'] = url_destination_column
 
                 else:
                     st.error("Impossible de calculer la matrice de similarité. Veuillez vérifier vos données.")
@@ -245,6 +226,40 @@ def app():
             except Exception as e:
                 st.error(f"Erreur lors de l'analyse : {e}")
                 st.error("Détails de l'erreur :", exc_info=True)
+
+        if 'similarity_matrix' in st.session_state and st.session_state['similarity_matrix'] is not None:
+            st.subheader("Paramètres des résultats")
+            max_results = st.slider("Nombre d'URLs similaires à afficher", 1, 10, 5)
+
+            # Création du DataFrame pour les URLs similaires
+            links_df = create_links_table(st.session_state['urls'], st.session_state['similarity_matrix'], max_results)
+
+            # Analyse du maillage existant
+            analysis_df = analyze_existing_links(st.session_state['df_maillage'], 
+                                                 st.session_state['url_depart_column'], 
+                                                 st.session_state['url_destination_column'], 
+                                                 st.session_state['similarity_matrix'], 
+                                                 st.session_state['urls'])
+            
+            # Création du fichier Excel avec les deux feuilles
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                links_df.to_excel(writer, index=False, sheet_name='URLs Similaires')
+                analysis_df.to_excel(writer, index=False, sheet_name='Analyse Maillage Existant')
+            
+            st.download_button(
+                label="Télécharger le fichier Excel avec les résultats",
+                data=output.getvalue(),
+                file_name=f'resultats_maillage-{st.session_state["file_name"]}.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+
+            # Affichage des DataFrames dans l'interface
+            st.subheader("URLs Similaires")
+            st.dataframe(links_df)
+
+            st.subheader("Analyse du Maillage Existant")
+            st.dataframe(analysis_df)
 
 if __name__ == "__main__":
     app()
