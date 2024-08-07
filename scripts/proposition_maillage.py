@@ -78,7 +78,11 @@ def get_embeddings(text):
 
 def calculate_similarity(embeddings):
     try:
-        return cosine_similarity(embeddings)
+        # Filtrer les embeddings non nuls
+        valid_embeddings = [e for e in embeddings if e is not None]
+        if len(valid_embeddings) != len(embeddings):
+            st.warning(f"Attention : {len(embeddings) - len(valid_embeddings)} embeddings manquants ont été ignorés.")
+        return cosine_similarity(valid_embeddings)
     except Exception as e:
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
@@ -108,9 +112,11 @@ def create_links_table(urls, similarity_matrix, max_results):
         links_table[f'URL similaire {n}'] = []
     links_table['Concatener'] = []
 
-    for i, url in enumerate(urls):
+    valid_urls = urls[:len(similarity_matrix)]  # Utilisez seulement les URLs avec des similarités valides
+
+    for i, url in enumerate(valid_urls):
         similarities = similarity_matrix[i]
-        temp_df = pd.DataFrame({'URL': urls, 'Similarité': similarities})
+        temp_df = pd.DataFrame({'URL': valid_urls, 'Similarité': similarities})
         temp_df = temp_df[temp_df['URL'] != url]
         top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(max_results)['URL'].tolist()
 
@@ -197,27 +203,32 @@ def app():
                 st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
                 
                 if len(st.session_state['embeddings']) != len(urls):
-                    st.error(f"Attention : {len(urls) - len(st.session_state['embeddings'])} URLs n'ont pas pu être traitées.")
+                    st.warning(f"Attention : {len(urls) - len(st.session_state['embeddings'])} URLs n'ont pas pu être traitées.")
                 
                 st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
-                st.session_state['urls'] = urls
-                st.session_state['file_name'] = file_name
+                
+                if st.session_state['similarity_matrix'] is not None:
+                    valid_urls = urls[:len(st.session_state['similarity_matrix'])]
+                    st.session_state['urls'] = valid_urls
+                    st.session_state['file_name'] = file_name
 
-                # Analyse du maillage existant
-                analysis_df = analyze_existing_links(df_maillage, url_depart_column, url_destination_column, st.session_state['similarity_matrix'], urls)
-                
-                # Ajout de la nouvelle feuille au fichier Excel
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    xls.to_excel(writer, index=False, sheet_name='Original')
-                    analysis_df.to_excel(writer, index=False, sheet_name='Analyse maillage existant')
-                
-                st.download_button(
-                    label="Télécharger le fichier Excel avec l'analyse du maillage",
-                    data=output.getvalue(),
-                    file_name=f'analyse_maillage-{file_name}.xlsx',
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
+                    # Analyse du maillage existant
+                    analysis_df = analyze_existing_links(df_maillage, url_depart_column, url_destination_column, st.session_state['similarity_matrix'], valid_urls)
+                    
+                    # Ajout de la nouvelle feuille au fichier Excel
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        xls.to_excel(writer, index=False, sheet_name='Original')
+                        analysis_df.to_excel(writer, index=False, sheet_name='Analyse maillage existant')
+                    
+                    st.download_button(
+                        label="Télécharger le fichier Excel avec l'analyse du maillage",
+                        data=output.getvalue(),
+                        file_name=f'analyse_maillage-{file_name}.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
+                else:
+                    st.error("Impossible de calculer la matrice de similarité. Veuillez vérifier vos données.")
 
             except Exception as e:
                 st.error(f"Erreur lors de l'analyse : {e}")
