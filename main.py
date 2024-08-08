@@ -4,6 +4,32 @@ from scripts import similarite_cosinus, cannibalisation_serp, test_cannibalisati
 
 st.set_page_config(page_title="Scripts de Pirates", layout="wide")
 
+# CSS personnalisé pour styliser les boutons
+st.markdown("""
+<style>
+    .stButton > button {
+        width: 100%;
+        text-align: left;
+        background-color: transparent;
+        color: #262730;
+        font-weight: normal;
+        border: none;
+        padding: 0.5rem 1rem;
+        margin: 0;
+        border-radius: 0;
+    }
+    .stButton > button:hover {
+        background-color: #f0f2f6;
+    }
+    .stButton > button:active {
+        background-color: #e0e2e6;
+    }
+    .sidebar .stButton > button {
+        font-size: 0.9rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Titre principal
 st.sidebar.title("Scripts de Pirates")
 
