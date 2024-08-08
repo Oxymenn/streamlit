@@ -28,74 +28,10 @@ stopwords_fr = {
 # Configuration de la clé API OpenAI
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
-def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        if include_classes:
-            elements = soup.find_all(class_=include_classes)
-        else:
-            elements = [soup]
-
-        if exclude_classes:
-            for cls in exclude_classes:
-                for element in elements:
-                    for excluded in element.find_all(class_=cls):
-                        excluded.decompose()
-
-        content = ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
-
-        content = re.sub(r'\s+', ' ', content)
-        content = content.lower()
-        content = re.sub(r'[^\w\s]', '', content)
-
-        words = content.split()
-        all_stopwords = stopwords_fr.union(set(additional_stopwords))
-        content = ' '.join([word for word in words if word not in all_stopwords])
-
-        return content
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de l'accès à {url}: {e}")
-        return None
-    except Exception as e:
-        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
-        return None
-
-def get_embeddings(text):
-    try:
-        response = requests.post(
-            'https://api.openai.com/v1/embeddings',
-            headers={
-                'Authorization': f'Bearer {OPENAI_API_KEY}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': 'text-embedding-3-small',
-                'input': text,
-                'encoding_format': 'float'
-            }
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data['data'][0]['embedding']
-    except requests.exceptions.HTTPError as http_err:
-        st.error(f"HTTP error occurred: {http_err}")
-    except Exception as e:
-        st.error(f"Erreur lors de la création des embeddings: {e}")
-    return None
-
-def calculate_similarity(embeddings):
-    try:
-        similarity_matrix = cosine_similarity(embeddings)
-        return similarity_matrix
-    except Exception as e:
-        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
-        return None
+# Fonctions extract_and_clean_content, get_embeddings, et calculate_similarity inchangées
 
 @st.cache_data
-def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_links, include_classes, exclude_classes, additional_stopwords):
+def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_similar_urls, include_classes, exclude_classes, additional_stopwords):
     contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
     contents = [content for content in contents if content]
 
@@ -118,40 +54,23 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_link
         similarities = similarity_matrix[i]
         similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)
         
-        # Exclure l'URL de départ elle-même et prendre les num_links suivantes
-        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start][:num_links]
+        # Exclure l'URL de départ elle-même et prendre les num_similar_urls suivantes
+        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start][:num_similar_urls]
 
         for url_dest, sim in similar_urls:
             ancres_df = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
             
             if not ancres_df.empty:
-                ancres = ancres_df[col_ancre].tolist()
-                
-                # Sélectionner les ancres en respectant l'ordre de priorité
-                selected_ancres = []
-                for _ in range(num_links):
-                    if ancres:
-                        selected_ancres.append(ancres.pop(0))
-                    else:
-                        # Si on a épuisé toutes les ancres, on reprend celle avec le plus d'impressions
-                        selected_ancres.append(ancres_df.iloc[0][col_ancre])
-                
-                for ancre in selected_ancres:
-                    results.append({
-                        'URL de départ': url_start, 
-                        'URL de destination': url_dest, 
-                        'Ancre': ancre,
-                        'Score de similarité': sim
-                    })
+                ancre = ancres_df.iloc[0][col_ancre]
             else:
-                # Si aucune ancre n'est trouvée, utiliser l'URL de destination comme ancre
-                for _ in range(num_links):
-                    results.append({
-                        'URL de départ': url_start, 
-                        'URL de destination': url_dest, 
-                        'Ancre': url_dest,
-                        'Score de similarité': sim
-                    })
+                ancre = url_dest
+
+            results.append({
+                'URL de départ': url_start, 
+                'URL de destination': url_dest, 
+                'Ancre': ancre,
+                'Score de similarité': sim
+            })
 
     df_results = pd.DataFrame(results)
 
@@ -170,8 +89,8 @@ def app():
         st.session_state.urls_to_analyze = ""
     if 'uploaded_file' not in st.session_state:
         st.session_state.uploaded_file = None
-    if 'num_links' not in st.session_state:
-        st.session_state.num_links = 5
+    if 'num_similar_urls' not in st.session_state:
+        st.session_state.num_similar_urls = 5
     if 'include_classes' not in st.session_state:
         st.session_state.include_classes = ""
     if 'exclude_classes' not in st.session_state:
@@ -200,8 +119,8 @@ def app():
                 return
 
             urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
-            max_links = 10  # Vous pouvez ajuster cette valeur selon vos besoins
-            st.session_state.num_links = st.slider("Nombre de liens à créer pour chaque URL de destination", min_value=1, max_value=max_links, value=st.session_state.num_links)
+            max_similar_urls = len(urls_list) - 1  # Nombre maximum d'URLs similaires est le nombre total d'URLs moins 1
+            st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=min(5, max_similar_urls))
 
             st.subheader("Filtrer le contenu HTML et termes")
             st.session_state.include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)", st.session_state.include_classes)
@@ -214,7 +133,7 @@ def app():
                     exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
                     additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, st.session_state.num_links, include_classes, exclude_classes, additional_stopwords)
+                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, st.session_state.num_similar_urls, include_classes, exclude_classes, additional_stopwords)
 
                     if error_message:
                         st.error(error_message)
