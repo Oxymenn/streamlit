@@ -34,7 +34,7 @@ def extract_and_clean_content(url):
         response = requests.get(url)
         response.raise_for_status()  # Assure que la requête est réussie
         soup = BeautifulSoup(response.text, 'html.parser')
-        element = soup.find(class_='below-woocommerce-category')
+        element = soup.find(class_='article-template__content')
         
         if element:
             content = element.get_text(separator=" ", strip=True)
