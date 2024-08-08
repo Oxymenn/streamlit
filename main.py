@@ -11,23 +11,28 @@ st.sidebar.title("Pirates SEO")
 def sidebar_header(title):
     st.sidebar.markdown(f"**{title}**")
 
-# Maillage interne
-sidebar_header("Maillage interne")
-if st.sidebar.button("Proposition Maillage"):
-    proposition_maillage.app()
-if st.sidebar.button("Analyse + Proposition Maillage"):
-    analyse_proposition_maillage.app()
+# Dictionnaire des scripts
+scripts = {
+    "Maillage interne": {
+        "Proposition Maillage": proposition_maillage,
+        "Analyse + Proposition Maillage": analyse_proposition_maillage
+    },
+    "Autres scripts": {
+        "Similarité Cosinus": similarite_cosinus,
+        "Cannibalisation SERP": cannibalisation_serp,
+        "Test Cannibalisation": test_cannibalisation,
+        "Images Bulk": images_bulk
+    }
+}
 
-# Autres scripts
-sidebar_header("Autres scripts")
-if st.sidebar.button("Similarité Cosinus"):
-    similarite_cosinus.app()
-if st.sidebar.button("Cannibalisation SERP"):
-    cannibalisation_serp.app()
-if st.sidebar.button("Test Cannibalisation"):
-    test_cannibalisation.app()
-if st.sidebar.button("Images Bulk"):
-    images_bulk.app()
+# Sélection du script
+selected_script = None
+
+for category, category_scripts in scripts.items():
+    sidebar_header(category)
+    selected_script_name = st.sidebar.radio("", list(category_scripts.keys()), key=category)
+    if st.sidebar.button("Exécuter", key=f"execute_{category}"):
+        selected_script = category_scripts[selected_script_name]
 
 # Copyright
 st.sidebar.markdown("---")
@@ -36,4 +41,7 @@ st.sidebar.markdown("© 2024 | by PirateSEO")
 # Zone principale pour afficher le contenu du script sélectionné
 main_container = st.container()
 with main_container:
-    st.write("Sélectionnez un script dans le menu de gauche pour commencer.")
+    if selected_script:
+        selected_script.app()
+    else:
+        st.write("Sélectionnez un script dans le menu de gauche et cliquez sur 'Exécuter' pour commencer.")
