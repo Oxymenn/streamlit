@@ -4,17 +4,26 @@ from scripts import similarite_cosinus, cannibalisation_serp, test_cannibalisati
 
 st.set_page_config(page_title="Scripts de Pirates", layout="wide")
 
-# CSS personnalisé pour réduire l'espace
+# CSS personnalisé pour un espacement minimal
 st.markdown("""
 <style>
     .sidebar .sidebar-content {
         padding-top: 0rem;
     }
-    .sidebar .stRadio > label {
-        margin-top: 0.5rem;
-    }
     .sidebar .stRadio > div[role="radiogroup"] {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+    .sidebar .stRadio > label {
+        margin: 0;
+        line-height: 1;
+    }
+    .sidebar .stRadio > div > label {
+        padding: 0.1rem 0;
+    }
+    h4 {
         margin-top: 0.5rem;
+        margin-bottom: 0.1rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -22,9 +31,9 @@ st.markdown("""
 # Titre principal
 st.sidebar.title("Pirates SEO")
 
-# Fonction pour créer un sous-titre avec moins d'espace
+# Fonction pour créer un sous-titre avec espacement minimal
 def sidebar_header(title):
-    st.sidebar.markdown(f"<h4 style='margin-bottom:0.5rem;'>{title}</h4>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<h4>{title}</h4>", unsafe_allow_html=True)
 
 # Dictionnaire des scripts
 scripts = {
@@ -50,7 +59,7 @@ for category, category_scripts in scripts.items():
         selected_script = category_scripts[script_name]
 
 # Copyright
-st.sidebar.markdown("---")
+st.sidebar.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
 st.sidebar.markdown("© 2024 | by PirateSEO")
 
 # Zone principale pour afficher le contenu du script sélectionné
