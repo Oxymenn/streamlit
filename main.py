@@ -4,12 +4,27 @@ from scripts import similarite_cosinus, cannibalisation_serp, test_cannibalisati
 
 st.set_page_config(page_title="Scripts de Pirates", layout="wide")
 
+# CSS personnalisé pour réduire l'espace
+st.markdown("""
+<style>
+    .sidebar .sidebar-content {
+        padding-top: 0rem;
+    }
+    .sidebar .stRadio > label {
+        margin-top: 0.5rem;
+    }
+    .sidebar .stRadio > div[role="radiogroup"] {
+        margin-top: 0.5rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Titre principal
 st.sidebar.title("Pirates SEO")
 
-# Fonction pour créer un sous-titre
+# Fonction pour créer un sous-titre avec moins d'espace
 def sidebar_header(title):
-    st.sidebar.markdown(f"**{title}**")
+    st.sidebar.markdown(f"<h4 style='margin-bottom:0.5rem;'>{title}</h4>", unsafe_allow_html=True)
 
 # Dictionnaire des scripts
 scripts = {
@@ -30,7 +45,7 @@ selected_script = None
 
 for category, category_scripts in scripts.items():
     sidebar_header(category)
-    script_name = st.sidebar.radio("", list(category_scripts.keys()), key=category)
+    script_name = st.sidebar.radio("", list(category_scripts.keys()), key=category, label_visibility="collapsed")
     if script_name:
         selected_script = category_scripts[script_name]
 
