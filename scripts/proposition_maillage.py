@@ -106,16 +106,19 @@ def app():
         try:
             df_excel = pd.read_excel(uploaded_file)
 
-            # Vérifier les colonnes nécessaires
-            required_columns = ['URL', 'Ancre', 'Impressions']
-            if not all(col in df_excel.columns for col in required_columns):
-                st.error("Le fichier Excel doit contenir les colonnes 'URL', 'Ancre' et 'Impressions'")
-                return
+            # Sélection des colonnes
+            col_url = st.selectbox("Sélectionnez la colonne contenant les URLs", df_excel.columns)
+            col_ancre = st.selectbox("Sélectionnez la colonne contenant les ancres", df_excel.columns)
+            col_priorite = st.selectbox("Sélectionnez la colonne contenant l'indice de priorité (nombre d'impressions)", df_excel.columns)
 
-            # Traiter les URLs à analyser
-            urls = [url.strip() for url in urls_to_analyze.split('\n') if url.strip()]
+            # Curseur pour le nombre d'URLs de destination
+            max_urls = len(urls_to_analyze.split('\n'))
+            num_dest_urls = st.slider("Nombre d'URLs de destination à inclure", min_value=1, max_value=max_urls, value=5)
 
             if st.button("Exécuter l'analyse"):
+                # Traiter les URLs à analyser
+                urls = [url.strip() for url in urls_to_analyze.split('\n') if url.strip()]
+
                 # Extraire et nettoyer le contenu des URLs
                 contents = [extract_and_clean_content(url) for url in urls]
                 contents = [content for content in contents if content]
@@ -132,12 +135,12 @@ def app():
                     results = []
                     for i, url_start in enumerate(urls):
                         similarities = similarity_matrix[i]
-                        similar_urls = sorted(zip(urls, similarities), key=lambda x: x[1], reverse=True)[1:6]  # Top 5 similaires
+                        similar_urls = sorted(zip(urls, similarities), key=lambda x: x[1], reverse=True)[1:num_dest_urls+1]
 
                         for url_dest, sim in similar_urls:
                             if sim >= 0.75:  # Seulement si la similarité est >= 0.75
-                                ancres = df_excel[df_excel['URL'] == url_dest].sort_values('Impressions', ascending=False)['Ancre'].tolist()
-                                ancre = ancres[0] if ancres else df_excel.sort_values('Impressions', ascending=False)['Ancre'].iloc[0]
+                                ancres = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[col_ancre].tolist()
+                                ancre = ancres[0] if ancres else df_excel.sort_values(col_priorite, ascending=False)[col_ancre].iloc[0]
                                 results.append({'URL de départ': url_start, 'URL de destination': url_dest, 'Ancre': ancre})
 
                     # Créer le DataFrame final
