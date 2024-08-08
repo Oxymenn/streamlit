@@ -125,16 +125,26 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_simi
             ancres_df = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
             
             if not ancres_df.empty:
-                ancre = ancres_df.iloc[0][col_ancre]
+                ancres = ancres_df[col_ancre].tolist()
+                impressions = ancres_df[col_priorite].tolist()
+                
+                # Sélectionner l'ancre avec le plus d'impressions
+                best_ancre = ancres[0]
+                
+                results.append({
+                    'URL de départ': url_start, 
+                    'URL de destination': url_dest, 
+                    'Ancre': best_ancre,
+                    'Score de similarité': sim
+                })
             else:
-                ancre = url_dest
-
-            results.append({
-                'URL de départ': url_start, 
-                'URL de destination': url_dest, 
-                'Ancre': ancre,
-                'Score de similarité': sim
-            })
+                # Si aucune ancre n'est trouvée, utiliser l'URL de destination comme ancre
+                results.append({
+                    'URL de départ': url_start, 
+                    'URL de destination': url_dest, 
+                    'Ancre': url_dest,
+                    'Score de similarité': sim
+                })
 
     df_results = pd.DataFrame(results)
 
@@ -220,7 +230,8 @@ def app():
 
     # Bouton pour réinitialiser l'analyse
     if st.button("Réinitialiser l'analyse"):
-        st.session_state.df_results = None
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.experimental_rerun()
 
 if __name__ == "__main__":
