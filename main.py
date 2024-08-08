@@ -10,22 +10,26 @@ st.markdown("""
     .stButton > button {
         width: 100%;
         text-align: left;
-        background-color: transparent;
-        color: #262730;
+        background-color: white;
+        color: black;
         font-weight: normal;
         border: none;
         padding: 0.5rem 1rem;
         margin: 0;
         border-radius: 0;
+        transition: background-color 0.3s;
     }
     .stButton > button:hover {
-        background-color: #f0f2f6;
+        background-color: #f0f0f0;
     }
-    .stButton > button:active {
-        background-color: #e0e2e6;
+    .stButton > button:active, .stButton > button:focus {
+        background-color: #e0e0e0;
     }
     .sidebar .stButton > button {
         font-size: 0.9rem;
+    }
+    .sidebar .stButton {
+        margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
