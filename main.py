@@ -2,7 +2,7 @@ import streamlit as st
 from scripts import analyse_proposition_maillage, proposition_maillage
 from scripts import similarite_cosinus, cannibalisation_serp, test_cannibalisation, images_bulk
 
-st.set_page_config(page_title="Scripts de Pirates", layout="wide")
+st.set_page_config(page_title="Ratpi SEO", layout="wide")
 
 # CSS personnalisé pour styliser les boutons
 st.markdown("""
