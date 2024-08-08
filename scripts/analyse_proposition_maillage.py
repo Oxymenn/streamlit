@@ -164,7 +164,7 @@ def analyze_existing_links(df_maillage, url_depart_column, url_destination_colum
     return pd.DataFrame(analysis_results)
 
 def app():
-    st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
+    st.title("Analyse + Proposition Maillage Interne")
     uploaded_file = st.file_uploader("Importer un fichier Excel contenant des URLs", type=["xlsx"])
 
     if uploaded_file is not None:
