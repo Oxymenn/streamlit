@@ -53,6 +53,9 @@ def extract_and_clean_content(url, exclude_classes):
     return None
 
 def get_embeddings(text):
+    if not text or len(text) == 0:
+        st.error(f"Texte vide, impossible de générer l'embedding.")
+        return None
     try:
         response = requests.post(
             'https://api.openai.com/v1/embeddings',
@@ -62,7 +65,7 @@ def get_embeddings(text):
             },
             json={
                 'model': 'text-embedding-3-small',
-                'input': text,
+                'input': text[:8000],  # Limitez la longueur du texte si nécessaire
                 'encoding_format': 'float'
             },
             timeout=10
@@ -71,13 +74,19 @@ def get_embeddings(text):
         return response.json()['data'][0]['embedding']
     except requests.exceptions.HTTPError as http_err:
         st.error(f"HTTP error occurred: {http_err}")
+        st.error(f"Response content: {response.text}")  # Affichez le contenu de la réponse pour plus de détails
     except Exception as e:
         st.error(f"Erreur lors de la création des embeddings: {e}")
     return None
 
 def calculate_similarity(embeddings):
     try:
-        return cosine_similarity(embeddings)
+        # Filtrer les embeddings nuls ou invalides
+        valid_embeddings = [emb for emb in embeddings if emb is not None and len(emb) > 0]
+        if len(valid_embeddings) < 2:
+            st.error("Pas assez d'embeddings valides pour calculer la similarité.")
+            return None
+        return cosine_similarity(valid_embeddings)
     except Exception as e:
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
@@ -133,9 +142,14 @@ def app():
 
             st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes) for url in urls]
             st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
-            st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
-            st.session_state['urls'] = urls
-            st.session_state['file_name'] = file_name
+            st.session_state['embeddings'] = [emb for emb in st.session_state['embeddings'] if emb is not None]
+            
+            if len(st.session_state['embeddings']) < 2:
+                st.error("Pas assez d'embeddings valides pour continuer.")
+            else:
+                st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
+                st.session_state['urls'] = urls
+                st.session_state['file_name'] = file_name
 
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier: {e}")
@@ -168,4 +182,3 @@ def app():
 
 if __name__ == "__main__":
     app()
-
