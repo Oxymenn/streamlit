@@ -4,30 +4,6 @@ from scripts import similarite_cosinus, cannibalisation_serp, test_cannibalisati
 
 st.set_page_config(page_title="Scripts de Pirates", layout="wide")
 
-# CSS personnalisé pour un espacement minimal
-st.markdown("""
-<style>
-    .sidebar .sidebar-content {
-        padding-top: 0rem;
-    }
-    .sidebar .stRadio > div[role="radiogroup"] {
-        margin-top: 0;
-        margin-bottom: 0;
-    }
-    .sidebar .stRadio > label {
-        margin: 0;
-        line-height: 1;
-    }
-    .sidebar .stRadio > div > label {
-        padding: 0.1rem 0;
-    }
-    h4 {
-        margin-top: 0.5rem;
-        margin-bottom: 0.1rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # Titre principal
 st.sidebar.title("Pirates SEO")
 
@@ -69,3 +45,29 @@ with main_container:
         selected_script.app()
     else:
         st.write("Sélectionnez un script dans le menu de gauche pour commencer.")
+
+
+
+# CSS personnalisé pour un espacement minimal
+st.markdown("""
+<style>
+    .sidebar .sidebar-content {
+        padding-top: 0rem;
+    }
+    .sidebar .stRadio > div[role="radiogroup"] {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+    .sidebar .stRadio > label {
+        margin: 0;
+        line-height: 1;
+    }
+    .sidebar .stRadio > div > label {
+        padding: 0.1rem 0;
+    }
+    h4 {
+        margin-top: 0.5rem;
+        margin-bottom: 0.1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
