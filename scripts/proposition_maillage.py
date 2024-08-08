@@ -121,6 +121,9 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_dest
         for url_dest, sim in similar_urls:
             if sim >= 0.75:
                 ancres_df = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
+                if ancres_df.empty:
+                    continue
+                
                 ancres = ancres_df[col_ancre].tolist()
                 
                 selected_ancres = []
@@ -178,7 +181,7 @@ def app():
 
                 if error_message:
                     st.error(error_message)
-                else:
+                elif df_results is not None:
                     st.dataframe(df_results)
 
                     csv = df_results.to_csv(index=False).encode('utf-8')
@@ -188,6 +191,8 @@ def app():
                         file_name='maillage_interne_personnalise.csv',
                         mime='text/csv'
                     )
+                else:
+                    st.warning("Aucun résultat n'a été généré.")
 
         except Exception as e:
             st.error(f"Erreur lors du traitement : {str(e)}")
