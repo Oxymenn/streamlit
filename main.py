@@ -17,7 +17,7 @@ PAGES = {
 }
 
 # Titre principal
-st.sidebar.title("Scripts de Pirates")
+st.sidebar.title("PirateSEO")
 
 # Sous-titre et choix des scripts
 st.sidebar.subheader("Les scripts")
