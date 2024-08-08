@@ -6,7 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 
-# Liste de stopwords en français (inchangée)
+# Liste de stopwords en français
 stopwords_fr = {
     "alors", "boutique", "site", "collection", "gamme", "découvrez", "sélection", "explorez", "nettoyer", "nettoyez", "entretien", "entretenir", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
@@ -28,34 +28,39 @@ stopwords_fr = {
 # Configuration de la clé API OpenAI
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
-def extract_and_clean_content(url, exclude_classes):
+# Fonction pour extraire et nettoyer le contenu HTML
+def extract_and_clean_content(url):
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
+        response = requests.get(url)
+        response.raise_for_status()  # Assure que la requête est réussie
         soup = BeautifulSoup(response.text, 'html.parser')
+        element = soup.find(class_='below-woocommerce-category')
         
-        # Supprimer les éléments avec les classes à exclure
-        for class_name in exclude_classes:
-            for element in soup.find_all(class_=class_name):
-                element.decompose()
-        
-        # Extraction de tout le contenu visible du body
-        content = soup.body.get_text(separator=" ", strip=True)
-        
+        if element:
+            content = element.get_text(separator=" ", strip=True)
+        else:
+            st.error(f"Élément non trouvé dans l'URL: {url}")
+            return None
+
         # Nettoyage du texte
-        content = re.sub(r'\s+', ' ', content.lower())
-        content = re.sub(r'[^\w\s]', '', content)
-        return ' '.join([word for word in content.split() if word not in stopwords_fr])
+        content = re.sub(r'\s+', ' ', content)  # Nettoyer les espaces
+        content = content.lower()  # Mettre en minuscules
+        content = re.sub(r'[^\w\s]', '', content)  # Supprimer la ponctuation
+
+        # Retirer les mots vides
+        words = content.split()
+        content = ' '.join([word for word in words if word not in stopwords_fr])
+
+        return content
     except requests.exceptions.RequestException as e:
         st.error(f"Erreur lors de l'accès à {url}: {e}")
+        return None
     except Exception as e:
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
-    return None
-
-def get_embeddings(text):
-    if not text or len(text) == 0:
-        st.error(f"Texte vide, impossible de générer l'embedding.")
         return None
+
+# Fonction pour obtenir les embeddings d'un texte en utilisant l'API OpenAI
+def get_embeddings(text):
     try:
         response = requests.post(
             'https://api.openai.com/v1/embeddings',
@@ -64,121 +69,154 @@ def get_embeddings(text):
                 'Content-Type': 'application/json',
             },
             json={
-                'model': 'text-embedding-3-small',
-                'input': text[:8000],  # Limitez la longueur du texte si nécessaire
+                'model': 'text-embedding-3-small',  # Assurez-vous que ce modèle est disponible
+                'input': text,
                 'encoding_format': 'float'
-            },
-            timeout=10
+            }
         )
-        response.raise_for_status()
-        return response.json()['data'][0]['embedding']
+        response.raise_for_status()  # Assurez-vous que la réponse est réussie
+        data = response.json()
+        return data['data'][0]['embedding']
     except requests.exceptions.HTTPError as http_err:
         st.error(f"HTTP error occurred: {http_err}")
-        st.error(f"Response content: {response.text}")  # Affichez le contenu de la réponse pour plus de détails
     except Exception as e:
         st.error(f"Erreur lors de la création des embeddings: {e}")
     return None
 
+# Fonction pour calculer la similarité cosinus
 def calculate_similarity(embeddings):
     try:
-        # Filtrer les embeddings nuls ou invalides
-        valid_embeddings = [emb for emb in embeddings if emb is not None and len(emb) > 0]
-        if len(valid_embeddings) < 2:
-            st.error("Pas assez d'embeddings valides pour calculer la similarité.")
-            return None
-        return cosine_similarity(valid_embeddings)
+        similarity_matrix = cosine_similarity(embeddings)
+        return similarity_matrix
     except Exception as e:
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
-def create_similarity_df(urls, similarity_matrix, selected_url, max_results):
-    selected_index = urls.tolist().index(selected_url)
-    selected_similarities = similarity_matrix[selected_index]
-    similarity_df = pd.DataFrame({
-        'URL': urls,
-        'Similarité': selected_similarities
-    })
-    similarity_df = similarity_df[similarity_df['URL'] != selected_url]
-    return similarity_df.sort_values(by='Similarité', ascending=False).head(max_results)
-
-def create_links_table(urls, similarity_matrix, max_results):
-    links_table = {'URL de départ': []}
-    for n in range(1, max_results + 1):
-        links_table[f'URL similaire {n}'] = []
-    links_table['Concatener'] = []
-
-    for i, url in enumerate(urls):
-        similarities = similarity_matrix[i]
-        temp_df = pd.DataFrame({'URL': urls, 'Similarité': similarities})
-        temp_df = temp_df[temp_df['URL'] != url]
-        top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(max_results)['URL'].tolist()
-
-        links_table['URL de départ'].append(url)
-        for n in range(1, max_results + 1):
-            links_table[f'URL similaire {n}'].append(top_similar_urls[n - 1] if len(top_similar_urls) >= n else None)
-
-        concatenated = '; '.join([f"Lien {n} : {top_similar_urls[n - 1]}" if len(top_similar_urls) >= n else f"Lien {n} : " for n in range(1, max_results + 1)])
-        links_table['Concatener'].append(concatenated)
-
-    return pd.DataFrame(links_table)
-
+# Fonction principale de l'application
 def app():
-    st.title("Proposition Maillage Interne")
+    st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
-    # Ajout d'un champ pour les classes à exclure
-    exclude_classes = st.text_input("Classes HTML à exclure (séparées par des virgules)", "")
-    exclude_classes = [cls.strip() for cls in exclude_classes.split(',')] if exclude_classes else []
-
-    # Ajout du bouton Exécuter
-    execute_button = st.button("Exécuter")
-
-    if uploaded_file is not None and execute_button:
+    if uploaded_file is not None:
+        # Lire le fichier importé
         try:
-            df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+            if uploaded_file.name.endswith('.csv'):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+
+            # Extraire le nom du fichier sans extension
             file_name = uploaded_file.name.rsplit('.', 1)[0]
+
+            # Afficher les colonnes disponibles et permettre à l'utilisateur de sélectionner la colonne des URLs
             column_option = st.selectbox("Sélectionnez la colonne contenant les URLs", df.columns)
+
             urls = df[column_option].dropna().unique()
 
-            st.session_state['contents'] = [extract_and_clean_content(url, exclude_classes) for url in urls]
-            st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
-            st.session_state['embeddings'] = [emb for emb in st.session_state['embeddings'] if emb is not None]
-            
-            if len(st.session_state['embeddings']) < 2:
-                st.error("Pas assez d'embeddings valides pour continuer.")
-            else:
+            # Initialiser l'état de session si nécessaire
+            if 'contents' not in st.session_state:
+                st.session_state['contents'] = [extract_and_clean_content(url) for url in urls]
+            if 'embeddings' not in st.session_state:
+                st.session_state['embeddings'] = [get_embeddings(content) for content in st.session_state['contents'] if content]
+            if 'similarity_matrix' not in st.session_state:
                 st.session_state['similarity_matrix'] = calculate_similarity(st.session_state['embeddings'])
-                st.session_state['urls'] = urls
-                st.session_state['file_name'] = file_name
+
+            # Vérification de la matrice de similarité
+            if st.session_state['similarity_matrix'] is not None:
+                # Sélecteur d'URL et curseur pour le nombre de résultats
+                selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", urls)
+                max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(urls) - 1, 5)
+
+                # Trouver l'index de l'URL sélectionnée
+                selected_index = urls.tolist().index(selected_url)
+
+                # Obtenir les similarités pour l'URL sélectionnée
+                selected_similarities = st.session_state['similarity_matrix'][selected_index]
+
+                # Créer un DataFrame des similarités
+                similarity_df = pd.DataFrame({
+                    'URL': urls,
+                    'Similarité': selected_similarities
+                })
+
+                # Exclure l'URL sélectionnée
+                similarity_df = similarity_df[similarity_df['URL'] != selected_url]
+
+                # Trier le DataFrame par similarité décroissante
+                similarity_df = similarity_df.sort_values(by='Similarité', ascending=False)
+
+                # Afficher le nombre de résultats spécifié par le curseur
+                st.dataframe(similarity_df.head(max_results))
+
+                # Télécharger le fichier CSV avec les résultats
+                csv = similarity_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Télécharger les urls similaires à l'url filtrée (CSV)",
+                    data=csv,
+                    file_name=f'urls_similaires-{file_name}.csv',
+                    mime='text/csv'
+                )
+
+                # Créer le second tableau pour toutes les URLs de départ
+                links_table = {
+                    'URL de départ': [],
+                    'URL similaire 1': [],
+                    'URL similaire 2': [],
+                    'URL similaire 3': [],
+                    'URL similaire 4': [],
+                    'URL similaire 5': [],
+                    'Concatener': []
+                }
+
+                for i, url in enumerate(urls):
+                    # Obtenir les similarités pour l'URL en cours
+                    similarities = st.session_state['similarity_matrix'][i]
+                    
+                    # Créer un DataFrame temporaire pour trier les similarités
+                    temp_df = pd.DataFrame({
+                        'URL': urls,
+                        'Similarité': similarities
+                    })
+
+                    # Exclure l'URL de départ
+                    temp_df = temp_df[temp_df['URL'] != url]
+
+                    # Trier et prendre les 5 meilleures similarités
+                    top_similar_urls = temp_df.sort_values(by='Similarité', ascending=False).head(5)['URL'].tolist()
+
+                    # Remplir les données dans le tableau
+                    links_table['URL de départ'].append(url)
+                    links_table['URL similaire 1'].append(top_similar_urls[0] if len(top_similar_urls) > 0 else None)
+                    links_table['URL similaire 2'].append(top_similar_urls[1] if len(top_similar_urls) > 1 else None)
+                    links_table['URL similaire 3'].append(top_similar_urls[2] if len(top_similar_urls) > 2 else None)
+                    links_table['URL similaire 4'].append(top_similar_urls[3] if len(top_similar_urls) > 3 else None)
+                    links_table['URL similaire 5'].append(top_similar_urls[4] if len(top_similar_urls) > 4 else None)
+
+                    # Concatener les URLs
+                    concatenated = f"Lien 1 : {top_similar_urls[0] if len(top_similar_urls) > 0 else ''}; Lien 2 : {top_similar_urls[1] if len(top_similar_urls) > 1 else ''}; Lien 3 : {top_similar_urls[2] if len(top_similar_urls) > 2 else ''}; Lien 4 : {top_similar_urls[3] if len(top_similar_urls) > 3 else ''}; Lien 5 : {top_similar_urls[4] if len(top_similar_urls) > 4 else ''}"
+                    links_table['Concatener'].append(concatenated)
+
+                # Créer un DataFrame pour le second tableau
+                links_df = pd.DataFrame(links_table)
+
+                # Afficher le second tableau
+                st.dataframe(links_df)
+
+                # Télécharger le second tableau en CSV
+                csv_links = links_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Télécharger le tableau du maillage interne (CSV)",
+                    data=csv_links,
+                    file_name=f'maillage_interne-{file_name}.csv',
+                    mime='text/csv'
+                )
 
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier: {e}")
 
-    if 'similarity_matrix' in st.session_state and st.session_state['similarity_matrix'] is not None:
-        selected_url = st.selectbox("Sélectionnez une URL spécifique à filtrer", st.session_state['urls'])
-        max_results = st.slider("Nombre d'URLs similaires à afficher (par ordre décroissant)", 1, len(st.session_state['urls']) - 1, 5)
-
-        similarity_df = create_similarity_df(st.session_state['urls'], st.session_state['similarity_matrix'], selected_url, max_results)
-        st.dataframe(similarity_df)
-
-        csv = similarity_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Télécharger les urls similaires à l'url filtrée (CSV)",
-            data=csv,
-            file_name=f'urls_similaires-{st.session_state["file_name"]}.csv',
-            mime='text/csv'
-        )
-
-        links_df = create_links_table(st.session_state['urls'], st.session_state['similarity_matrix'], max_results)
-        st.dataframe(links_df)
-
-        csv_links = links_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Télécharger le tableau du maillage interne (CSV)",
-            data=csv_links,
-            file_name=f'maillage_interne-{st.session_state["file_name"]}.csv',
-            mime='text/csv'
-        )
-
+# Assurez-vous que la fonction `app` est appelée ici
 if __name__ == "__main__":
     app()
+
+
+
