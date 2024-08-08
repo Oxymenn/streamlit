@@ -8,23 +8,34 @@ from scripts import images_bulk
 
 # Configuration des pages
 PAGES = {
-    "Analyse + Proposition Maillage": analyse_proposition_maillage,
-    "Proposition Maillage": proposition_maillage,
-    "Similarité Cosinus": similarite_cosinus,
-    "Cannibalisation SERP": cannibalisation_serp,
-    "Test Cannibalisation": test_cannibalisation,
-    "Images Bulk": images_bulk
+    "Maillage interne": {
+        "Analyse + Proposition Maillage": analyse_proposition_maillage,
+        "Proposition Maillage": proposition_maillage
+    },
+    "Autres scripts": {
+        "Similarité Cosinus": similarite_cosinus,
+        "Cannibalisation SERP": cannibalisation_serp,
+        "Test Cannibalisation": test_cannibalisation,
+        "Images Bulk": images_bulk
+    }
 }
 
 # Titre principal
 st.sidebar.title("Scripts de Pirates")
 
-# Sous-titre et choix des scripts
-st.sidebar.subheader("Les scripts")
-selection = st.sidebar.radio("", list(PAGES.keys()), index=0)
+# Sélection de la catégorie
+category = st.sidebar.radio("Catégories", list(PAGES.keys()))
+
+# Sélection du script dans la catégorie choisie
+if category == "Maillage interne":
+    st.sidebar.subheader("Maillage interne")
+    script = st.sidebar.radio("", list(PAGES[category].keys()))
+else:
+    st.sidebar.subheader("Autres scripts")
+    script = st.sidebar.radio("", list(PAGES[category].keys()))
 
 # Affichage du script sélectionné
-page = PAGES[selection]
+page = PAGES[category][script]
 page.app()
 
 # Copyright
