@@ -29,26 +29,36 @@ stopwords_fr = {
 # Configuration de la clé API OpenAI
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
-# Fonction pour extraire et nettoyer le contenu HTML (inchangée)
-def extract_and_clean_content(url):
+# Fonction pour extraire et nettoyer le contenu HTML (modifiée)
+def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
         response = requests.get(url)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        element = soup.find(class_='article-template__content')
-        
-        if element:
-            content = element.get_text(separator=" ", strip=True)
-        else:
-            st.error(f"Élément non trouvé dans l'URL: {url}")
-            return None
 
+        # Filtrer le contenu en fonction des classes à inclure et exclure
+        if include_classes:
+            elements = soup.find_all(class_=include_classes)
+        else:
+            elements = [soup]
+
+        if exclude_classes:
+            for cls in exclude_classes:
+                for element in elements:
+                    for excluded in element.find_all(class_=cls):
+                        excluded.decompose()
+
+        content = ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
+
+        # Nettoyage du texte
         content = re.sub(r'\s+', ' ', content)
         content = content.lower()
         content = re.sub(r'[^\w\s]', '', content)
 
+        # Retirer les mots vides, y compris les stopwords additionnels
         words = content.split()
-        content = ' '.join([word for word in words if word not in stopwords_fr])
+        all_stopwords = stopwords_fr.union(set(additional_stopwords))
+        content = ' '.join([word for word in words if word not in all_stopwords])
 
         return content
     except requests.exceptions.RequestException as e:
@@ -106,6 +116,9 @@ def app():
         try:
             df_excel = pd.read_excel(uploaded_file)
 
+            # Sous-titre pour la sélection des données GSC
+            st.subheader("Sélectionnez les données GSC")
+
             # Sélection des colonnes
             col_url = st.selectbox("Sélectionnez la colonne contenant les URLs", df_excel.columns)
             col_ancre = st.selectbox("Sélectionnez la colonne contenant les ancres", df_excel.columns)
@@ -115,12 +128,25 @@ def app():
             max_urls = len(urls_to_analyze.split('\n'))
             num_dest_urls = st.slider("Nombre d'URLs de destination à inclure", min_value=1, max_value=max_urls, value=5)
 
+            # Sous-titre pour les filtres
+            st.subheader("Filtrer le contenu HTML et termes")
+
+            # Filtres supplémentaires
+            include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)")
+            exclude_classes = st.text_area("Classes HTML à exclure de l'analyse (une classe par ligne, optionnel)")
+            additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)")
+
             if st.button("Exécuter l'analyse"):
                 # Traiter les URLs à analyser
                 urls = [url.strip() for url in urls_to_analyze.split('\n') if url.strip()]
 
+                # Traiter les filtres
+                include_classes = [cls.strip() for cls in include_classes.split('\n') if cls.strip()]
+                exclude_classes = [cls.strip() for cls in exclude_classes.split('\n') if cls.strip()]
+                additional_stopwords = [word.strip() for word in additional_stopwords.split('\n') if word.strip()]
+
                 # Extraire et nettoyer le contenu des URLs
-                contents = [extract_and_clean_content(url) for url in urls]
+                contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls]
                 contents = [content for content in contents if content]
 
                 # Obtenir les embeddings
