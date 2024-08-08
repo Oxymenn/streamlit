@@ -39,7 +39,7 @@ st.markdown("""
 st.sidebar.title("Pirates SEO")
 
 # Maillage interne
-st.sidebar.subtitle("Maillage interne")
+st.sidebar.header("Maillage interne")
 if st.sidebar.button("Proposition Maillage"):
     proposition_maillage.app()
 if st.sidebar.button("Analyse + Proposition Maillage"):
