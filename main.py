@@ -25,14 +25,14 @@ scripts = {
     }
 }
 
-# Sélection du script
+# Sélection et exécution du script
 selected_script = None
 
 for category, category_scripts in scripts.items():
     sidebar_header(category)
-    selected_script_name = st.sidebar.radio("", list(category_scripts.keys()), key=category)
-    if st.sidebar.button("Exécuter", key=f"execute_{category}"):
-        selected_script = category_scripts[selected_script_name]
+    script_name = st.sidebar.radio("", list(category_scripts.keys()), key=category)
+    if script_name:
+        selected_script = category_scripts[script_name]
 
 # Copyright
 st.sidebar.markdown("---")
@@ -44,4 +44,4 @@ with main_container:
     if selected_script:
         selected_script.app()
     else:
-        st.write("Sélectionnez un script dans le menu de gauche et cliquez sur 'Exécuter' pour commencer.")
+        st.write("Sélectionnez un script dans le menu de gauche pour commencer.")
