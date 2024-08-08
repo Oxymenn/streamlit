@@ -11,19 +11,20 @@ st.markdown("""
         width: 100%;
         text-align: left;
         background-color: white;
-        color: black;
+        color: black !important;
         font-weight: normal;
         border: none;
         padding: 0.5rem 1rem;
         margin: 0;
         border-radius: 0;
-        transition: background-color 0.3s;
+        transition: background-color 0.3s, font-weight 0.3s;
     }
     .stButton > button:hover {
         background-color: #f0f0f0;
     }
     .stButton > button:active, .stButton > button:focus {
         background-color: #e0e0e0;
+        font-weight: bold !important;
     }
     .sidebar .stButton > button {
         font-size: 0.9rem;
