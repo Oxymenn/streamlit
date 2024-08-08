@@ -2,7 +2,6 @@ import streamlit as st
 from scripts import analyse_proposition_maillage
 from scripts import proposition_maillage
 from scripts import similarite_cosinus
-from scripts import audit_maillage_interne
 from scripts import cannibalisation_serp
 from scripts import test_cannibalisation
 from scripts import images_bulk
@@ -12,7 +11,6 @@ PAGES = {
     "Analyse + Proposition Maillage": analyse_proposition_maillage,
     "Proposition Maillage": proposition_maillage,
     "Similarité Cosinus": similarite_cosinus,
-    "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
     "Test Cannibalisation": test_cannibalisation,
     "Images Bulk": images_bulk
