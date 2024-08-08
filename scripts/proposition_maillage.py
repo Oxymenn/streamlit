@@ -112,8 +112,8 @@ def app():
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
 
     if uploaded_file is not None and urls_to_analyze:
-        # Lire le fichier Excel importé
         try:
+            # Lire le fichier Excel importé
             df_excel = pd.read_excel(uploaded_file)
 
             # Sous-titre pour la sélection des données GSC
@@ -124,9 +124,15 @@ def app():
             col_ancre = st.selectbox("Sélectionnez la colonne contenant les ancres", df_excel.columns)
             col_priorite = st.selectbox("Sélectionnez la colonne contenant l'indice de priorité (nombre d'impressions)", df_excel.columns)
 
+            # Vérification de l'existence des colonnes sélectionnées
+            if not all(col in df_excel.columns for col in [col_url, col_ancre, col_priorite]):
+                st.error("Erreur: Une ou plusieurs colonnes sélectionnées n'existent pas dans le fichier Excel.")
+                return
+
             # Curseur pour le nombre d'URLs de destination
-            max_urls = len(urls_to_analyze.split('\n'))
-            num_dest_urls = st.slider("Nombre d'URLs de destination à inclure", min_value=1, max_value=max_urls, value=5)
+            urls_list = [url.strip() for url in urls_to_analyze.split('\n') if url.strip()]
+            max_urls = len(urls_list)
+            num_dest_urls = st.slider("Nombre d'URLs de destination à inclure", min_value=1, max_value=max_urls, value=min(5, max_urls))
 
             # Sous-titre pour les filtres
             st.subheader("Filtrer le contenu HTML et termes")
@@ -137,21 +143,26 @@ def app():
             additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)")
 
             if st.button("Exécuter l'analyse"):
-                # Traiter les URLs à analyser
-                urls = [url.strip() for url in urls_to_analyze.split('\n') if url.strip()]
-
                 # Traiter les filtres
                 include_classes = [cls.strip() for cls in include_classes.split('\n') if cls.strip()]
                 exclude_classes = [cls.strip() for cls in exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in additional_stopwords.split('\n') if word.strip()]
 
                 # Extraire et nettoyer le contenu des URLs
-                contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls]
+                contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
                 contents = [content for content in contents if content]
+
+                if not contents:
+                    st.error("Aucun contenu n'a pu être extrait des URLs fournies.")
+                    return
 
                 # Obtenir les embeddings
                 embeddings = [get_embeddings(content) for content in contents]
                 embeddings = [emb for emb in embeddings if emb]
+
+                if not embeddings:
+                    st.error("Impossible de générer des embeddings pour les contenus extraits.")
+                    return
 
                 # Calculer la matrice de similarité
                 similarity_matrix = calculate_similarity(embeddings)
@@ -159,9 +170,9 @@ def app():
                 if similarity_matrix is not None:
                     # Créer le DataFrame de résultats
                     results = []
-                    for i, url_start in enumerate(urls):
+                    for i, url_start in enumerate(urls_list):
                         similarities = similarity_matrix[i]
-                        similar_urls = sorted(zip(urls, similarities), key=lambda x: x[1], reverse=True)[1:num_dest_urls+1]
+                        similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)[1:num_dest_urls+1]
 
                         for url_dest, sim in similar_urls:
                             if sim >= 0.75:  # Seulement si la similarité est >= 0.75
@@ -172,21 +183,24 @@ def app():
                     # Créer le DataFrame final
                     df_results = pd.DataFrame(results)
 
-                    # Afficher les résultats
-                    st.dataframe(df_results)
+                    if df_results.empty:
+                        st.warning("Aucun résultat n'a été trouvé avec les critères spécifiés.")
+                    else:
+                        # Afficher les résultats
+                        st.dataframe(df_results)
 
-                    # Option de téléchargement
-                    csv = df_results.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="Télécharger les résultats (CSV)",
-                        data=csv,
-                        file_name='maillage_interne_personnalise.csv',
-                        mime='text/csv'
-                    )
+                        # Option de téléchargement
+                        csv = df_results.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="Télécharger les résultats (CSV)",
+                            data=csv,
+                            file_name='maillage_interne_personnalise.csv',
+                            mime='text/csv'
+                        )
                 else:
                     st.error("Erreur lors du calcul de la similarité.")
         except Exception as e:
-            st.error(f"Erreur lors du traitement : {e}")
+            st.error(f"Erreur lors du traitement : {str(e)}")
 
 # Exécution de l'application
 if __name__ == "__main__":
