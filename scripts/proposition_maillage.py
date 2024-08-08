@@ -163,13 +163,32 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_link
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
 
-    urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)")
+    # Initialiser session_state
+    if 'df_results' not in st.session_state:
+        st.session_state.df_results = None
+    if 'urls_to_analyze' not in st.session_state:
+        st.session_state.urls_to_analyze = ""
+    if 'uploaded_file' not in st.session_state:
+        st.session_state.uploaded_file = None
+    if 'num_links' not in st.session_state:
+        st.session_state.num_links = 5
+    if 'include_classes' not in st.session_state:
+        st.session_state.include_classes = ""
+    if 'exclude_classes' not in st.session_state:
+        st.session_state.exclude_classes = ""
+    if 'additional_stopwords' not in st.session_state:
+        st.session_state.additional_stopwords = ""
+
+    # Interface utilisateur
+    st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
+    if uploaded_file is not None:
+        st.session_state.uploaded_file = uploaded_file
 
-    if uploaded_file is not None and urls_to_analyze:
+    if st.session_state.uploaded_file is not None and st.session_state.urls_to_analyze:
         try:
-            df_excel = pd.read_excel(uploaded_file)
+            df_excel = pd.read_excel(st.session_state.uploaded_file)
 
             st.subheader("Sélectionnez les données GSC")
             col_url = st.selectbox("Sélectionnez la colonne contenant les URLs", df_excel.columns)
@@ -180,39 +199,46 @@ def app():
                 st.error("Erreur: Une ou plusieurs colonnes sélectionnées n'existent pas dans le fichier Excel.")
                 return
 
-            urls_list = [url.strip() for url in urls_to_analyze.split('\n') if url.strip()]
+            urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
             max_links = 10  # Vous pouvez ajuster cette valeur selon vos besoins
-            num_links = st.slider("Nombre de liens à créer pour chaque URL de destination", min_value=1, max_value=max_links, value=5)
+            st.session_state.num_links = st.slider("Nombre de liens à créer pour chaque URL de destination", min_value=1, max_value=max_links, value=st.session_state.num_links)
 
             st.subheader("Filtrer le contenu HTML et termes")
-            include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)")
-            exclude_classes = st.text_area("Classes HTML à exclure de l'analyse (une classe par ligne, optionnel)")
-            additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)")
+            st.session_state.include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)", st.session_state.include_classes)
+            st.session_state.exclude_classes = st.text_area("Classes HTML à exclure de l'analyse (une classe par ligne, optionnel)", st.session_state.exclude_classes)
+            st.session_state.additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)", st.session_state.additional_stopwords)
 
-            if st.button("Exécuter l'analyse"):
-                include_classes = [cls.strip() for cls in include_classes.split('\n') if cls.strip()]
-                exclude_classes = [cls.strip() for cls in exclude_classes.split('\n') if cls.strip()]
-                additional_stopwords = [word.strip() for word in additional_stopwords.split('\n') if word.strip()]
+            if st.button("Exécuter l'analyse") or st.session_state.df_results is not None:
+                if st.session_state.df_results is None:
+                    include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
+                    exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
+                    additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_links, include_classes, exclude_classes, additional_stopwords)
+                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, st.session_state.num_links, include_classes, exclude_classes, additional_stopwords)
 
-                if error_message:
-                    st.error(error_message)
-                elif df_results is not None:
-                    st.dataframe(df_results)
+                    if error_message:
+                        st.error(error_message)
+                    elif st.session_state.df_results is None:
+                        st.warning("Aucun résultat n'a été généré.")
 
-                    csv = df_results.to_csv(index=False).encode('utf-8')
+                if st.session_state.df_results is not None:
+                    st.dataframe(st.session_state.df_results)
+
+                    csv = st.session_state.df_results.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="Télécharger les résultats (CSV)",
                         data=csv,
                         file_name='maillage_interne_personnalise.csv',
                         mime='text/csv'
                     )
-                else:
-                    st.warning("Aucun résultat n'a été généré.")
 
         except Exception as e:
             st.error(f"Erreur lors du traitement : {str(e)}")
+
+    # Bouton pour réinitialiser l'analyse
+    if st.button("Réinitialiser l'analyse"):
+        st.session_state.df_results = None
+        st.experimental_rerun()
 
 if __name__ == "__main__":
     app()
