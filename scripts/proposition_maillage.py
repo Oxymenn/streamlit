@@ -114,7 +114,7 @@ def create_links_table(urls, similarity_matrix, max_results):
     return pd.DataFrame(links_table)
 
 def app():
-    st.title("Pages Similaires Sémantiquement - Woocommerce (Shoptimizer)")
+    st.title("Proposition Maillage Interne")
     uploaded_file = st.file_uploader("Importer un fichier CSV ou Excel contenant des URLs", type=["csv", "xlsx"])
 
     # Ajout d'un champ pour les classes à exclure
