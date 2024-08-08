@@ -95,7 +95,7 @@ def calculate_similarity(embeddings):
         return None
 
 @st.cache_data
-def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_similar_urls, include_classes, exclude_classes, additional_stopwords):
+def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
     contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
     contents = [content for content in contents if content]
 
@@ -118,8 +118,8 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_simi
         similarities = similarity_matrix[i]
         similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)
         
-        # Exclure l'URL de départ elle-même et prendre les num_similar_urls suivantes
-        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start][:num_similar_urls]
+        # Exclure l'URL de départ elle-même
+        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start]
 
         for j, (url_dest, sim) in enumerate(similar_urls):
             ancres_df = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
@@ -188,33 +188,37 @@ def app():
 
             urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
             max_similar_urls = len(urls_list) - 1  # Nombre maximum d'URLs similaires est le nombre total d'URLs moins 1
-            num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
+            st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
 
             st.subheader("Filtrer le contenu HTML et termes")
             st.session_state.include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)", st.session_state.include_classes)
             st.session_state.exclude_classes = st.text_area("Classes HTML à exclure de l'analyse (une classe par ligne, optionnel)", st.session_state.exclude_classes)
             st.session_state.additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)", st.session_state.additional_stopwords)
 
-            include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
-            exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
-            additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
+            if st.button("Exécuter l'analyse") or st.session_state.df_results is None:
+                include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
+                exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
+                additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-            st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_similar_urls, include_classes, exclude_classes, additional_stopwords)
+                st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
 
-            if error_message:
-                st.error(error_message)
-            elif st.session_state.df_results is not None:
-                st.dataframe(st.session_state.df_results)
+                if error_message:
+                    st.error(error_message)
+                elif st.session_state.df_results is None:
+                    st.warning("Aucun résultat n'a été généré.")
 
-                csv = st.session_state.df_results.to_csv(index=False).encode('utf-8')
+            if st.session_state.df_results is not None:
+                # Filtrer les résultats en fonction du nombre d'URLs similaires sélectionné
+                filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(st.session_state.num_similar_urls, 'Score de similarité')).reset_index(drop=True)
+                st.dataframe(filtered_results)
+
+                csv = filtered_results.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="Télécharger les résultats (CSV)",
                     data=csv,
                     file_name='maillage_interne_personnalise.csv',
                     mime='text/csv'
                 )
-            else:
-                st.warning("Aucun résultat n'a été généré.")
 
         except Exception as e:
             st.error(f"Erreur lors du traitement : {str(e)}")
