@@ -19,10 +19,6 @@ PAGES = {
 # Titre principal
 st.sidebar.title("PirateSEO")
 
-# Sous-titre et choix des scripts
-st.sidebar.subheader("Les scripts")
-selection = st.sidebar.radio("", list(PAGES.keys()), index=0)
-
 # Affichage du script sélectionné
 page = PAGES[selection]
 page.app()
