@@ -116,25 +116,19 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_dest
     results = []
     for i, url_start in enumerate(urls_list):
         similarities = similarity_matrix[i]
-        similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)[1:num_dest_urls+1]
+        similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)
+        
+        # Exclure l'URL de départ elle-même et prendre les num_dest_urls suivantes
+        similar_urls = [url for url, _ in similar_urls if url != url_start][:num_dest_urls]
 
-        for url_dest, sim in similar_urls:
-            if sim >= 0.75:
-                ancres_df = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
-                if ancres_df.empty:
-                    continue
-                
-                ancres = ancres_df[col_ancre].tolist()
-                
-                selected_ancres = []
-                for _ in range(num_dest_urls):
-                    if ancres:
-                        selected_ancres.append(ancres.pop(0))
-                    else:
-                        selected_ancres.append(ancres_df.iloc[0][col_ancre])
-                
-                for ancre in selected_ancres:
-                    results.append({'URL de départ': url_start, 'URL de destination': url_dest, 'Ancre': ancre})
+        for url_dest in similar_urls:
+            ancres_df = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
+            if not ancres_df.empty:
+                ancre = ancres_df.iloc[0][col_ancre]
+                results.append({'URL de départ': url_start, 'URL de destination': url_dest, 'Ancre': ancre})
+            else:
+                # Si aucune ancre n'est trouvée, utiliser l'URL de destination comme ancre
+                results.append({'URL de départ': url_start, 'URL de destination': url_dest, 'Ancre': url_dest})
 
     df_results = pd.DataFrame(results)
 
@@ -164,7 +158,7 @@ def app():
                 return
 
             urls_list = [url.strip() for url in urls_to_analyze.split('\n') if url.strip()]
-            max_urls = len(urls_list)
+            max_urls = len(urls_list) - 1  # Nombre maximum d'URLs de destination est le nombre total d'URLs moins 1
             num_dest_urls = st.slider("Nombre d'URLs de destination à inclure", min_value=1, max_value=max_urls, value=min(5, max_urls))
 
             st.subheader("Filtrer le contenu HTML et termes")
