@@ -1,4 +1,5 @@
 import streamlit as st
+from scripts import analyse_proposition_maillage
 from scripts import proposition_maillage
 from scripts import similarite_cosinus
 from scripts import audit_maillage_interne
@@ -8,7 +9,8 @@ from scripts import images_bulk
 
 # Configuration des pages
 PAGES = {
-    "Pages Similaires Sémantiquement - Proposition de Maillage Interne": proposition_maillage,
+    "Analyse + Proposition Maillage": analyse_proposition_maillage,
+    "Proposition Maillage": proposition_maillage,
     "Similarité Cosinus": similarite_cosinus,
     "Audit Maillage Interne": audit_maillage_interne,
     "Cannibalisation SERP": cannibalisation_serp,
