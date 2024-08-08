@@ -95,7 +95,7 @@ def calculate_similarity(embeddings):
         return None
 
 @st.cache_data
-def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_dest_urls, include_classes, exclude_classes, additional_stopwords):
+def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_links, include_classes, exclude_classes, additional_stopwords):
     contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
     contents = [content for content in contents if content]
 
@@ -118,17 +118,40 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_dest
         similarities = similarity_matrix[i]
         similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)
         
-        # Exclure l'URL de départ elle-même et prendre les num_dest_urls suivantes
-        similar_urls = [url for url, _ in similar_urls if url != url_start][:num_dest_urls]
+        # Exclure l'URL de départ elle-même et prendre les num_links suivantes
+        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start][:num_links]
 
-        for url_dest in similar_urls:
+        for url_dest, sim in similar_urls:
             ancres_df = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
+            
             if not ancres_df.empty:
-                ancre = ancres_df.iloc[0][col_ancre]
-                results.append({'URL de départ': url_start, 'URL de destination': url_dest, 'Ancre': ancre})
+                ancres = ancres_df[col_ancre].tolist()
+                
+                # Sélectionner les ancres en respectant l'ordre de priorité
+                selected_ancres = []
+                for _ in range(num_links):
+                    if ancres:
+                        selected_ancres.append(ancres.pop(0))
+                    else:
+                        # Si on a épuisé toutes les ancres, on reprend celle avec le plus d'impressions
+                        selected_ancres.append(ancres_df.iloc[0][col_ancre])
+                
+                for ancre in selected_ancres:
+                    results.append({
+                        'URL de départ': url_start, 
+                        'URL de destination': url_dest, 
+                        'Ancre': ancre,
+                        'Score de similarité': sim
+                    })
             else:
                 # Si aucune ancre n'est trouvée, utiliser l'URL de destination comme ancre
-                results.append({'URL de départ': url_start, 'URL de destination': url_dest, 'Ancre': url_dest})
+                for _ in range(num_links):
+                    results.append({
+                        'URL de départ': url_start, 
+                        'URL de destination': url_dest, 
+                        'Ancre': url_dest,
+                        'Score de similarité': sim
+                    })
 
     df_results = pd.DataFrame(results)
 
@@ -158,8 +181,8 @@ def app():
                 return
 
             urls_list = [url.strip() for url in urls_to_analyze.split('\n') if url.strip()]
-            max_urls = len(urls_list) - 1  # Nombre maximum d'URLs de destination est le nombre total d'URLs moins 1
-            num_dest_urls = st.slider("Nombre d'URLs de destination à inclure", min_value=1, max_value=max_urls, value=min(5, max_urls))
+            max_links = 10  # Vous pouvez ajuster cette valeur selon vos besoins
+            num_links = st.slider("Nombre de liens à créer pour chaque URL de destination", min_value=1, max_value=max_links, value=5)
 
             st.subheader("Filtrer le contenu HTML et termes")
             include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)")
@@ -171,7 +194,7 @@ def app():
                 exclude_classes = [cls.strip() for cls in exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in additional_stopwords.split('\n') if word.strip()]
 
-                df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_dest_urls, include_classes, exclude_classes, additional_stopwords)
+                df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_links, include_classes, exclude_classes, additional_stopwords)
 
                 if error_message:
                     st.error(error_message)
