@@ -28,7 +28,71 @@ stopwords_fr = {
 # Configuration de la clé API OpenAI
 OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
 
-# Fonctions extract_and_clean_content, get_embeddings, et calculate_similarity inchangées
+def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        if include_classes:
+            elements = soup.find_all(class_=include_classes)
+        else:
+            elements = [soup]
+
+        if exclude_classes:
+            for cls in exclude_classes:
+                for element in elements:
+                    for excluded in element.find_all(class_=cls):
+                        excluded.decompose()
+
+        content = ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
+
+        content = re.sub(r'\s+', ' ', content)
+        content = content.lower()
+        content = re.sub(r'[^\w\s]', '', content)
+
+        words = content.split()
+        all_stopwords = stopwords_fr.union(set(additional_stopwords))
+        content = ' '.join([word for word in words if word not in all_stopwords])
+
+        return content
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erreur lors de l'accès à {url}: {e}")
+        return None
+    except Exception as e:
+        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
+        return None
+
+def get_embeddings(text):
+    try:
+        response = requests.post(
+            'https://api.openai.com/v1/embeddings',
+            headers={
+                'Authorization': f'Bearer {OPENAI_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': 'text-embedding-3-small',
+                'input': text,
+                'encoding_format': 'float'
+            }
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data['data'][0]['embedding']
+    except requests.exceptions.HTTPError as http_err:
+        st.error(f"HTTP error occurred: {http_err}")
+    except Exception as e:
+        st.error(f"Erreur lors de la création des embeddings: {e}")
+    return None
+
+def calculate_similarity(embeddings):
+    try:
+        similarity_matrix = cosine_similarity(embeddings)
+        return similarity_matrix
+    except Exception as e:
+        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
+        return None
 
 @st.cache_data
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, num_similar_urls, include_classes, exclude_classes, additional_stopwords):
