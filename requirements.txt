@@ -10,4 +10,4 @@ tqdm
 unidecode
 openai
 selenium
-webdriver
+webdriver-manager
