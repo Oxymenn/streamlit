@@ -1,18 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
-from selenium.webdriver.firefox.service import Service as FirefoxService
-from webdriver_manager.firefox import GeckoDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from collections import Counter
 from unidecode import unidecode
 import re
 import time
 import random
+import requests
+from bs4 import BeautifulSoup
 
 STOPWORDS = set(['de', 'à', 'pour', 'du', 'le', 'la', 'les', 'un', 'une', 'des', 'en', 'et'])
 
@@ -21,22 +16,24 @@ def preprocess_keyword(keyword):
     keyword = re.sub(r'[^\w\s]', '', keyword)
     return ' '.join([word for word in keyword.split() if word not in STOPWORDS])
 
-def get_google_results(driver, keyword, num_results=10, delay_min=3, delay_max=5):
+def get_google_results(keyword, num_results=10, delay_min=3, delay_max=5):
     url = f"https://www.google.fr/search?q={keyword}&num={num_results}"
-    driver.get(url)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     
     try:
-        # Attendre que les résultats soient chargés
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.yuRUbf"))
-        )
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         results = []
-        for div in driver.find_elements(By.CSS_SELECTOR, "div.yuRUbf"):
-            anchor = div.find_element(By.TAG_NAME, "a")
-            title = div.find_element(By.TAG_NAME, "h3").text
-            link = anchor.get_attribute("href")
-            results.append((link, title))
+        for div in soup.find_all('div', class_='yuRUbf'):
+            anchor = div.find('a')
+            if anchor and 'href' in anchor.attrs:
+                link = anchor['href']
+                title = div.find('h3').text if div.find('h3') else ''
+                results.append((link, title))
             
             if len(results) >= num_results:
                 break
@@ -86,28 +83,19 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
 
     st.write("\n📊 Récupération des résultats Google...")
     
-    firefox_options = FirefoxOptions()
-    firefox_options.add_argument("--headless")
-    
-    try:
-        service = FirefoxService(GeckoDriverManager().install())
-        with webdriver.Firefox(service=service, options=firefox_options) as driver:
-            google_results = {}
-            for i, kw in enumerate(keywords):
-                results = get_google_results(driver, kw, delay_min=delay_min, delay_max=delay_max)
-                if results:
-                    google_results[kw] = results
-                else:
-                    st.write(f"Skipping keyword '{kw}' due to no results")
+    google_results = {}
+    for i, kw in enumerate(keywords):
+        results = get_google_results(kw, delay_min=delay_min, delay_max=delay_max)
+        if results:
+            google_results[kw] = results
+        else:
+            st.write(f"Skipping keyword '{kw}' due to no results")
 
-                elapsed_time = time.time() - start_time
-                estimated_time_remaining = (elapsed_time / (i + 1)) * (total_keywords - (i + 1))
-                
-                progress_bar.progress((i + 1) / total_keywords)
-                progress_text.text(f"Requêtes restantes: {total_keywords - (i + 1)}, Temps estimé restant: {int(estimated_time_remaining // 60)}m {int(estimated_time_remaining % 60)}s")
-    except Exception as e:
-        st.error(f"Erreur lors de l'initialisation du WebDriver: {str(e)}")
-        return None
+        elapsed_time = time.time() - start_time
+        estimated_time_remaining = (elapsed_time / (i + 1)) * (total_keywords - (i + 1))
+        
+        progress_bar.progress((i + 1) / total_keywords)
+        progress_text.text(f"Requêtes restantes: {total_keywords - (i + 1)}, Temps estimé restant: {int(estimated_time_remaining // 60)}m {int(estimated_time_remaining % 60)}s")
 
     st.write("\n🔍 Analyse de similarité...")
     similar_groups = []
