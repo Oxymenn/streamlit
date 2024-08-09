@@ -195,7 +195,7 @@ def app():
             st.session_state.exclude_classes = st.text_area("Classes HTML à exclure de l'analyse (une classe par ligne, optionnel)", st.session_state.exclude_classes)
             st.session_state.additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)", st.session_state.additional_stopwords)
 
-            if st.button("Exécuter l'analyse") or st.session_state.df_results is None:
+            if st.button("Exécuter l'analyse"):
                 include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
                 exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
