@@ -9,3 +9,5 @@ beautifulsoup4
 tqdm
 unidecode
 openai
+selenium
+webdriver
