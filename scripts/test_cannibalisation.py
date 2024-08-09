@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from webdriver_manager.firefox import GeckoDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -84,25 +86,28 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
 
     st.write("\n📊 Récupération des résultats Google...")
     
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    firefox_options = FirefoxOptions()
+    firefox_options.add_argument("--headless")
     
-    with webdriver.Chrome(options=chrome_options) as driver:
-        google_results = {}
-        for i, kw in enumerate(keywords):
-            results = get_google_results(driver, kw, delay_min=delay_min, delay_max=delay_max)
-            if results:
-                google_results[kw] = results
-            else:
-                st.write(f"Skipping keyword '{kw}' due to no results")
+    try:
+        service = FirefoxService(GeckoDriverManager().install())
+        with webdriver.Firefox(service=service, options=firefox_options) as driver:
+            google_results = {}
+            for i, kw in enumerate(keywords):
+                results = get_google_results(driver, kw, delay_min=delay_min, delay_max=delay_max)
+                if results:
+                    google_results[kw] = results
+                else:
+                    st.write(f"Skipping keyword '{kw}' due to no results")
 
-            elapsed_time = time.time() - start_time
-            estimated_time_remaining = (elapsed_time / (i + 1)) * (total_keywords - (i + 1))
-            
-            progress_bar.progress((i + 1) / total_keywords)
-            progress_text.text(f"Requêtes restantes: {total_keywords - (i + 1)}, Temps estimé restant: {int(estimated_time_remaining // 60)}m {int(estimated_time_remaining % 60)}s")
+                elapsed_time = time.time() - start_time
+                estimated_time_remaining = (elapsed_time / (i + 1)) * (total_keywords - (i + 1))
+                
+                progress_bar.progress((i + 1) / total_keywords)
+                progress_text.text(f"Requêtes restantes: {total_keywords - (i + 1)}, Temps estimé restant: {int(estimated_time_remaining // 60)}m {int(estimated_time_remaining % 60)}s")
+    except Exception as e:
+        st.error(f"Erreur lors de l'initialisation du WebDriver: {str(e)}")
+        return None
 
     st.write("\n🔍 Analyse de similarité...")
     similar_groups = []
@@ -185,15 +190,18 @@ def app():
         if st.button("Exécuter l'analyse"):
             result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, delay_range[0], delay_range[1])
             
-            st.write("Résultats de l'analyse:")
-            st.dataframe(result_df)
+            if result_df is not None:
+                st.write("Résultats de l'analyse:")
+                st.dataframe(result_df)
 
-            st.download_button(
-                label="Télécharger le fichier de résultats",
-                data=result_df.to_csv(index=False).encode('utf-8'),
-                file_name="resultat_similarite.csv",
-                mime="text/csv"
-            )
+                st.download_button(
+                    label="Télécharger le fichier de résultats",
+                    data=result_df.to_csv(index=False).encode('utf-8'),
+                    file_name="resultat_similarite.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.error("L'analyse n'a pas pu être complétée en raison d'erreurs.")
 
 if __name__ == "__main__":
     app()
