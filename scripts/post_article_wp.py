@@ -3,7 +3,10 @@ import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import urlparse, urlunparse
 import concurrent.futures
-import openai
+from openai import OpenAI
+
+# Configuration OpenAI
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
 def app():
     st.title("Générer et publier un article sur plusieurs sites WordPress")
@@ -14,9 +17,6 @@ def app():
         {"name": "Site 2", "key": "wordpress2"},
         # Ajoutez autant de sites que nécessaire
     ]
-
-    # Configuration OpenAI
-    openai.api_key = st.secrets["openai"]["api_key"]
 
     def get_site_config(site_key):
         try:
@@ -52,14 +52,14 @@ def app():
 
     def generate_article(prompt, keyword):
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
+            response = client.chat.completions.create(
+                model="gpt-4o-mini-2024-07-18",
                 messages=[
                     {"role": "system", "content": "Vous êtes un rédacteur web expert en SEO."},
                     {"role": "user", "content": f"{prompt} Le mot-clé principal est : {keyword}"}
                 ]
             )
-            return response.choices[0].message['content']
+            return response.choices[0].message.content
         except Exception as e:
             raise Exception(f"Erreur lors de la génération de l'article : {str(e)}")
 
@@ -94,6 +94,7 @@ def app():
                             st.success(result)
                         else:
                             st.error(result)
+
             except Exception as e:
                 st.error(str(e))
 
