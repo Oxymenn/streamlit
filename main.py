@@ -5,6 +5,7 @@ from scripts import similarite_cosinus
 from scripts import cannibalisation_serp
 from scripts import test_cannibalisation
 from scripts import images_bulk
+from scripts import post_article_wp
 
 # Configuration des pages
 PAGES = {
@@ -13,7 +14,8 @@ PAGES = {
     "Similarité Cosinus": similarite_cosinus,
     "Cannibalisation SERP": cannibalisation_serp,
     "Test Cannibalisation": test_cannibalisation,
-    "Images Bulk": images_bulk
+    "Images Bulk": images_bulk,
+    "Images Bulk": post_article_wp
 }
 
 # Titre principal
