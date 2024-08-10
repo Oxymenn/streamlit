@@ -1,21 +1,22 @@
 import streamlit as st
 import requests
 from requests.auth import HTTPBasicAuth
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 def app():
     st.title("Publier un article sur WordPress")
 
     try:
-        # Récupération et nettoyage de l'URL
-        wp_url = st.secrets["wordpress"]["url"].rstrip('/').rstrip('/xmlrpc.php')
+        # Récupération de l'URL brute depuis les secrets
+        raw_url = st.secrets["wordpress"]["url"]
         wp_username = st.secrets["wordpress"]["username"]
         wp_password = st.secrets["wordpress"]["password"]
         
-        # Vérification et correction de l'URL
-        parsed_url = urlparse(wp_url)
-        if not parsed_url.scheme:
-            wp_url = "https://" + wp_url
+        # Parsing et reconstruction de l'URL
+        parsed_url = urlparse(raw_url)
+        scheme = parsed_url.scheme if parsed_url.scheme else 'https'
+        netloc = parsed_url.netloc if parsed_url.netloc else parsed_url.path
+        wp_url = urlunparse((scheme, netloc, '', '', '', ''))
         
         st.write(f"URL utilisée : {wp_url}")  # Pour le débogage
     except KeyError:
@@ -33,7 +34,7 @@ def app():
         }
         try:
             response = requests.post(api_url, json=data, headers=headers, auth=auth)
-            response.raise_for_status()  # Lève une exception pour les codes d'état HTTP d'erreur
+            response.raise_for_status()
             return response.json()['id']
         except requests.exceptions.RequestException as e:
             raise Exception(f"Erreur lors de la publication : {str(e)}")
