@@ -15,7 +15,7 @@ PAGES = {
     "Cannibalisation SERP": cannibalisation_serp,
     "Test Cannibalisation": test_cannibalisation,
     "Images Bulk": images_bulk,
-    "Images Bulk": post_article_wp
+    "Post Article WP": post_article_wp
 }
 
 # Titre principal
