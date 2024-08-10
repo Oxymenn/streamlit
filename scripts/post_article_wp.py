@@ -4,6 +4,7 @@ from requests.auth import HTTPBasicAuth
 from urllib.parse import urlparse, urlunparse
 import concurrent.futures
 from openai import OpenAI
+import re
 
 # Configuration OpenAI
 client = OpenAI(api_key=st.secrets["openai"]["api_key"])
@@ -47,57 +48,59 @@ def publish_post_rest(site_config, title, content):
     except requests.exceptions.RequestException as e:
         raise Exception(f"Erreur lors de la publication sur {site_config['url']}: {str(e)}")
 
-def generate_article(prompt, keyword):
+def generate_article(prompt, keyword, site_name):
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini-2024-07-18",
             messages=[
                 {"role": "system", "content": "Vous êtes un rédacteur web expert en SEO."},
-                {"role": "user", "content": f"{prompt} Le mot-clé principal est : {keyword}"}
+                {"role": "user", "content": f"Écrivez un article unique pour le site {site_name}. {prompt} Le mot-clé principal est : {keyword}. Commencez l'article par un titre H1 pertinent."}
             ]
         )
         return response.choices[0].message.content
     except Exception as e:
         raise Exception(f"Erreur lors de la génération de l'article : {str(e)}")
 
+def extract_title(content):
+    match = re.search(r'<h1>(.*?)</h1>', content, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    else:
+        return "Article généré"  # Titre par défaut si aucun H1 n'est trouvé
+
 def app():
-    st.title("Générer et publier un article sur plusieurs sites WordPress")
+    st.title("Générer et publier des articles uniques sur plusieurs sites WordPress")
 
-    if 'article_content' not in st.session_state:
-        st.session_state.article_content = None
+    prompt = st.text_area("Entrez votre prompt pour générer les articles")
+    keyword = st.text_input("Entrez le mot-clé principal des articles")
 
-    prompt = st.text_area("Entrez votre prompt pour générer l'article")
-    keyword = st.text_input("Entrez le mot-clé principal de l'article")
-
-    if st.button("Générer l'article"):
+    if st.button("Générer et publier les articles"):
         if not prompt or not keyword:
             st.error("Veuillez entrer un prompt et un mot-clé.")
         else:
-            try:
-                with st.spinner("Génération de l'article en cours..."):
-                    st.session_state.article_content = generate_article(prompt, keyword)
-                st.success("Article généré avec succès!")
-                st.write("Aperçu de l'article :")
-                st.write(st.session_state.article_content[:500] + "...")  # Affiche les 500 premiers caractères
-            except Exception as e:
-                st.error(str(e))
-
-    if st.session_state.article_content and st.button("Publier l'article généré sur tous les sites"):
-        results = []
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_to_site = {executor.submit(publish_post_rest, get_site_config(site["key"]), f"Article sur {keyword}", st.session_state.article_content): site["name"] for site in sites if get_site_config(site["key"])}
-            for future in concurrent.futures.as_completed(future_to_site):
-                site_name = future_to_site[future]
-                try:
-                    post_id = future.result()
-                    results.append(f"Article publié avec succès sur {site_name}! ID: {post_id}")
-                except Exception as exc:
-                    results.append(f"Erreur lors de la publication sur {site_name}: {str(exc)}")
-        
-        for result in results:
-            if "succès" in result:
-                st.success(result)
-            else:
-                st.error(result)
+            results = []
+            for site in sites:
+                site_config = get_site_config(site["key"])
+                if site_config:
+                    try:
+                        with st.spinner(f"Génération et publication de l'article pour {site['name']}..."):
+                            article_content = generate_article(prompt, keyword, site['name'])
+                            title = extract_title(article_content)
+                            post_id = publish_post_rest(site_config, title, article_content)
+                            results.append(f"Article publié avec succès sur {site['name']}! ID: {post_id}")
+                            st.success(f"Article pour {site['name']} généré et publié avec succès!")
+                            st.write(f"Titre : {title}")
+                            st.write("Aperçu de l'article :")
+                            st.write(article_content[:500] + "...")  # Affiche les 500 premiers caractères
+                    except Exception as e:
+                        results.append(f"Erreur pour {site['name']}: {str(e)}")
+                        st.error(f"Erreur lors de la génération ou de la publication pour {site['name']}: {str(e)}")
+            
+            st.subheader("Résumé des publications")
+            for result in results:
+                if "succès" in result:
+                    st.success(result)
+                else:
+                    st.error(result)
 
     # Ajoutez ici toute autre fonctionnalité existante de post_article_wp.py si nécessaire
