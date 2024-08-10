@@ -7,7 +7,8 @@ def app():
     st.title("Publier un article sur WordPress")
 
     try:
-        wp_url = st.secrets["wordpress"]["url"].rstrip('/xmlrpc.php')
+        # Récupération et nettoyage de l'URL
+        wp_url = st.secrets["wordpress"]["url"].rstrip('/').rstrip('/xmlrpc.php')
         wp_username = st.secrets["wordpress"]["username"]
         wp_password = st.secrets["wordpress"]["password"]
         
@@ -15,8 +16,6 @@ def app():
         parsed_url = urlparse(wp_url)
         if not parsed_url.scheme:
             wp_url = "https://" + wp_url
-        if not wp_url.endswith('.fr'):
-            wp_url += '.fr'
         
         st.write(f"URL utilisée : {wp_url}")  # Pour le débogage
     except KeyError:
@@ -32,11 +31,12 @@ def app():
             'content': content,
             'status': 'publish'
         }
-        response = requests.post(api_url, json=data, headers=headers, auth=auth)
-        if response.status_code == 201:
+        try:
+            response = requests.post(api_url, json=data, headers=headers, auth=auth)
+            response.raise_for_status()  # Lève une exception pour les codes d'état HTTP d'erreur
             return response.json()['id']
-        else:
-            raise Exception(f"Erreur HTTP {response.status_code}: {response.text}")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Erreur lors de la publication : {str(e)}")
 
     title = st.text_input("Titre de l'article")
     content = st.text_area("Contenu de l'article")
@@ -46,7 +46,7 @@ def app():
             post_id = publish_post_rest(title, content)
             st.success(f"Article publié avec succès via l'API REST! ID: {post_id}")
         except Exception as e:
-            st.error(f"Erreur lors de la publication : {str(e)}")
+            st.error(str(e))
 
 if __name__ == "__main__":
     app()
