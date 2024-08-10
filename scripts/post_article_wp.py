@@ -60,7 +60,7 @@ def generate_article(prompt, keyword):
     except Exception as e:
         raise Exception(f"Erreur lors de la génération de l'article : {str(e)}")
 
-def main():
+def app():
     st.title("Générer et publier un article sur plusieurs sites WordPress")
 
     if 'article_content' not in st.session_state:
@@ -100,5 +100,4 @@ def main():
             else:
                 st.error(result)
 
-if __name__ == "__main__":
-    main()
+    # Ajoutez ici toute autre fonctionnalité existante de post_article_wp.py si nécessaire
