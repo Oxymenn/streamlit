@@ -1,10 +1,11 @@
 import streamlit as st
-import requests
-from requests.auth import HTTPBasicAuth
+from wordpress_xmlrpc import Client, WordPressPost
+from wordpress_xmlrpc.methods.posts import NewPost
 
 def app():
     st.title("Publier un article sur WordPress")
 
+    # Récupération des secrets avec gestion d'erreur
     try:
         wp_url = st.secrets["wordpress"]["url"]
         wp_username = st.secrets["wordpress"]["username"]
@@ -14,29 +15,23 @@ def app():
         return
 
     def publish_post(title, content):
-        api_url = f"{wp_url}/wp-json/wp/v2/posts"
-        auth = HTTPBasicAuth(wp_username, wp_password)
-        headers = {'Content-Type': 'application/json'}
-        data = {
-            'title': title,
-            'content': content,
-            'status': 'publish'
-        }
-        response = requests.post(api_url, json=data, headers=headers, auth=auth)
-        if response.status_code == 201:
-            return True
-        else:
-            raise Exception(f"Erreur HTTP {response.status_code}: {response.text}")
+        client = Client(wp_url, wp_username, wp_password)
+        post = WordPressPost()
+        post.title = title
+        post.content = content
+        post.post_status = 'publish'
+        client.call(NewPost(post))
 
     title = st.text_input("Titre de l'article")
     content = st.text_area("Contenu de l'article")
 
     if st.button("Publier"):
         try:
-            if publish_post(title, content):
-                st.success("Article publié avec succès!")
+            publish_post(title, content)
+            st.success("Article publié avec succès!")
         except Exception as e:
             st.error(f"Erreur lors de la publication : {str(e)}")
 
+# Si vous voulez pouvoir exécuter ce script individuellement aussi
 if __name__ == "__main__":
     app()
