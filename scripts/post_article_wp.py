@@ -4,7 +4,6 @@ from requests.auth import HTTPBasicAuth
 from urllib.parse import urlparse, urlunparse
 import concurrent.futures
 from openai import OpenAI
-import re
 
 # Configuration OpenAI
 client = OpenAI(api_key=st.secrets["openai"]["api_key"])
@@ -54,19 +53,12 @@ def generate_article(prompt, keyword, site_name):
             model="gpt-4o-mini-2024-07-18",
             messages=[
                 {"role": "system", "content": "Vous êtes un rédacteur web expert en SEO."},
-                {"role": "user", "content": f"Écrivez un article unique pour le site {site_name}. {prompt} Le mot-clé principal est : {keyword}. Commencez l'article par un titre H1 pertinent."}
+                {"role": "user", "content": f"Écrivez un article unique pour le site {site_name}. {prompt} Le mot-clé principal est : {keyword}."}
             ]
         )
         return response.choices[0].message.content
     except Exception as e:
         raise Exception(f"Erreur lors de la génération de l'article : {str(e)}")
-
-def extract_title(content):
-    match = re.search(r'<h1>(.*?)</h1>', content, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    else:
-        return "Article généré"  # Titre par défaut si aucun H1 n'est trouvé
 
 def app():
     st.title("Générer et publier des articles sur différents mots-clés")
@@ -87,7 +79,7 @@ def app():
                     try:
                         with st.spinner(f"Génération et publication de l'article pour le mot-clé '{keyword}' sur {site['name']}..."):
                             article_content = generate_article(prompt, keyword, site['name'])
-                            title = extract_title(article_content)
+                            title = f"Article sur {keyword}"  # Titre basé sur le mot-clé
                             post_id = publish_post_rest(site_config, title, article_content)
                             results.append(f"Article sur '{keyword}' publié avec succès sur {site['name']}! ID: {post_id}")
                             st.success(f"Article sur '{keyword}' pour {site['name']} généré et publié avec succès!")
@@ -112,3 +104,6 @@ def app():
                 st.warning(f"Attention : {len(keyword_list) - len(sites)} mot(s)-clé(s) n'ont pas été utilisés car il n'y a pas assez de sites configurés.")
 
     # Ajoutez ici toute autre fonctionnalité existante de post_article_wp.py si nécessaire
+
+if __name__ == "__main__":
+    app()
