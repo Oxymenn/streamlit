@@ -36,8 +36,8 @@ def normalize_keyword(keyword):
     # Supprimer les stopwords
     words = [word for word in keyword.split() if word not in STOPWORDS]
     
-    # Supprimer les 's' à la fin des mots pour gérer singulier/pluriel
-    words = [word[:-1] if word.endswith('s') and len(word) > 3 else word for word in words]
+    # Supprimer les terminaisons en 'e', 's', 'es' pour gérer le genre et le nombre
+    words = [re.sub(r'e?s?$', '', word) if len(word) > 3 else word for word in words]
     
     # Trier les mots pour gérer l'ordre différent
     return ' '.join(sorted(words))
