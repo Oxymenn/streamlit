@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from unidecode import unidecode
 
-# Liste de stopwords français
+# Liste de stopwords français (inchangée)
 STOPWORDS = set([
     'le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'a', 'à', 'au', 'aux',
     'et', 'ou', 'mais', 'donc', 'car', 'ni', 'or', 'que', 'qui', 'quoi', 'dont', 'où',
@@ -86,12 +86,16 @@ def app():
         if st.button("Traiter"):
             unique_keywords = process_keywords(st.session_state.df, keyword_column, volume_column)
             
+            # Créer un nouveau DataFrame avec les résultats uniques
             unique_df = pd.DataFrame(unique_keywords, columns=['Mot-clé unique', 'Volume unique'])
             unique_df = unique_df.sort_values('Volume unique', ascending=False)
             
-            st.session_state.df['Mot-clé unique'] = ''
-            st.session_state.df['Volume unique'] = 0
+            # Ajouter les colonnes de résultats au DataFrame original
+            st.session_state.df = pd.concat([st.session_state.df, 
+                                             pd.DataFrame(columns=['Mot-clé unique', 'Volume unique'])], 
+                                            axis=1)
             
+            # Remplir les nouvelles colonnes avec les résultats uniques
             st.session_state.df.loc[:len(unique_df)-1, 'Mot-clé unique'] = unique_df['Mot-clé unique'].values
             st.session_state.df.loc[:len(unique_df)-1, 'Volume unique'] = unique_df['Volume unique'].values
             
