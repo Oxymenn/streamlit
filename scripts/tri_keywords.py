@@ -1,93 +1,77 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import re
-from unidecode import unidecode
-from nltk.stem.snowball import FrenchStemmer
-from nltk.corpus import stopwords
-import nltk
+from collections import Counter
 
-# Télécharger les ressources NLTK nécessaires
-nltk.download('stopwords')
+# Liste de stopwords français
+STOPWORDS = set([
+    'le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'de', 'a', 'à', 'au', 'aux',
+    'et', 'ou', 'mais', 'donc', 'car', 'ni', 'or', 'que', 'qui', 'quoi', 'dont', 'où',
+    'ce', 'cet', 'cette', 'ces', 'mon', 'ton', 'son', 'notre', 'votre', 'leur',
+    'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles', 'me', 'te', 'se', 'lui',
+    'en', 'y', 'pour', 'par', 'avec', 'sans', 'sous', 'sur', 'dans', 'entre', 'vers',
+    'chez', 'hors', 'de', 'avant', 'après', 'pendant', 'depuis', 'durant',
+    'être', 'avoir', 'faire', 'dire', 'aller', 'voir', 'venir', 'devoir', 'pouvoir',
+    'vouloir', 'falloir', 'savoir',
+    'tout', 'tous', 'toute', 'toutes', 'aucun', 'aucune', 'autre', 'autres',
+    'même', 'mêmes', 'tel', 'telle', 'tels', 'telles',
+    'peu', 'plupart', 'beaucoup', 'plus', 'moins', 'très', 'assez', 'trop',
+    'comment', 'pourquoi', 'quand', 'si', 'ne', 'pas', 'plus', 'jamais', 'toujours',
+    'ici', 'là', 'voici', 'voilà', 'alors', 'ainsi', 'comme', 'bien', 'mal',
+    'oui', 'non', 'peut-être',
+    # Ajoutez d'autres stopwords si nécessaire
+])
 
-# Initialiser le stemmer français et la liste des stopwords
-stemmer = FrenchStemmer()
-stop_words = set(stopwords.words('french'))
+def remove_stopwords(text):
+    return ' '.join([word for word in text.lower().split() if word not in STOPWORDS])
 
-def preprocess_keyword(keyword):
-    # Convertir en minuscules et supprimer les accents
-    keyword = unidecode(keyword.lower())
+def clean_text(text):
+    # Convertir en minuscules
+    text = text.lower()
     # Supprimer la ponctuation
-    keyword = re.sub(r'[^\w\s]', '', keyword)
+    text = re.sub(r'[^\w\s]', '', text)
+    # Supprimer les chiffres
+    text = re.sub(r'\d+', '', text)
+    # Supprimer les espaces multiples
+    text = re.sub(r'\s+', ' ', text).strip()
     # Supprimer les stopwords
-    keyword = ' '.join([word for word in keyword.split() if word not in stop_words])
-    # Appliquer le stemming
-    keyword = ' '.join([stemmer.stem(word) for word in keyword.split()])
-    # Trier les mots
-    keyword = ' '.join(sorted(keyword.split()))
-    return keyword
+    text = remove_stopwords(text)
+    return text
 
-def clean_keywords(df):
-    # Créer une copie du DataFrame
-    df_cleaned = df.copy()
-    
-    # Prétraiter les mots-clés
-    df_cleaned['cleaned_keyword'] = df_cleaned['keyword'].apply(preprocess_keyword)
-    
-    # Grouper par mot-clé nettoyé et garder celui avec le volume le plus élevé
-    df_cleaned = df_cleaned.loc[df_cleaned.groupby('cleaned_keyword')['volume'].idxmax()]
-    
-    # Trier par volume décroissant
-    df_cleaned = df_cleaned.sort_values('volume', ascending=False)
-    
-    return df_cleaned
+def app():
+    st.title("Tri et Nettoyage de mots-clés")
 
-# Interface utilisateur Streamlit
-st.title("Nettoyage de mots-clés")
+    uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        
+        # Sélection de la colonne contenant les mots-clés
+        column = st.selectbox("Sélectionnez la colonne contenant les mots-clés", df.columns)
+        
+        if st.button("Traiter"):
+            # Nettoyage des mots-clés
+            df['cleaned_keywords'] = df[column].apply(clean_text)
+            
+            # Comptage des mots
+            all_words = ' '.join(df['cleaned_keywords']).split()
+            word_counts = Counter(all_words)
+            
+            # Création d'un nouveau DataFrame avec les mots et leur fréquence
+            word_freq_df = pd.DataFrame(word_counts.items(), columns=['Mot', 'Fréquence'])
+            word_freq_df = word_freq_df.sort_values('Fréquence', ascending=False)
+            
+            # Affichage des résultats
+            st.write("Mots-clés les plus fréquents :")
+            st.dataframe(word_freq_df)
+            
+            # Option de téléchargement
+            csv = word_freq_df.to_csv(index=False)
+            st.download_button(
+                label="Télécharger les résultats en CSV",
+                data=csv,
+                file_name="mots_cles_frequents.csv",
+                mime="text/csv",
+            )
 
-# Upload du fichier CSV
-uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
-
-if uploaded_file is not None:
-    # Lire le fichier CSV
-    df = pd.read_csv(uploaded_file)
-    
-    # Afficher les premières lignes du DataFrame original
-    st.subheader("Données originales")
-    st.write(df.head())
-    
-    # Sélection des colonnes
-    keyword_col = st.selectbox("Sélectionnez la colonne des mots-clés", df.columns)
-    volume_col = st.selectbox("Sélectionnez la colonne des volumes", df.columns)
-    
-    # Options de nettoyage
-    st.subheader("Options de nettoyage")
-    remove_accents = st.checkbox("Supprimer les accents", value=True)
-    remove_plurals = st.checkbox("Supprimer les pluriels", value=True)
-    ignore_word_order = st.checkbox("Ignorer l'ordre des mots", value=True)
-    remove_stopwords = st.checkbox("Supprimer les stopwords", value=True)
-    
-    if st.button("Nettoyer les mots-clés"):
-        # Renommer les colonnes
-        df = df.rename(columns={keyword_col: 'keyword', volume_col: 'volume'})
-        
-        # Appliquer le nettoyage
-        df_cleaned = clean_keywords(df)
-        
-        # Afficher les résultats
-        st.subheader("Résultats du nettoyage")
-        st.write(f"Nombre de mots-clés originaux : {len(df)}")
-        st.write(f"Nombre de mots-clés après nettoyage : {len(df_cleaned)}")
-        
-        # Afficher les mots-clés nettoyés
-        st.subheader("Mots-clés nettoyés")
-        st.write(df_cleaned[['keyword', 'volume', 'cleaned_keyword']])
-        
-        # Téléchargement du fichier CSV nettoyé
-        csv = df_cleaned.to_csv(index=False)
-        st.download_button(
-            label="Télécharger les résultats en CSV",
-            data=csv,
-            file_name="mots_cles_nettoyes.csv",
-            mime="text/csv",
-        )
+if __name__ == "__main__":
+    app()
