@@ -72,6 +72,8 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
     keywords = df[keyword_column].tolist()
     volumes = df[volume_column].tolist()
     
+    st.write(f"Nombre total de mots-clés : {len(keywords)}")
+    
     result_data = []
     
     for i, (kw1, vol1) in enumerate(zip(keywords, volumes)):
@@ -80,12 +82,14 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
         for j, (kw2, vol2) in enumerate(zip(keywords, volumes)):
             if i != j:
                 if are_keywords_similar(kw1, kw2):
+                    st.write(f"  Comparaison avec : {kw2}")
                     results1 = get_valueserp_results(kw1, api_key)
                     results2 = get_valueserp_results(kw2, api_key)
                     if not results1 or not results2:
-                        st.warning(f"Impossible d'obtenir les résultats SERP pour '{kw1}' ou '{kw2}'")
+                        st.warning(f"  Impossible d'obtenir les résultats SERP pour '{kw1}' ou '{kw2}'")
                         continue
                     serp_similarity = calculate_serp_similarity(results1, results2)
+                    st.write(f"  Similarité SERP : {serp_similarity}")
                     
                     if serp_similarity >= serp_similarity_threshold:
                         similar_keywords.append({
@@ -101,6 +105,7 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
                 'similar_keywords': similar_keywords
             })
     
+    st.write(f"Nombre de résultats : {len(result_data)}")
     return pd.DataFrame(result_data)
 
 def app():
@@ -140,19 +145,22 @@ def app():
                 with st.spinner("Analyse en cours..."):
                     result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, api_key)
                 
-                if result_df is not None and not result_df.empty:
-                    st.success("Analyse terminée avec succès!")
-                    st.write("Résultats de l'analyse:")
-                    st.dataframe(result_df)
+                if result_df is not None:
+                    if not result_df.empty:
+                        st.success("Analyse terminée avec succès!")
+                        st.write("Résultats de l'analyse:")
+                        st.dataframe(result_df)
 
-                    st.download_button(
-                        label="Télécharger le fichier de résultats",
-                        data=result_df.to_csv(index=False).encode('utf-8'),
-                        file_name="resultat_similarite.csv",
-                        mime="text/csv"
-                    )
+                        st.download_button(
+                            label="Télécharger le fichier de résultats",
+                            data=result_df.to_csv(index=False).encode('utf-8'),
+                            file_name="resultat_similarite.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.warning("L'analyse n'a trouvé aucun mot-clé similaire selon les critères définis.")
                 else:
-                    st.error("L'analyse n'a pas produit de résultats. Veuillez vérifier vos données d'entrée et votre clé API.")
+                    st.error("Une erreur s'est produite lors de l'analyse. Veuillez vérifier vos données d'entrée et votre clé API.")
         except Exception as e:
             st.error(f"Une erreur s'est produite lors de l'analyse : {str(e)}")
             st.error(f"Détails de l'erreur : {traceback.format_exc()}")
