@@ -75,6 +75,21 @@ def publish_post_rest(site_config, title, content, image_url):
     except requests.exceptions.RequestException as e:
         raise Exception(f"Erreur lors de la publication sur {site_config['url']}: {str(e)}")
 
+def generate_seo_title(keyword):
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini-2024-07-18",
+            messages=[
+                {"role": "system", "content": "Vous êtes un expert en SEO."},
+                {"role": "user", "content": f"Générez un titre SEO optimisé en français pour un article basé sur le mot-clé '{keyword}'. Le titre doit inclure le mot-clé, être accrocheur, et faire maximum 70 caractères."}
+            ]
+        )
+        title = response.choices[0].message.content.strip()
+        # Assurez-vous que le titre ne dépasse pas 70 caractères
+        return title[:70]
+    except Exception as e:
+        raise Exception(f"Erreur lors de la génération du titre SEO : {str(e)}")
+
 def generate_article(prompt, keyword, site_name):
     try:
         response = client.chat.completions.create(
@@ -119,8 +134,8 @@ def app():
                 if site_config:
                     try:
                         with st.spinner(f"Génération et publication de l'article pour le mot-clé '{keyword}' sur {site['name']}..."):
+                            title = generate_seo_title(keyword)
                             article_content = generate_article(prompt, keyword, site['name'])
-                            title = keyword  # Le titre est directement le mot-clé
                             image_url = generate_image(title)
                             post_id = publish_post_rest(site_config, title, article_content, image_url)
                             results.append(f"Article '{title}' publié avec succès sur {site['name']}! ID: {post_id}")
@@ -130,8 +145,8 @@ def app():
                             st.write(article_content[:500] + "...")
                             st.image(image_url, caption=f"Image générée pour l'article : {title}")
                     except Exception as e:
-                        results.append(f"Erreur pour l'article '{title}' sur {site['name']}: {str(e)}")
-                        st.error(f"Erreur lors de la génération ou de la publication pour '{title}' sur {site['name']}: {str(e)}")
+                        results.append(f"Erreur pour l'article basé sur '{keyword}' sur {site['name']}: {str(e)}")
+                        st.error(f"Erreur lors de la génération ou de la publication pour '{keyword}' sur {site['name']}: {str(e)}")
                 
                 if i + 1 >= len(sites):
                     break
