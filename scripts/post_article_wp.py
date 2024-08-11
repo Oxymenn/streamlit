@@ -88,34 +88,29 @@ def generate_article(prompt, keyword, site_name):
     except Exception as e:
         raise Exception(f"Erreur lors de la génération de l'article : {str(e)}")
 
-def generate_image_variation(base_image_path):
+def generate_image(title):
     try:
-        with open(base_image_path, "rb") as image_file:
-            response = client.images.create_variation(
-                model="dall-e-2",
-                image=image_file,
-                n=1,
-                size="1024x1024"
-            )
+        response = client.images.generate(
+            model="dall-e-2",
+            prompt=f"Génère moi une image réaliste pour l'article {title}",
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
         return response.data[0].url
     except Exception as e:
-        raise Exception(f"Erreur lors de la génération de la variation d'image : {str(e)}")
+        raise Exception(f"Erreur lors de la génération de l'image : {str(e)}")
 
 def app():
     st.title("Générer et publier des articles sur différents mots-clés avec images")
 
     prompt = st.text_area("Entrez votre prompt général pour générer les articles")
     keywords = st.text_area("Entrez les mots-clés (un par ligne)")
-    base_image = st.file_uploader("Téléchargez une image de base pour les variations", type=['png', 'jpg', 'jpeg'])
 
     if st.button("Générer et publier les articles"):
-        if not prompt or not keywords or not base_image:
-            st.error("Veuillez entrer un prompt, au moins un mot-clé, et télécharger une image de base.")
+        if not prompt or not keywords:
+            st.error("Veuillez entrer un prompt et au moins un mot-clé.")
         else:
-            # Sauvegarder l'image de base temporairement
-            with open("base_image.png", "wb") as f:
-                f.write(base_image.getbuffer())
-
             keyword_list = [kw.strip() for kw in keywords.split('\n') if kw.strip()]
             results = []
 
@@ -126,7 +121,7 @@ def app():
                         with st.spinner(f"Génération et publication de l'article pour le mot-clé '{keyword}' sur {site['name']}..."):
                             article_content = generate_article(prompt, keyword, site['name'])
                             title = keyword  # Le titre est directement le mot-clé
-                            image_url = generate_image_variation("base_image.png")
+                            image_url = generate_image(title)
                             post_id = publish_post_rest(site_config, title, article_content, image_url)
                             results.append(f"Article '{title}' publié avec succès sur {site['name']}! ID: {post_id}")
                             st.success(f"Article '{title}' pour {site['name']} généré et publié avec succès!")
@@ -150,10 +145,6 @@ def app():
 
             if len(keyword_list) > len(sites):
                 st.warning(f"Attention : {len(keyword_list) - len(sites)} mot(s)-clé(s) n'ont pas été utilisés car il n'y a pas assez de sites configurés.")
-
-            # Suppression de l'image de base temporaire
-            import os
-            os.remove("base_image.png")
 
 if __name__ == "__main__":
     app()
