@@ -4,11 +4,7 @@ import numpy as np
 from collections import Counter
 from unidecode import unidecode
 import re
-import time
-import random
 import requests
-import json
-import os
 
 STOPWORDS = set(['de', 'à', 'pour', 'du', 'le', 'la', 'les', 'un', 'une', 'des', 'en', 'et'])
 
@@ -17,27 +13,7 @@ def preprocess_keyword(keyword):
     keyword = re.sub(r'[^\w\s]', '', keyword)
     return ' '.join([word for word in keyword.split() if word not in STOPWORDS])
 
-def get_api_key():
-    try:
-        api_key = st.secrets.get("valueserp_api_key")
-    except Exception as e:
-        st.error(f"Erreur lors de l'accès à st.secrets: {e}")
-        api_key = None
-    
-    if not api_key:
-        api_key = os.environ.get("VALUESERP_API_KEY")
-    
-    if not api_key:
-        api_key = st.text_input("Veuillez entrer votre clé API ValueSERP:", type="password")
-    
-    if not api_key:
-        st.error("Aucune clé API ValueSERP n'a été fournie. L'application ne peut pas fonctionner sans cette clé.")
-        st.stop()
-    
-    return api_key
-
-def get_valueserp_results(keyword, num_results=10):
-    api_key = get_api_key()
+def get_valueserp_results(keyword, api_key, num_results=10):
     url = "https://api.valueserp.com/search"
     params = {
         'api_key': api_key,
@@ -91,7 +67,7 @@ def are_keywords_similar(kw1, kw2):
 
     return jaccard_similarity > 0.8
 
-def process_keywords(df, keyword_column, volume_column, serp_similarity_threshold=0.4):
+def process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, api_key):
     keywords = df[keyword_column].tolist()
     volumes = df[volume_column].tolist()
     
@@ -102,8 +78,8 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
         for j, (kw2, vol2) in enumerate(zip(keywords, volumes)):
             if i != j:
                 if are_keywords_similar(kw1, kw2):
-                    results1 = get_valueserp_results(kw1)
-                    results2 = get_valueserp_results(kw2)
+                    results1 = get_valueserp_results(kw1, api_key)
+                    results2 = get_valueserp_results(kw2, api_key)
                     serp_similarity = calculate_serp_similarity(results1, results2)
                     
                     if serp_similarity >= serp_similarity_threshold:
@@ -125,9 +101,10 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
 def app():
     st.title("Analyse de cannibalisation de mots-clés SERP")
 
-    api_key = get_api_key()
+    api_key = st.text_input("Veuillez entrer votre clé API ValueSERP:", type="password")
+
     if not api_key:
-        st.error("Une clé API ValueSERP valide est requise pour continuer.")
+        st.warning("Une clé API ValueSERP est requise pour continuer.")
         st.stop()
 
     uploaded_file = st.file_uploader("Importer un fichier Excel ou CSV", type=["xlsx", "csv"])
@@ -154,7 +131,7 @@ def app():
         st.dataframe(df.head())
 
         if st.button("Exécuter l'analyse"):
-            result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold)
+            result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, api_key)
             
             if result_df is not None and not result_df.empty:
                 st.write("Résultats de l'analyse:")
