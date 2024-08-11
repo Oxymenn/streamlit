@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 from collections import defaultdict
+from unidecode import unidecode
 
 # Liste de stopwords français
 STOPWORDS = set([
@@ -25,16 +26,26 @@ def remove_stopwords(text):
     return ' '.join([word for word in text.lower().split() if word not in STOPWORDS])
 
 def clean_text(text):
-    text = text.lower()
+    text = unidecode(text.lower())
     text = re.sub(r'[^\w\s]', '', text)
     text = re.sub(r'\d+', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     text = remove_stopwords(text)
     return text
 
+def normalize_keyword(keyword):
+    # Supprimer les 's' à la fin des mots pour gérer singulier/pluriel
+    words = keyword.split()
+    normalized = []
+    for word in words:
+        if word.endswith('s') and len(word) > 3:
+            word = word[:-1]
+        normalized.append(word)
+    return ' '.join(normalized)
+
 def are_similar(kw1, kw2, threshold=0.8):
-    set1 = set(kw1.split())
-    set2 = set(kw2.split())
+    set1 = set(normalize_keyword(kw1).split())
+    set2 = set(normalize_keyword(kw2).split())
     intersection = set1.intersection(set2)
     return len(intersection) / max(len(set1), len(set2)) >= threshold
 
@@ -61,7 +72,7 @@ def app():
                 volume = row[volume_column]
                 
                 similar_found = False
-                for key in keyword_dict:
+                for key in list(keyword_dict.keys()):  # Utiliser une liste pour éviter l'erreur de modification pendant l'itération
                     if are_similar(cleaned_kw, key):
                         if volume > keyword_dict[key]['volume']:
                             keyword_dict[key] = {'keyword': row[keyword_column], 'volume': volume}
@@ -71,20 +82,28 @@ def app():
                 if not similar_found:
                     keyword_dict[cleaned_kw] = {'keyword': row[keyword_column], 'volume': volume}
             
-            # Création d'un nouveau DataFrame avec les mots-clés uniques
-            unique_keywords = pd.DataFrame.from_dict(keyword_dict, orient='index')
-            unique_keywords = unique_keywords.reset_index(drop=True)
-            
+            # Ajout des nouvelles colonnes au DataFrame original
+            df['Mot-clé unique'] = df[keyword_column]
+            df['Volume associé'] = df[volume_column]
+
+            for index, row in df.iterrows():
+                cleaned_kw = row['cleaned_keywords']
+                for key, value in keyword_dict.items():
+                    if are_similar(cleaned_kw, key):
+                        df.at[index, 'Mot-clé unique'] = value['keyword']
+                        df.at[index, 'Volume associé'] = value['volume']
+                        break
+
             # Affichage des résultats
-            st.write("Mots-clés uniques après nettoyage :")
-            st.dataframe(unique_keywords)
+            st.write("Résultats du traitement :")
+            st.dataframe(df)
             
             # Option de téléchargement
-            csv = unique_keywords.to_csv(index=False)
+            csv = df.to_csv(index=False)
             st.download_button(
                 label="Télécharger les résultats en CSV",
                 data=csv,
-                file_name="mots_cles_uniques.csv",
+                file_name="mots_cles_traites.csv",
                 mime="text/csv",
             )
 
