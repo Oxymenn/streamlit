@@ -1,11 +1,10 @@
 import streamlit as st
 import pandas as pd
-import csv
 import re
 from collections import defaultdict
 from unidecode import unidecode
 
-# Liste de stopwords français (inchangée)
+# Liste de stopwords français
 STOPWORDS = set([
     'le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'a', 'à', 'au', 'aux',
     'et', 'ou', 'mais', 'donc', 'car', 'ni', 'or', 'que', 'qui', 'quoi', 'dont', 'où',
@@ -50,25 +49,21 @@ def normalize_keyword(keyword):
     return ' '.join(sorted(filtered_words))
 
 def process_keywords(df, keyword_column, volume_column):
-    unique_rows = set()
-    rows_to_keep = []
-
+    keyword_groups = defaultdict(list)
+    
     for _, row in df.iterrows():
         keyword = row[keyword_column]
         volume = row[volume_column]
         normalized_kw = normalize_keyword(keyword)
-        
-        if normalized_kw not in unique_rows:
-            unique_rows.add(normalized_kw)
-            rows_to_keep.append((keyword, volume))
-        else:
-            # Si le mot-clé existe déjà, gardez celui avec le plus grand volume
-            existing_row = next((r for r in rows_to_keep if normalize_keyword(r[0]) == normalized_kw), None)
-            if existing_row and volume > existing_row[1]:
-                rows_to_keep.remove(existing_row)
-                rows_to_keep.append((keyword, volume))
-
-    return rows_to_keep
+        keyword_groups[normalized_kw].append((keyword, volume))
+    
+    unique_keywords = []
+    for group in keyword_groups.values():
+        # Sélectionner le mot-clé avec le plus gros volume dans le groupe
+        unique_keyword, max_volume = max(group, key=lambda x: x[1])
+        unique_keywords.append((unique_keyword, max_volume))
+    
+    return unique_keywords
 
 def app():
     st.title("Tri et Nettoyage de mots-clés")
@@ -91,12 +86,20 @@ def app():
             # Trier par volume décroissant
             unique_df = unique_df.sort_values('Volume unique', ascending=False)
             
+            # Ajouter les nouvelles colonnes au DataFrame original
+            df['Mot-clé unique'] = ''
+            df['Volume unique'] = 0
+            
+            # Remplir les nouvelles colonnes avec les valeurs uniques
+            df.loc[:len(unique_df)-1, 'Mot-clé unique'] = unique_df['Mot-clé unique'].values
+            df.loc[:len(unique_df)-1, 'Volume unique'] = unique_df['Volume unique'].values
+            
             # Affichage des résultats
             st.write("Résultats après traitement :")
-            st.dataframe(unique_df)
+            st.dataframe(df)
             
             # Option de téléchargement
-            csv = unique_df.to_csv(index=False)
+            csv = df.to_csv(index=False)
             st.download_button(
                 label="Télécharger les résultats en CSV",
                 data=csv,
