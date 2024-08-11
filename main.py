@@ -3,7 +3,7 @@ from scripts import analyse_proposition_maillage
 from scripts import proposition_maillage
 from scripts import similarite_cosinus
 from scripts import cannibalisation_serp
-from scripts import test_cannibalisation
+from scripts import cannibalisation_gratuit
 from scripts import images_bulk
 from scripts import post_article_wp
 
@@ -12,8 +12,8 @@ PAGES = {
     "Analyse + Proposition Maillage": analyse_proposition_maillage,
     "Proposition Maillage": proposition_maillage,
     "Similarité Cosinus": similarite_cosinus,
-    "Cannibalisation SERP": cannibalisation_serp,
-    "Test Cannibalisation": test_cannibalisation,
+        "Analyse Cannibalisation SERP (2€30 pour 1000 mots)": cannibalisation_serp_payant,
+    "Analyse Cannibalisation SERP (gratuit)": cannibalisation_serp_gratuit,
     "Images Bulk": images_bulk,
     "Post Article WP": post_article_wp
 }
