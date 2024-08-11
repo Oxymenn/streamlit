@@ -1,17 +1,18 @@
 import streamlit as st
 import pandas as pd
+import csv
 import re
 from collections import defaultdict
 from unidecode import unidecode
 
-# Liste de stopwords français
+# Liste de stopwords français (inchangée)
 STOPWORDS = set([
-    'le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'de', 'a', 'à', 'au', 'aux',
+    'le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'a', 'à', 'au', 'aux',
     'et', 'ou', 'mais', 'donc', 'car', 'ni', 'or', 'que', 'qui', 'quoi', 'dont', 'où',
     'ce', 'cet', 'cette', 'ces', 'mon', 'ton', 'son', 'notre', 'votre', 'leur',
     'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles', 'me', 'te', 'se', 'lui',
     'en', 'y', 'pour', 'par', 'avec', 'sans', 'sous', 'sur', 'dans', 'entre', 'vers',
-    'chez', 'hors', 'de', 'avant', 'après', 'pendant', 'depuis', 'durant',
+    'chez', 'hors', 'avant', 'après', 'pendant', 'depuis', 'durant',
     'être', 'avoir', 'faire', 'dire', 'aller', 'voir', 'venir', 'devoir', 'pouvoir',
     'vouloir', 'falloir', 'savoir',
     'tout', 'tous', 'toute', 'toutes', 'aucun', 'aucune', 'autre', 'autres',
@@ -33,11 +34,13 @@ def normalize_keyword(keyword):
     # Supprimer les espaces supplémentaires
     keyword = re.sub(r'\s+', ' ', keyword).strip()
     
-    # Supprimer les stopwords, sauf 'de' quand il est entre deux mots
+    # Traiter les mots spécifiques
+    keyword = keyword.replace('table de chevet', 'table chevet')
+    
     words = keyword.split()
     filtered_words = []
-    for i, word in enumerate(words):
-        if word not in STOPWORDS or (word == 'de' and i > 0 and i < len(words) - 1):
+    for word in words:
+        if word not in STOPWORDS or word == 'de':
             filtered_words.append(word)
     
     # Supprimer les terminaisons en 'e', 's', 'es' pour gérer le genre et le nombre
@@ -47,21 +50,25 @@ def normalize_keyword(keyword):
     return ' '.join(sorted(filtered_words))
 
 def process_keywords(df, keyword_column, volume_column):
-    keyword_groups = defaultdict(list)
-    
+    unique_rows = set()
+    rows_to_keep = []
+
     for _, row in df.iterrows():
         keyword = row[keyword_column]
         volume = row[volume_column]
         normalized_kw = normalize_keyword(keyword)
-        keyword_groups[normalized_kw].append((keyword, volume))
-    
-    unique_keywords = []
-    for group in keyword_groups.values():
-        # Sélectionner le mot-clé avec le plus gros volume dans le groupe
-        unique_keyword, max_volume = max(group, key=lambda x: x[1])
-        unique_keywords.append((unique_keyword, max_volume))
-    
-    return unique_keywords
+        
+        if normalized_kw not in unique_rows:
+            unique_rows.add(normalized_kw)
+            rows_to_keep.append((keyword, volume))
+        else:
+            # Si le mot-clé existe déjà, gardez celui avec le plus grand volume
+            existing_row = next((r for r in rows_to_keep if normalize_keyword(r[0]) == normalized_kw), None)
+            if existing_row and volume > existing_row[1]:
+                rows_to_keep.remove(existing_row)
+                rows_to_keep.append((keyword, volume))
+
+    return rows_to_keep
 
 def app():
     st.title("Tri et Nettoyage de mots-clés")
@@ -84,20 +91,12 @@ def app():
             # Trier par volume décroissant
             unique_df = unique_df.sort_values('Volume unique', ascending=False)
             
-            # Ajouter les nouvelles colonnes au DataFrame original
-            df['Mot-clé unique'] = ''
-            df['Volume unique'] = 0
-            
-            # Remplir les nouvelles colonnes avec les valeurs uniques
-            df.loc[:len(unique_df)-1, 'Mot-clé unique'] = unique_df['Mot-clé unique'].values
-            df.loc[:len(unique_df)-1, 'Volume unique'] = unique_df['Volume unique'].values
-            
             # Affichage des résultats
             st.write("Résultats après traitement :")
-            st.dataframe(df)
+            st.dataframe(unique_df)
             
             # Option de téléchargement
-            csv = df.to_csv(index=False)
+            csv = unique_df.to_csv(index=False)
             st.download_button(
                 label="Télécharger les résultats en CSV",
                 data=csv,
