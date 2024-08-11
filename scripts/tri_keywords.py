@@ -23,9 +23,15 @@ STOPWORDS = set([
 ])
 
 def normalize_keyword(keyword):
-    # Supprimer les accents, mettre en minuscules et supprimer la ponctuation
+    # Supprimer les accents et mettre en minuscules
     keyword = unidecode(keyword.lower())
+    
+    # Supprimer la ponctuation et les chiffres
     keyword = re.sub(r'[^\w\s]', '', keyword)
+    keyword = re.sub(r'\d+', '', keyword)
+    
+    # Supprimer les espaces supplémentaires
+    keyword = re.sub(r'\s+', ' ', keyword).strip()
     
     # Supprimer les stopwords
     words = [word for word in keyword.split() if word not in STOPWORDS]
@@ -36,8 +42,25 @@ def normalize_keyword(keyword):
     # Trier les mots pour gérer l'ordre différent
     return ' '.join(sorted(words))
 
-def are_similar(kw1, kw2):
-    return normalize_keyword(kw1) == normalize_keyword(kw2)
+def group_similar_keywords(df, keyword_column, volume_column):
+    keyword_groups = defaultdict(list)
+    
+    for _, row in df.iterrows():
+        keyword = row[keyword_column]
+        volume = row[volume_column]
+        normalized_kw = normalize_keyword(keyword)
+        keyword_groups[normalized_kw].append((keyword, volume))
+    
+    return keyword_groups
+
+def find_unique_keywords(keyword_groups):
+    unique_keywords = {}
+    for normalized_kw, group in keyword_groups.items():
+        # Sélectionner le mot-clé avec le plus gros volume dans le groupe
+        unique_keyword, max_volume = max(group, key=lambda x: x[1])
+        unique_keywords[normalized_kw] = (unique_keyword, max_volume)
+    
+    return unique_keywords
 
 def app():
     st.title("Tri et Nettoyage de mots-clés")
@@ -51,32 +74,26 @@ def app():
         volume_column = st.selectbox("Sélectionnez la colonne contenant les volumes", df.columns)
         
         if st.button("Traiter"):
-            # Tri et nettoyage des mots-clés similaires
-            keyword_dict = defaultdict(lambda: {'keyword': '', 'volume': 0})
+            # Grouper les mots-clés similaires
+            keyword_groups = group_similar_keywords(df, keyword_column, volume_column)
             
-            for _, row in df.iterrows():
-                keyword = row[keyword_column]
-                volume = row[volume_column]
-                normalized_kw = normalize_keyword(keyword)
-                
-                if volume > keyword_dict[normalized_kw]['volume']:
-                    keyword_dict[normalized_kw] = {'keyword': keyword, 'volume': volume}
+            # Trouver les mots-clés uniques
+            unique_keywords = find_unique_keywords(keyword_groups)
             
-            # Création d'un nouveau DataFrame avec les mots-clés uniques
-            unique_keywords = pd.DataFrame.from_dict(keyword_dict, orient='index')
-            unique_keywords = unique_keywords.reset_index(drop=True)
-            unique_keywords.columns = ['Mot-clé unique', 'Volume associé']
+            # Création des nouvelles colonnes
+            df['Mot-clé unique'] = df[keyword_column].apply(lambda x: unique_keywords[normalize_keyword(x)][0])
+            df['Volume associé'] = df[keyword_column].apply(lambda x: unique_keywords[normalize_keyword(x)][1])
             
             # Affichage des résultats
-            st.write("Mots-clés uniques après nettoyage :")
-            st.dataframe(unique_keywords)
+            st.write("Résultats après traitement :")
+            st.dataframe(df)
             
             # Option de téléchargement
-            csv = unique_keywords.to_csv(index=False)
+            csv = df.to_csv(index=False)
             st.download_button(
                 label="Télécharger les résultats en CSV",
                 data=csv,
-                file_name="mots_cles_uniques.csv",
+                file_name="mots_cles_traites.csv",
                 mime="text/csv",
             )
 
