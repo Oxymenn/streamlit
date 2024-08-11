@@ -1,13 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import requests
-from bs4 import BeautifulSoup
 from collections import Counter
 from unidecode import unidecode
 import re
 import time
 import random
+import requests
+import json
 
 STOPWORDS = set(['de', 'à', 'pour', 'du', 'le', 'la', 'les', 'un', 'une', 'des', 'en', 'et'])
 
@@ -16,34 +16,35 @@ def preprocess_keyword(keyword):
     keyword = re.sub(r'[^\w\s]', '', keyword)
     return ' '.join([word for word in keyword.split() if word not in STOPWORDS])
 
-def get_google_results(keyword, num_results=10, delay_min=3, delay_max=5):
-    url = f"https://www.google.fr/search?q={keyword}&num={num_results}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+def get_valueserp_results(keyword, num_results=10):
+    api_key = st.secrets["valueserp_api_key"]
+    url = "https://api.valueserp.com/search"
+    params = {
+        'api_key': api_key,
+        'q': keyword,
+        'location': "France",
+        'gl': "fr",
+        'hl': "fr",
+        'google_domain': "google.fr",
+        'num': num_results,
+        'output': "json"
     }
 
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        api_result = requests.get(url, params=params)
+        api_result.raise_for_status()
+        data = api_result.json()
+        
         results = []
-
-        for div in soup.find_all('div', class_='yuRUbf'):
-            anchor = div.find('a')
-            if anchor and 'href' in anchor.attrs:
-                link = anchor['href']
-                title = div.find('h3').text if div.find('h3') else ''
+        if 'organic_results' in data:
+            for result in data['organic_results']:
+                link = result.get('link', '')
+                title = result.get('title', '')
                 results.append((link, title))
-
-            if len(results) >= num_results:
-                break
-
-        # Augmentation du délai entre les requêtes
-        time.sleep(random.uniform(delay_min, delay_max))
-
+        
         return results[:num_results]
-
-    except requests.RequestException as e:
+    
+    except Exception as e:
         st.error(f"Error fetching results for '{keyword}': {e}")
         return []
 
@@ -70,7 +71,7 @@ def are_keywords_similar(kw1, kw2):
 
     return jaccard_similarity > 0.8
 
-def process_keywords(df, keyword_column, volume_column, serp_similarity_threshold=0.4, delay_min=3, delay_max=5):
+def process_keywords(df, keyword_column, volume_column, serp_similarity_threshold=0.4):
     start_time = time.time()
     st.write("\n🕒 Début du traitement...")
 
@@ -82,12 +83,13 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
     progress_bar = st.progress(0)
     progress_text = st.empty()
 
-    st.write("\n📊 Récupération des résultats Google...")
-    google_results = {}
+    st.write("\n📊 Récupération des résultats ValueSerp...")
+    
+    valueserp_results = {}
     for i, kw in enumerate(keywords):
-        results = get_google_results(kw, delay_min=delay_min, delay_max=delay_max)
+        results = get_valueserp_results(kw)
         if results:
-            google_results[kw] = results
+            valueserp_results[kw] = [result[0] for result in results]  # On ne garde que les URLs
         else:
             st.write(f"Skipping keyword '{kw}' due to no results")
 
@@ -110,7 +112,7 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
             if j in processed:
                 continue
 
-            serp_similarity = calculate_serp_similarity(google_results.get(kw1, []), google_results.get(kw2, []))
+            serp_similarity = calculate_serp_similarity(valueserp_results.get(kw1, []), valueserp_results.get(kw2, []))
             keyword_similarity = are_keywords_similar(kw1, kw2)
 
             if serp_similarity > serp_similarity_threshold or keyword_similarity:
@@ -125,15 +127,17 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
         max_volume_index = max(group, key=lambda x: volumes[x])
         unique_keywords[keywords[max_volume_index]] = volumes[max_volume_index]
 
-    df['mots-clés uniques'] = ''
-    df['volumes'] = ''
+    # Création des nouvelles colonnes
+    df['keywords uniques'] = ''
+    df['volumes uniques'] = ''
 
     for kw, vol in unique_keywords.items():
         mask = df[keyword_column] == kw
-        df.loc[mask, 'mots-clés uniques'] = kw
-        df.loc[mask, 'volumes'] = vol
+        df.loc[mask, 'keywords uniques'] = kw
+        df.loc[mask, 'volumes uniques'] = vol
 
-    df['volumes_sort'] = pd.to_numeric(df['volumes'].fillna(0), errors='coerce').fillna(0).astype(int)
+    # Tri des résultats par volume décroissant
+    df['volumes_sort'] = pd.to_numeric(df['volumes uniques'].fillna(0), errors='coerce').fillna(0).astype(int)
     df = df.sort_values('volumes_sort', ascending=False)
     df = df.drop('volumes_sort', axis=1)
 
@@ -153,11 +157,8 @@ def app():
     serp_similarity_threshold = st.select_slider(
         "Taux de similarité SERP", 
         options=[i/100 for i in range(10, 101, 10)],
+        value=0.4,
         format_func=lambda x: f"{int(x*100)}%"
-    )
-    delay_range = st.slider(
-        "Plage de délai des requêtes Google (en secondes)", 
-        1, 30, (3, 5)
     )
 
     if uploaded_file is not None:
@@ -176,14 +177,20 @@ def app():
         st.dataframe(df.head())
 
         if st.button("Exécuter l'analyse"):
-            result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, delay_range[0], delay_range[1])
+            result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold)
             
-            st.write("Résultats de l'analyse:")
-            st.dataframe(result_df)
+            if result_df is not None:
+                st.write("Résultats de l'analyse:")
+                st.dataframe(result_df)
 
-            st.download_button(
-                label="Télécharger le fichier de résultats",
-                data=result_df.to_csv(index=False).encode('utf-8'),
-                file_name="resultat_similarite.csv",
-                mime="text/csv"
-            )
+                st.download_button(
+                    label="Télécharger le fichier de résultats",
+                    data=result_df.to_csv(index=False).encode('utf-8'),
+                    file_name="resultat_similarite.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.error("L'analyse n'a pas pu être complétée en raison d'erreurs.")
+
+if __name__ == "__main__":
+    app()
