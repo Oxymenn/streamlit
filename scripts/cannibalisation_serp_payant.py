@@ -18,18 +18,15 @@ def preprocess_keyword(keyword):
     return ' '.join([word for word in keyword.split() if word not in STOPWORDS])
 
 def get_api_key():
-    # Essayez d'abord d'obtenir la clé API depuis st.secrets
     try:
         api_key = st.secrets.get("valueserp_api_key")
     except Exception as e:
         st.error(f"Erreur lors de l'accès à st.secrets: {e}")
         api_key = None
     
-    # Si ce n'est pas dans st.secrets, essayez les variables d'environnement
     if not api_key:
         api_key = os.environ.get("VALUESERP_API_KEY")
     
-    # Si toujours pas de clé, demandez à l'utilisateur
     if not api_key:
         api_key = st.text_input("Veuillez entrer votre clé API ValueSERP:", type="password")
     
@@ -71,12 +68,63 @@ def get_valueserp_results(keyword, num_results=10):
         st.error(f"Error fetching results for '{keyword}': {e}")
         return []
 
-# Le reste du code reste inchangé...
+def calculate_serp_similarity(results1, results2):
+    common_results = set(results1) & set(results2)
+    return len(common_results) / 10
+
+def are_keywords_similar(kw1, kw2):
+    processed_kw1 = preprocess_keyword(kw1)
+    processed_kw2 = preprocess_keyword(kw2)
+
+    if processed_kw1 == processed_kw2:
+        return True
+
+    words1 = Counter(processed_kw1.split())
+    words2 = Counter(processed_kw2.split())
+
+    if words1 == words2:
+        return True
+
+    intersection = sum((words1 & words2).values())
+    union = sum((words1 | words2).values())
+    jaccard_similarity = intersection / union if union > 0 else 0
+
+    return jaccard_similarity > 0.8
+
+def process_keywords(df, keyword_column, volume_column, serp_similarity_threshold=0.4):
+    keywords = df[keyword_column].tolist()
+    volumes = df[volume_column].tolist()
+    
+    result_data = []
+    
+    for i, (kw1, vol1) in enumerate(zip(keywords, volumes)):
+        similar_keywords = []
+        for j, (kw2, vol2) in enumerate(zip(keywords, volumes)):
+            if i != j:
+                if are_keywords_similar(kw1, kw2):
+                    results1 = get_valueserp_results(kw1)
+                    results2 = get_valueserp_results(kw2)
+                    serp_similarity = calculate_serp_similarity(results1, results2)
+                    
+                    if serp_similarity >= serp_similarity_threshold:
+                        similar_keywords.append({
+                            'keyword': kw2,
+                            'volume': vol2,
+                            'serp_similarity': serp_similarity
+                        })
+        
+        if similar_keywords:
+            result_data.append({
+                'keyword': kw1,
+                'volume': vol1,
+                'similar_keywords': similar_keywords
+            })
+    
+    return pd.DataFrame(result_data)
 
 def app():
     st.title("Analyse de cannibalisation de mots-clés SERP")
 
-    # Déplacer l'appel à get_api_key() ici pour s'assurer que la clé est disponible avant le traitement
     api_key = get_api_key()
     if not api_key:
         st.error("Une clé API ValueSERP valide est requise pour continuer.")
@@ -108,7 +156,7 @@ def app():
         if st.button("Exécuter l'analyse"):
             result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold)
             
-            if result_df is not None:
+            if result_df is not None and not result_df.empty:
                 st.write("Résultats de l'analyse:")
                 st.dataframe(result_df)
 
@@ -119,7 +167,7 @@ def app():
                     mime="text/csv"
                 )
             else:
-                st.error("L'analyse n'a pas pu être complétée en raison d'erreurs.")
+                st.error("L'analyse n'a pas produit de résultats ou a rencontré une erreur.")
 
 if __name__ == "__main__":
     app()
