@@ -5,6 +5,7 @@ from collections import Counter
 from unidecode import unidecode
 import re
 import requests
+import traceback
 
 STOPWORDS = set(['de', 'à', 'pour', 'du', 'le', 'la', 'les', 'un', 'une', 'des', 'en', 'et'])
 
@@ -40,8 +41,8 @@ def get_valueserp_results(keyword, api_key, num_results=10):
         
         return results[:num_results]
     
-    except Exception as e:
-        st.error(f"Error fetching results for '{keyword}': {e}")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erreur lors de la requête API pour '{keyword}': {e}")
         return []
 
 def calculate_serp_similarity(results1, results2):
@@ -74,12 +75,16 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
     result_data = []
     
     for i, (kw1, vol1) in enumerate(zip(keywords, volumes)):
+        st.write(f"Traitement du mot-clé {i+1}/{len(keywords)}: {kw1}")
         similar_keywords = []
         for j, (kw2, vol2) in enumerate(zip(keywords, volumes)):
             if i != j:
                 if are_keywords_similar(kw1, kw2):
                     results1 = get_valueserp_results(kw1, api_key)
                     results2 = get_valueserp_results(kw2, api_key)
+                    if not results1 or not results2:
+                        st.warning(f"Impossible d'obtenir les résultats SERP pour '{kw1}' ou '{kw2}'")
+                        continue
                     serp_similarity = calculate_serp_similarity(results1, results2)
                     
                     if serp_similarity >= serp_similarity_threshold:
@@ -116,35 +121,41 @@ def app():
     )
 
     if uploaded_file is not None:
-        if uploaded_file.name.endswith('.xlsx'):
-            df = pd.read_excel(uploaded_file)
-        elif uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-        else:
-            st.error("Type de fichier non supporté!")
-            st.stop()
-
-        keyword_column = st.selectbox("Sélectionner la colonne des mots-clés", df.columns)
-        volume_column = st.selectbox("Sélectionner la colonne des volumes", df.columns)
-
-        st.write("Aperçu du fichier importé:")
-        st.dataframe(df.head())
-
-        if st.button("Exécuter l'analyse"):
-            result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, api_key)
-            
-            if result_df is not None and not result_df.empty:
-                st.write("Résultats de l'analyse:")
-                st.dataframe(result_df)
-
-                st.download_button(
-                    label="Télécharger le fichier de résultats",
-                    data=result_df.to_csv(index=False).encode('utf-8'),
-                    file_name="resultat_similarite.csv",
-                    mime="text/csv"
-                )
+        try:
+            if uploaded_file.name.endswith('.xlsx'):
+                df = pd.read_excel(uploaded_file)
+            elif uploaded_file.name.endswith('.csv'):
+                df = pd.read_csv(uploaded_file)
             else:
-                st.error("L'analyse n'a pas produit de résultats ou a rencontré une erreur.")
+                st.error("Type de fichier non supporté!")
+                st.stop()
+
+            keyword_column = st.selectbox("Sélectionner la colonne des mots-clés", df.columns)
+            volume_column = st.selectbox("Sélectionner la colonne des volumes", df.columns)
+
+            st.write("Aperçu du fichier importé:")
+            st.dataframe(df.head())
+
+            if st.button("Exécuter l'analyse"):
+                with st.spinner("Analyse en cours..."):
+                    result_df = process_keywords(df, keyword_column, volume_column, serp_similarity_threshold, api_key)
+                
+                if result_df is not None and not result_df.empty:
+                    st.success("Analyse terminée avec succès!")
+                    st.write("Résultats de l'analyse:")
+                    st.dataframe(result_df)
+
+                    st.download_button(
+                        label="Télécharger le fichier de résultats",
+                        data=result_df.to_csv(index=False).encode('utf-8'),
+                        file_name="resultat_similarite.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.error("L'analyse n'a pas produit de résultats. Veuillez vérifier vos données d'entrée et votre clé API.")
+        except Exception as e:
+            st.error(f"Une erreur s'est produite lors de l'analyse : {str(e)}")
+            st.error(f"Détails de l'erreur : {traceback.format_exc()}")
 
 if __name__ == "__main__":
     app()
