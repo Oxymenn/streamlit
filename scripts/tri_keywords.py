@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
-from collections import Counter
+from collections import defaultdict
 
 # Liste de stopwords français
 STOPWORDS = set([
@@ -19,24 +19,24 @@ STOPWORDS = set([
     'comment', 'pourquoi', 'quand', 'si', 'ne', 'pas', 'plus', 'jamais', 'toujours',
     'ici', 'là', 'voici', 'voilà', 'alors', 'ainsi', 'comme', 'bien', 'mal',
     'oui', 'non', 'peut-être',
-    # Ajoutez d'autres stopwords si nécessaire
 ])
 
 def remove_stopwords(text):
     return ' '.join([word for word in text.lower().split() if word not in STOPWORDS])
 
 def clean_text(text):
-    # Convertir en minuscules
     text = text.lower()
-    # Supprimer la ponctuation
     text = re.sub(r'[^\w\s]', '', text)
-    # Supprimer les chiffres
     text = re.sub(r'\d+', '', text)
-    # Supprimer les espaces multiples
     text = re.sub(r'\s+', ' ', text).strip()
-    # Supprimer les stopwords
     text = remove_stopwords(text)
     return text
+
+def are_similar(kw1, kw2, threshold=0.8):
+    set1 = set(kw1.split())
+    set2 = set(kw2.split())
+    intersection = set1.intersection(set2)
+    return len(intersection) / max(len(set1), len(set2)) >= threshold
 
 def app():
     st.title("Tri et Nettoyage de mots-clés")
@@ -45,31 +45,46 @@ def app():
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         
-        # Sélection de la colonne contenant les mots-clés
-        column = st.selectbox("Sélectionnez la colonne contenant les mots-clés", df.columns)
+        # Sélection des colonnes
+        keyword_column = st.selectbox("Sélectionnez la colonne contenant les mots-clés", df.columns)
+        volume_column = st.selectbox("Sélectionnez la colonne contenant les volumes", df.columns)
         
         if st.button("Traiter"):
             # Nettoyage des mots-clés
-            df['cleaned_keywords'] = df[column].apply(clean_text)
+            df['cleaned_keywords'] = df[keyword_column].apply(clean_text)
             
-            # Comptage des mots
-            all_words = ' '.join(df['cleaned_keywords']).split()
-            word_counts = Counter(all_words)
+            # Tri et nettoyage des mots-clés similaires
+            keyword_dict = defaultdict(lambda: {'keyword': '', 'volume': 0})
             
-            # Création d'un nouveau DataFrame avec les mots et leur fréquence
-            word_freq_df = pd.DataFrame(word_counts.items(), columns=['Mot', 'Fréquence'])
-            word_freq_df = word_freq_df.sort_values('Fréquence', ascending=False)
+            for _, row in df.iterrows():
+                cleaned_kw = row['cleaned_keywords']
+                volume = row[volume_column]
+                
+                similar_found = False
+                for key in keyword_dict:
+                    if are_similar(cleaned_kw, key):
+                        if volume > keyword_dict[key]['volume']:
+                            keyword_dict[key] = {'keyword': row[keyword_column], 'volume': volume}
+                        similar_found = True
+                        break
+                
+                if not similar_found:
+                    keyword_dict[cleaned_kw] = {'keyword': row[keyword_column], 'volume': volume}
+            
+            # Création d'un nouveau DataFrame avec les mots-clés uniques
+            unique_keywords = pd.DataFrame.from_dict(keyword_dict, orient='index')
+            unique_keywords = unique_keywords.reset_index(drop=True)
             
             # Affichage des résultats
-            st.write("Mots-clés les plus fréquents :")
-            st.dataframe(word_freq_df)
+            st.write("Mots-clés uniques après nettoyage :")
+            st.dataframe(unique_keywords)
             
             # Option de téléchargement
-            csv = word_freq_df.to_csv(index=False)
+            csv = unique_keywords.to_csv(index=False)
             st.download_button(
                 label="Télécharger les résultats en CSV",
                 data=csv,
-                file_name="mots_cles_frequents.csv",
+                file_name="mots_cles_uniques.csv",
                 mime="text/csv",
             )
 
