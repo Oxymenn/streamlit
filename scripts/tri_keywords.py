@@ -42,7 +42,7 @@ def normalize_keyword(keyword):
     # Trier les mots pour gérer l'ordre différent
     return ' '.join(sorted(words))
 
-def group_similar_keywords(df, keyword_column, volume_column):
+def process_keywords(df, keyword_column, volume_column):
     keyword_groups = defaultdict(list)
     
     for _, row in df.iterrows():
@@ -51,14 +51,11 @@ def group_similar_keywords(df, keyword_column, volume_column):
         normalized_kw = normalize_keyword(keyword)
         keyword_groups[normalized_kw].append((keyword, volume))
     
-    return keyword_groups
-
-def find_unique_keywords(keyword_groups):
-    unique_keywords = {}
-    for normalized_kw, group in keyword_groups.items():
+    unique_keywords = []
+    for group in keyword_groups.values():
         # Sélectionner le mot-clé avec le plus gros volume dans le groupe
         unique_keyword, max_volume = max(group, key=lambda x: x[1])
-        unique_keywords[normalized_kw] = (unique_keyword, max_volume)
+        unique_keywords.append((unique_keyword, max_volume))
     
     return unique_keywords
 
@@ -74,26 +71,25 @@ def app():
         volume_column = st.selectbox("Sélectionnez la colonne contenant les volumes", df.columns)
         
         if st.button("Traiter"):
-            # Grouper les mots-clés similaires
-            keyword_groups = group_similar_keywords(df, keyword_column, volume_column)
+            # Traiter les mots-clés
+            unique_keywords = process_keywords(df, keyword_column, volume_column)
             
-            # Trouver les mots-clés uniques
-            unique_keywords = find_unique_keywords(keyword_groups)
+            # Création d'un nouveau DataFrame pour les mots-clés uniques
+            unique_df = pd.DataFrame(unique_keywords, columns=['Mot-clé unique', 'Volume associé'])
             
-            # Création des nouvelles colonnes
-            df['Mot-clé unique'] = df[keyword_column].apply(lambda x: unique_keywords[normalize_keyword(x)][0])
-            df['Volume associé'] = df[keyword_column].apply(lambda x: unique_keywords[normalize_keyword(x)][1])
+            # Trier par volume décroissant
+            unique_df = unique_df.sort_values('Volume associé', ascending=False)
             
             # Affichage des résultats
             st.write("Résultats après traitement :")
-            st.dataframe(df)
+            st.dataframe(unique_df)
             
             # Option de téléchargement
-            csv = df.to_csv(index=False)
+            csv = unique_df.to_csv(index=False)
             st.download_button(
                 label="Télécharger les résultats en CSV",
                 data=csv,
-                file_name="mots_cles_traites.csv",
+                file_name="mots_cles_uniques.csv",
                 mime="text/csv",
             )
 
