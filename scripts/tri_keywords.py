@@ -33,14 +33,18 @@ def normalize_keyword(keyword):
     # Supprimer les espaces supplémentaires
     keyword = re.sub(r'\s+', ' ', keyword).strip()
     
-    # Supprimer les stopwords
-    words = [word for word in keyword.split() if word not in STOPWORDS]
+    # Supprimer les stopwords, sauf 'de' quand il est entre deux mots
+    words = keyword.split()
+    filtered_words = []
+    for i, word in enumerate(words):
+        if word not in STOPWORDS or (word == 'de' and i > 0 and i < len(words) - 1):
+            filtered_words.append(word)
     
     # Supprimer les terminaisons en 'e', 's', 'es' pour gérer le genre et le nombre
-    words = [re.sub(r'e?s?$', '', word) if len(word) > 3 else word for word in words]
+    filtered_words = [re.sub(r'e?s?$', '', word) if len(word) > 3 else word for word in filtered_words]
     
     # Trier les mots pour gérer l'ordre différent
-    return ' '.join(sorted(words))
+    return ' '.join(sorted(filtered_words))
 
 def process_keywords(df, keyword_column, volume_column):
     keyword_groups = defaultdict(list)
