@@ -41,8 +41,8 @@ def normalize_keyword(keyword):
     filtered_words = []
     for word in words:
         if word not in STOPWORDS or word in ['de', 'a']:
-            # Supprimer les terminaisons en 'e', 's', 'es', 'he', 'che', 'ee' pour gérer le genre, le nombre et certains adjectifs
-            word = re.sub(r'(e|s|es|he|che|ee)$', '', word) if len(word) > 3 else word
+            # Supprimer les terminaisons pour gérer le genre, le nombre et certains adjectifs
+            word = re.sub(r'(e|s|es|he|che|ee)$', '', word)
             filtered_words.append(word)
     
     # Trier les mots pour gérer l'ordre différent
