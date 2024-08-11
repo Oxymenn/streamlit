@@ -2,8 +2,8 @@ import streamlit as st
 from scripts import analyse_proposition_maillage
 from scripts import proposition_maillage
 from scripts import similarite_cosinus
-from scripts import cannibalisation_serp
-from scripts import cannibalisation_gratuit
+from scripts import cannibalisation_serp_payant
+from scripts import cannibalisation_serp_gratuit
 from scripts import images_bulk
 from scripts import post_article_wp
 
