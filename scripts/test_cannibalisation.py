@@ -87,7 +87,7 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
     for i, kw in enumerate(keywords):
         results = get_google_results(kw, delay_min=delay_min, delay_max=delay_max)
         if results:
-            google_results[kw] = results
+            google_results[kw] = [result[0] for result in results]  # On ne garde que les URLs
         else:
             st.write(f"Skipping keyword '{kw}' due to no results")
 
@@ -125,15 +125,17 @@ def process_keywords(df, keyword_column, volume_column, serp_similarity_threshol
         max_volume_index = max(group, key=lambda x: volumes[x])
         unique_keywords[keywords[max_volume_index]] = volumes[max_volume_index]
 
-    df['mots-clés uniques'] = ''
-    df['volumes'] = ''
+    # Création des nouvelles colonnes
+    df['keywords uniques'] = ''
+    df['volumes uniques'] = ''
 
     for kw, vol in unique_keywords.items():
         mask = df[keyword_column] == kw
-        df.loc[mask, 'mots-clés uniques'] = kw
-        df.loc[mask, 'volumes'] = vol
+        df.loc[mask, 'keywords uniques'] = kw
+        df.loc[mask, 'volumes uniques'] = vol
 
-    df['volumes_sort'] = pd.to_numeric(df['volumes'].fillna(0), errors='coerce').fillna(0).astype(int)
+    # Tri des résultats par volume décroissant
+    df['volumes_sort'] = pd.to_numeric(df['volumes uniques'].fillna(0), errors='coerce').fillna(0).astype(int)
     df = df.sort_values('volumes_sort', ascending=False)
     df = df.drop('volumes_sort', axis=1)
 
@@ -153,6 +155,7 @@ def app():
     serp_similarity_threshold = st.select_slider(
         "Taux de similarité SERP", 
         options=[i/100 for i in range(10, 101, 10)],
+        value=0.4,
         format_func=lambda x: f"{int(x*100)}%"
     )
     delay_range = st.slider(
