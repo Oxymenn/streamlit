@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from unidecode import unidecode
 
-# Liste de stopwords français (inchangée)
+# Liste de stopwords français
 STOPWORDS = set([
     'le', 'la', 'les', 'l', 'un', 'une', 'des', 'du', 'a', 'à', 'au', 'aux',
     'et', 'ou', 'mais', 'donc', 'car', 'ni', 'or', 'que', 'qui', 'quoi', 'dont', 'où',
