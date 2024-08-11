@@ -23,23 +23,12 @@ STOPWORDS = set([
 ])
 
 def normalize_keyword(keyword):
-    # Supprimer les accents et mettre en minuscules
     keyword = unidecode(keyword.lower())
-    
-    # Supprimer la ponctuation et les chiffres
     keyword = re.sub(r'[^\w\s]', '', keyword)
     keyword = re.sub(r'\d+', '', keyword)
-    
-    # Supprimer les espaces supplémentaires
     keyword = re.sub(r'\s+', ' ', keyword).strip()
-    
-    # Supprimer les stopwords
     words = [word for word in keyword.split() if word not in STOPWORDS]
-    
-    # Supprimer les 's' à la fin des mots pour gérer singulier/pluriel
     words = [word[:-1] if word.endswith('s') and len(word) > 3 else word for word in words]
-    
-    # Trier les mots pour gérer l'ordre différent
     return ' '.join(sorted(words))
 
 def process_keywords(df, keyword_column, volume_column):
@@ -51,11 +40,10 @@ def process_keywords(df, keyword_column, volume_column):
         normalized_kw = normalize_keyword(keyword)
         keyword_groups[normalized_kw].append((keyword, volume))
     
-    unique_keywords = []
+    unique_keywords = {}
     for group in keyword_groups.values():
-        # Sélectionner le mot-clé avec le plus gros volume dans le groupe
         unique_keyword, max_volume = max(group, key=lambda x: x[1])
-        unique_keywords.append((unique_keyword, max_volume))
+        unique_keywords[normalize_keyword(unique_keyword)] = (unique_keyword, max_volume)
     
     return unique_keywords
 
@@ -66,30 +54,23 @@ def app():
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         
-        # Sélection des colonnes
         keyword_column = st.selectbox("Sélectionnez la colonne contenant les mots-clés", df.columns)
         volume_column = st.selectbox("Sélectionnez la colonne contenant les volumes", df.columns)
         
         if st.button("Traiter"):
-            # Traiter les mots-clés
             unique_keywords = process_keywords(df, keyword_column, volume_column)
             
-            # Création d'un nouveau DataFrame pour les mots-clés uniques
-            unique_df = pd.DataFrame(unique_keywords, columns=['Mot-clé unique', 'Volume associé'])
+            df['Mot-clé unique'] = df[keyword_column].apply(lambda x: unique_keywords[normalize_keyword(x)][0])
+            df['Volume unique'] = df[keyword_column].apply(lambda x: unique_keywords[normalize_keyword(x)][1])
             
-            # Trier par volume décroissant
-            unique_df = unique_df.sort_values('Volume associé', ascending=False)
-            
-            # Affichage des résultats
             st.write("Résultats après traitement :")
-            st.dataframe(unique_df)
+            st.dataframe(df)
             
-            # Option de téléchargement
-            csv = unique_df.to_csv(index=False)
+            csv = df.to_csv(index=False)
             st.download_button(
                 label="Télécharger les résultats en CSV",
                 data=csv,
-                file_name="mots_cles_uniques.csv",
+                file_name="mots_cles_traites.csv",
                 mime="text/csv",
             )
 
