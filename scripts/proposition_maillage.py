@@ -6,6 +6,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 import io
+import time
+import random
 from openai import OpenAI
 
 # Liste de stopwords en français
@@ -65,27 +67,23 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-def get_embeddings(text):
-    try:
-        response = requests.post(
-            'https://api.openai.com/v1/embeddings',
-            headers={
-                'Authorization': f'Bearer {OPENAI_API_KEY}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': 'text-embedding-3-small',
-                'input': text,
-                'encoding_format': 'float'
-            }
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data['data'][0]['embedding']
-    except requests.exceptions.HTTPError as http_err:
-        st.error(f"HTTP error occurred: {http_err}")
-    except Exception as e:
-        st.error(f"Erreur lors de la création des embeddings: {e}")
+@st.cache_data
+def get_embeddings(text, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            response = client.embeddings.create(
+                model="text-embedding-3-small",
+                input=text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries - 1:
+                sleep_time = (2 ** attempt) + random.random()
+                st.warning(f"Rate limit atteint. Attente de {sleep_time:.2f} secondes avant de réessayer...")
+                time.sleep(sleep_time)
+            else:
+                st.error(f"Erreur lors de la création des embeddings: {e}")
+                return None
     return None
 
 def calculate_similarity(embeddings):
@@ -96,19 +94,26 @@ def calculate_similarity(embeddings):
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
+def process_urls_in_batches(urls_list, include_classes, exclude_classes, additional_stopwords, batch_size=5):
+    all_contents = []
+    all_embeddings = []
+    for i in range(0, len(urls_list), batch_size):
+        batch = urls_list[i:i+batch_size]
+        batch_contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in batch]
+        all_contents.extend(batch_contents)
+        batch_embeddings = [get_embeddings(content) for content in batch_contents if content]
+        all_embeddings.extend(batch_embeddings)
+        if i + batch_size < len(urls_list):
+            st.info(f"Traitement du lot suivant dans 10 secondes...")
+            time.sleep(10)
+    return all_contents, all_embeddings
+
 @st.cache_data
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
-    contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
-    contents = [content for content in contents if content]
-
-    if not contents:
-        return None, "Aucun contenu n'a pu être extrait des URLs fournies."
-
-    embeddings = [get_embeddings(content) for content in contents]
-    embeddings = [emb for emb in embeddings if emb]
-
-    if not embeddings:
-        return None, "Impossible de générer des embeddings pour les contenus extraits."
+    contents, embeddings = process_urls_in_batches(urls_list, include_classes, exclude_classes, additional_stopwords)
+    
+    if not contents or not embeddings:
+        return None, "Aucun contenu n'a pu être extrait des URLs fournies ou impossible de générer des embeddings."
 
     similarity_matrix = calculate_similarity(embeddings)
 
@@ -120,7 +125,6 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         similarities = similarity_matrix[i]
         similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)
         
-        # Exclure l'URL de départ elle-même
         similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start]
 
         for j, (url_dest, sim) in enumerate(similar_urls):
@@ -131,9 +135,9 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
                 if j < len(ancres):
                     ancre = ancres[j]
                 else:
-                    ancre = ancres[0]  # Reprendre la première ancre si pas assez d'ancres uniques
+                    ancre = ancres[0]
             else:
-                ancre = url_dest  # Utiliser l'URL comme ancre si aucune ancre n'est trouvée
+                ancre = url_dest
 
             results.append({
                 'URL de départ': url_start, 
@@ -152,7 +156,6 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
 
-    # Initialiser session_state
     if 'df_results' not in st.session_state:
         st.session_state.df_results = None
     if 'urls_to_analyze' not in st.session_state:
@@ -168,7 +171,6 @@ def app():
     if 'additional_stopwords' not in st.session_state:
         st.session_state.additional_stopwords = ""
 
-    # Interface utilisateur
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
@@ -189,7 +191,7 @@ def app():
                 return
 
             urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
-            max_similar_urls = len(urls_list) - 1  # Nombre maximum d'URLs similaires est le nombre total d'URLs moins 1
+            max_similar_urls = len(urls_list) - 1
             st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
 
             st.subheader("Filtrer le contenu HTML et termes")
@@ -210,7 +212,6 @@ def app():
                     st.warning("Aucun résultat n'a été généré.")
 
             if st.session_state.df_results is not None:
-                # Filtrer les résultats en fonction du nombre d'URLs similaires sélectionné
                 filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(st.session_state.num_similar_urls, 'Score de similarité')).reset_index(drop=True)
                 st.dataframe(filtered_results)
 
@@ -225,7 +226,6 @@ def app():
         except Exception as e:
             st.error(f"Erreur lors du traitement : {str(e)}")
 
-    # Bouton pour réinitialiser l'analyse
     if st.button("Réinitialiser l'analyse"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
