@@ -7,6 +7,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.formatting.rule import Rule
 from openpyxl.styles.differential import DifferentialStyle
+from openpyxl.utils import get_column_letter
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 def analyze_url(url, keyword):
     scraper = cloudscraper.create_scraper()
@@ -75,11 +77,17 @@ def app():
         if st.button("Exécuter l'analyse"):
             with st.spinner("Analyse en cours..."):
                 results = []
-                for _, row in df.iterrows():
+                progress_bar = st.progress(0)
+                total_rows = len(df)
+
+                for index, row in df.iterrows():
                     url = row[url_column]
                     keyword = row[keyword_column]
                     result = analyze_url(url, keyword)
                     results.append([url, keyword] + result)
+                    
+                    # Mise à jour de la barre de progression
+                    progress_bar.progress((index + 1) / total_rows)
 
                 result_df = pd.DataFrame(results, columns=["URL", "Keyword", "Metatitle Occurrence", "Metadescription Occurrence", "H1 Occurrence", "H2 Occurrence", "Paragraph Occurrence"])
                 
