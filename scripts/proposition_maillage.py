@@ -6,6 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 import io
+from openai import OpenAI
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -26,7 +27,8 @@ stopwords_fr = {
 }
 
 # Configuration de la clé API OpenAI
-OPENAI_API_KEY = st.secrets.get("api_key", "default_key")
+OPENAI_API_KEY = st.secrets.get("openai", {}).get("api_key", "default_key")
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
