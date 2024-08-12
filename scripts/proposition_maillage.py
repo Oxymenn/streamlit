@@ -34,18 +34,18 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
 
+        content = ""
         if include_classes:
-            elements = soup.find_all(class_=include_classes)
+            for class_name in include_classes:
+                elements = soup.find_all(class_=class_name)
+                content += ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
         else:
-            elements = [soup]
+            content = soup.get_text(separator=" ", strip=True)
 
         if exclude_classes:
-            for cls in exclude_classes:
-                for element in elements:
-                    for excluded in element.find_all(class_=cls):
-                        excluded.decompose()
-
-        content = ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
+            for class_name in exclude_classes:
+                for element in soup.find_all(class_=class_name):
+                    content = content.replace(element.get_text(separator=" ", strip=True), "")
 
         content = re.sub(r'\s+', ' ', content)
         content = content.lower()
@@ -124,7 +124,12 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start]
 
         for j, (url_dest, sim) in enumerate(similar_urls):
-            ancres_df = df_excel[df_excel[col_url] == url_dest].sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
+            ancres_df = df_excel[df_excel[col_url] == url_dest]
+            
+            # Assurez-vous que la colonne de priorité est numérique
+            ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
+            
+            ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
             
             if not ancres_df.empty:
                 ancres = ancres_df[col_ancre].tolist()
@@ -152,7 +157,6 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
 
-    # Ajout du champ pour la clé API OpenAI
     api_key = st.text_input("Entrez votre clé API OpenAI", type="password")
 
     if 'df_results' not in st.session_state:
@@ -187,6 +191,11 @@ def app():
 
             if not all(col in df_excel.columns for col in [col_url, col_ancre, col_priorite]):
                 st.error("Erreur: Une ou plusieurs colonnes sélectionnées n'existent pas dans le fichier Excel.")
+                return
+
+            # Vérifiez que la colonne de priorité peut être convertie en numérique
+            if not pd.to_numeric(df_excel[col_priorite], errors='coerce').notna().all():
+                st.error(f"Erreur: La colonne '{col_priorite}' contient des valeurs non numériques.")
                 return
 
             urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
