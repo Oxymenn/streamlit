@@ -6,6 +6,8 @@ from scripts import cannibalisation_serp_payant
 from scripts import cannibalisation_serp_gratuit
 from scripts import images_bulk
 from scripts import post_article_wp
+from scripts import audit_on_page
+
 
 
 # Configuration des pages
@@ -16,7 +18,8 @@ PAGES = {
     "Analyse Cannibalisation SERP (2€30 pour 1000 mots)": cannibalisation_serp_payant,
     "Analyse Cannibalisation SERP (gratuit)": cannibalisation_serp_gratuit,
     "Images Bulk": images_bulk,
-    "Post Article WP": post_article_wp
+    "Post Article WP": post_article_wp,
+    "Audit SEO On-page": audit_on_page
 }
 
 # Titre principal
