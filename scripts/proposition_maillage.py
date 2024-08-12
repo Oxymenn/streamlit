@@ -5,9 +5,6 @@ from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
-import io
-import time
-import random
 from openai import OpenAI
 
 # Liste de stopwords en français
@@ -56,31 +53,21 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
         content = ' '.join([word for word in words if word not in all_stopwords])
 
         return content
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de l'accès à {url}: {e}")
-        return None
     except Exception as e:
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-def get_embeddings(text, api_key, max_retries=5):
+def get_embeddings(text, api_key):
     client = OpenAI(api_key=api_key)
-    for attempt in range(max_retries):
-        try:
-            response = client.embeddings.create(
-                model="text-embedding-3-small",
-                input=text
-            )
-            return response.data[0].embedding
-        except Exception as e:
-            if "429" in str(e) and attempt < max_retries - 1:
-                sleep_time = (2 ** attempt) + random.random()
-                st.warning(f"Rate limit atteint. Attente de {sleep_time:.2f} secondes avant de réessayer...")
-                time.sleep(sleep_time)
-            else:
-                st.error(f"Erreur lors de la création des embeddings: {e}")
-                return None
-    return None
+    try:
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        st.error(f"Erreur lors de la création des embeddings: {e}")
+        return None
 
 def calculate_similarity(embeddings):
     try:
@@ -90,26 +77,19 @@ def calculate_similarity(embeddings):
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
-def process_urls_in_batches(urls_list, include_classes, exclude_classes, additional_stopwords, api_key, batch_size=5):
-    all_contents = []
-    all_embeddings = []
-    for i in range(0, len(urls_list), batch_size):
-        batch = urls_list[i:i+batch_size]
-        batch_contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in batch]
-        all_contents.extend(batch_contents)
-        batch_embeddings = [get_embeddings(content, api_key) for content in batch_contents if content]
-        all_embeddings.extend(batch_embeddings)
-        if i + batch_size < len(urls_list):
-            st.info(f"Traitement du lot suivant dans 10 secondes...")
-            time.sleep(10)
-    return all_contents, all_embeddings
-
 @st.cache_data
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
-    contents, embeddings = process_urls_in_batches(urls_list, include_classes, exclude_classes, additional_stopwords, api_key)
-    
-    if not contents or not embeddings:
-        return None, "Aucun contenu n'a pu être extrait des URLs fournies ou impossible de générer des embeddings."
+    contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
+    contents = [content for content in contents if content]
+
+    if not contents:
+        return None, "Aucun contenu n'a pu être extrait des URLs fournies."
+
+    embeddings = [get_embeddings(content, api_key) for content in contents]
+    embeddings = [emb for emb in embeddings if emb]
+
+    if not embeddings:
+        return None, "Impossible de générer des embeddings pour les contenus extraits."
 
     similarity_matrix = calculate_similarity(embeddings)
 
@@ -125,18 +105,12 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
 
         for j, (url_dest, sim) in enumerate(similar_urls):
             ancres_df = df_excel[df_excel[col_url] == url_dest]
-            
-            # Assurez-vous que la colonne de priorité est numérique
             ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
-            
             ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
             
             if not ancres_df.empty:
                 ancres = ancres_df[col_ancre].tolist()
-                if j < len(ancres):
-                    ancre = ancres[j]
-                else:
-                    ancre = ancres[0]
+                ancre = ancres[j] if j < len(ancres) else ancres[0]
             else:
                 ancre = url_dest
 
@@ -193,7 +167,6 @@ def app():
                 st.error("Erreur: Une ou plusieurs colonnes sélectionnées n'existent pas dans le fichier Excel.")
                 return
 
-            # Vérifiez que la colonne de priorité peut être convertie en numérique
             if not pd.to_numeric(df_excel[col_priorite], errors='coerce').notna().all():
                 st.error(f"Erreur: La colonne '{col_priorite}' contient des valeurs non numériques.")
                 return
@@ -212,7 +185,8 @@ def app():
                 exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
+                with st.spinner("Running..."):
+                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
 
                 if error_message:
                     st.error(error_message)
