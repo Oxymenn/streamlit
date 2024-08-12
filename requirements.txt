@@ -10,3 +10,5 @@ tqdm
 unidecode
 openai
 python-wordpress-xmlrpc
+io
+cloudscraper
