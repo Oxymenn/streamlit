@@ -28,10 +28,6 @@ stopwords_fr = {
     "été", "être"
 }
 
-# Configuration de la clé API OpenAI
-OPENAI_API_KEY = st.secrets.get("openai", {}).get("api_key", "default_key")
-client = OpenAI(api_key=OPENAI_API_KEY)
-
 def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
         response = requests.get(url)
@@ -67,8 +63,8 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-@st.cache_data
-def get_embeddings(text, max_retries=5):
+def get_embeddings(text, api_key, max_retries=5):
+    client = OpenAI(api_key=api_key)
     for attempt in range(max_retries):
         try:
             response = client.embeddings.create(
@@ -94,14 +90,14 @@ def calculate_similarity(embeddings):
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
-def process_urls_in_batches(urls_list, include_classes, exclude_classes, additional_stopwords, batch_size=5):
+def process_urls_in_batches(urls_list, include_classes, exclude_classes, additional_stopwords, api_key, batch_size=5):
     all_contents = []
     all_embeddings = []
     for i in range(0, len(urls_list), batch_size):
         batch = urls_list[i:i+batch_size]
         batch_contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in batch]
         all_contents.extend(batch_contents)
-        batch_embeddings = [get_embeddings(content) for content in batch_contents if content]
+        batch_embeddings = [get_embeddings(content, api_key) for content in batch_contents if content]
         all_embeddings.extend(batch_embeddings)
         if i + batch_size < len(urls_list):
             st.info(f"Traitement du lot suivant dans 10 secondes...")
@@ -109,8 +105,8 @@ def process_urls_in_batches(urls_list, include_classes, exclude_classes, additio
     return all_contents, all_embeddings
 
 @st.cache_data
-def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
-    contents, embeddings = process_urls_in_batches(urls_list, include_classes, exclude_classes, additional_stopwords)
+def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
+    contents, embeddings = process_urls_in_batches(urls_list, include_classes, exclude_classes, additional_stopwords, api_key)
     
     if not contents or not embeddings:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies ou impossible de générer des embeddings."
@@ -156,6 +152,9 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
 
+    # Ajout du champ pour la clé API OpenAI
+    api_key = st.text_input("Entrez votre clé API OpenAI", type="password")
+
     if 'df_results' not in st.session_state:
         st.session_state.df_results = None
     if 'urls_to_analyze' not in st.session_state:
@@ -177,7 +176,7 @@ def app():
     if uploaded_file is not None:
         st.session_state.uploaded_file = uploaded_file
 
-    if st.session_state.uploaded_file is not None and st.session_state.urls_to_analyze:
+    if st.session_state.uploaded_file is not None and st.session_state.urls_to_analyze and api_key:
         try:
             df_excel = pd.read_excel(st.session_state.uploaded_file)
 
@@ -204,7 +203,7 @@ def app():
                 exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
+                st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
 
                 if error_message:
                     st.error(error_message)
@@ -225,6 +224,9 @@ def app():
 
         except Exception as e:
             st.error(f"Erreur lors du traitement : {str(e)}")
+
+    elif not api_key:
+        st.warning("Veuillez entrer votre clé API OpenAI pour continuer.")
 
     if st.button("Réinitialiser l'analyse"):
         for key in list(st.session_state.keys()):
