@@ -11,4 +11,3 @@ unidecode
 openai
 python-wordpress-xmlrpc
 cloudscraper
-woocommerce
