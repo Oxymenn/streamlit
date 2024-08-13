@@ -1,41 +1,51 @@
 import streamlit as st
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import AffinityPropagation
+import numpy as np
+from sklearn.cluster import AgglomerativeClustering
+import spacy
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def perform_clustering(keywords):
-    vectorizer = TfidfVectorizer()
-    X = vectorizer.fit_transform(keywords)
+# Charger le modèle spaCy (assurez-vous d'avoir téléchargé le modèle avec : python -m spacy download fr_core_news_md)
+nlp = spacy.load("fr_core_news_md")
 
-    af = AffinityPropagation().fit(X)
-    labels = af.labels_
+def get_embedding(text):
+    doc = nlp(text)
+    return doc.vector
 
+def perform_clustering(keywords, n_clusters=3):
+    # Créer les embeddings
+    embeddings = np.array([get_embedding(kw) for kw in keywords])
+    
+    # Effectuer le clustering hiérarchique
+    clustering = AgglomerativeClustering(n_clusters=n_clusters)
+    labels = clustering.fit_predict(embeddings)
+    
     cluster_data = {
         'Topic Clusters': labels, 
         'Keywords': keywords
     }
     cluster_df = pd.DataFrame(cluster_data)
     
-    return cluster_df, len(set(labels))
+    return cluster_df, n_clusters
 
 def app():
-    st.title("Topical Cluster")
+    st.title("Topical Cluster amélioré")
     
     st.write("""
-    Cet outil regroupe les mots-clés en clusters thématiques en utilisant TF-IDF et l'algorithme Affinity Propagation.
+    Cet outil regroupe les mots-clés en clusters thématiques en utilisant des embeddings de mots et un clustering hiérarchique.
     Entrez vos mots-clés (un par ligne) dans la zone de texte ci-dessous.
     """)
 
     keywords_input = st.text_area("Entrez vos mots-clés (un par ligne) :", height=200)
+    n_clusters = st.slider("Nombre de clusters souhaités", min_value=2, max_value=10, value=3)
 
     if st.button("Effectuer le clustering"):
         if keywords_input:
             keywords = [kw.strip() for kw in keywords_input.split('\n') if kw.strip()]
 
             with st.spinner("Clustering en cours..."):
-                cluster_df, n_clusters = perform_clustering(keywords)
+                cluster_df, n_clusters = perform_clustering(keywords, n_clusters)
 
             st.success(f"Clustering terminé ! {n_clusters} clusters trouvés.")
 
