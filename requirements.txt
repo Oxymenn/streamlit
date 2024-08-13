@@ -13,4 +13,3 @@ python-wordpress-xmlrpc
 cloudscraper
 matplotlib
 seaborn
-spacy
