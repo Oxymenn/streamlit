@@ -11,3 +11,5 @@ unidecode
 openai
 python-wordpress-xmlrpc
 cloudscraper
+matplotlib
+seaborn
