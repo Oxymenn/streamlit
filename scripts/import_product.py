@@ -83,4 +83,37 @@ def app():
                 st.error(f"Erreur lors de l'importation/mise à jour du produit : {e}")
                 st.error(f"Données du produit : {json.dumps(product_data, ensure_ascii=False, indent=2)}")
 
-    # Le reste du code reste inchangé...
+    uploaded_file = st.file_uploader("Choisissez un fichier CSV", type="csv")
+
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.write("Aperçu des données :")
+        st.write(df.head())
+        
+        st.write("Associez les colonnes de votre CSV aux champs WooCommerce :")
+        
+        woo_fields = ['id', 'name', 'type', 'regular_price', 'description', 'short_description', 'categories', 'images', 'sku']
+        column_options = [''] + df.columns.tolist()
+        column_mapping = {}
+        
+        for field in woo_fields:
+            column_mapping[field] = st.selectbox(f"Champ WooCommerce '{field}'", column_options)
+
+        num_products = st.number_input("Nombre de produits à importer/mettre à jour", min_value=1, max_value=len(df), value=1)
+
+        if st.button("Importer/Mettre à jour les produits"):
+            import_or_update_products(df, num_products, column_mapping)
+            st.success(f"{num_products} produits ont été traités !")
+
+            # Supprimer les lignes traitées et créer un nouveau CSV
+            df_remaining = df.iloc[num_products:]
+            csv_remaining = df_remaining.to_csv(index=False)
+            st.download_button(
+                label="Télécharger le fichier CSV mis à jour",
+                data=csv_remaining,
+                file_name="produits_restants.csv",
+                mime="text/csv"
+            )
+
+if __name__ == "__main__":
+    app()
