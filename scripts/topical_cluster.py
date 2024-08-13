@@ -6,76 +6,60 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 def perform_clustering(keywords):
-    # Create a Tf-idf Vector with Keywords
     vectorizer = TfidfVectorizer()
     X = vectorizer.fit_transform(keywords)
 
-    # Perform Affinity Propagation clustering
     af = AffinityPropagation().fit(X)
-    cluster_centers_indices = af.cluster_centers_indices_
     labels = af.labels_
 
-    # Get the number of clusters found
-    n_clusters = len(cluster_centers_indices)
-
-    # Create a DataFrame to store the cluster information
     cluster_data = {
         'Topic Clusters': labels, 
         'Keywords': keywords
     }
-
-    # Convert cluster_data to a Pandas DataFrame
     cluster_df = pd.DataFrame(cluster_data)
     
-    return cluster_df, n_clusters
+    return cluster_df, len(set(labels))
 
-def main():
-    st.title("Keyword Topic Clustering for SEO")
+def app():
+    st.title("Topical Cluster")
     
     st.write("""
-    This tool groups keywords into topic clusters using TF-IDF and Affinity Propagation clustering.
-    Enter your keywords (one per line) in the text area below.
+    Cet outil regroupe les mots-clés en clusters thématiques en utilisant TF-IDF et l'algorithme Affinity Propagation.
+    Entrez vos mots-clés (un par ligne) dans la zone de texte ci-dessous.
     """)
 
-    # Text area for user input
-    keywords_input = st.text_area("Enter your keywords (one per line):", height=200)
+    keywords_input = st.text_area("Entrez vos mots-clés (un par ligne) :", height=200)
 
-    if st.button("Perform Clustering"):
+    if st.button("Effectuer le clustering"):
         if keywords_input:
-            keywords = keywords_input.split('\n')
-            keywords = [keyword.strip() for keyword in keywords if keyword.strip()]
+            keywords = [kw.strip() for kw in keywords_input.split('\n') if kw.strip()]
 
-            with st.spinner("Performing clustering..."):
+            with st.spinner("Clustering en cours..."):
                 cluster_df, n_clusters = perform_clustering(keywords)
 
-            st.success(f"Clustering complete! Found {n_clusters} clusters.")
+            st.success(f"Clustering terminé ! {n_clusters} clusters trouvés.")
 
-            # Display results
-            st.subheader("Clustered Keywords")
+            st.subheader("Mots-clés regroupés")
             st.dataframe(cluster_df)
 
-            # Download button for CSV
             csv = cluster_df.to_csv(index=False)
             st.download_button(
-                label="Download clustered keywords as CSV",
+                label="Télécharger les mots-clés regroupés (CSV)",
                 data=csv,
-                file_name="clustered_keywords.csv",
+                file_name="mots_cles_regroupes.csv",
                 mime="text/csv",
             )
 
-            # Visualize clusters
-            st.subheader("Cluster Distribution")
+            st.subheader("Distribution des clusters")
             fig, ax = plt.subplots(figsize=(10, 5))
             sns.countplot(x='Topic Clusters', data=cluster_df, ax=ax)
-            plt.title("Distribution of Keywords Across Clusters")
+            plt.title("Distribution des mots-clés par cluster")
             plt.xlabel("Cluster")
-            plt.ylabel("Number of Keywords")
+            plt.ylabel("Nombre de mots-clés")
             st.pyplot(fig)
 
         else:
-            st.warning("Please enter some keywords before clustering.")
-def app():
-    st.title("Topical Cluster")
+            st.warning("Veuillez entrer des mots-clés avant de lancer le clustering.")
 
 if __name__ == "__main__":
-    main()
+    app()
