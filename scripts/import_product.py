@@ -20,7 +20,7 @@ def app():
         return value
 
     def create_or_update_product(product_data):
-        endpoint = f"{url}/wp-json/wp/v2/product"
+        endpoint = f"{url}/wp-json/wc/v3/products"  # Notez l'utilisation de wc/v3 pour WooCommerce
         auth = (username, password)
         headers = {"Content-Type": "application/json"}
 
@@ -29,7 +29,7 @@ def app():
             existing_product = requests.get(f"{endpoint}/{product_data['id']}", auth=auth)
             if existing_product.status_code == 200:
                 # Mise à jour du produit existant
-                response = requests.post(f"{endpoint}/{product_data['id']}", auth=auth, headers=headers, data=json.dumps(product_data))
+                response = requests.put(f"{endpoint}/{product_data['id']}", auth=auth, headers=headers, data=json.dumps(product_data))
             else:
                 # Création d'un nouveau produit
                 response = requests.post(endpoint, auth=auth, headers=headers, data=json.dumps(product_data))
@@ -46,20 +46,21 @@ def app():
         for index, row in df.head(num_products).iterrows():
             product_data = {}
             
-            for wp_field, csv_field in column_mapping.items():
+            for woo_field, csv_field in column_mapping.items():
                 if csv_field and csv_field in df.columns:
                     value = clean_data(row[csv_field])
                     if value is not None:
-                        if wp_field == 'categories':
-                            product_data[wp_field] = [{"id": cat_id} for cat_id in str(value).split(',') if cat_id]
-                        elif wp_field == 'images':
-                            product_data[wp_field] = [{"src": img_url} for img_url in str(value).split(',') if img_url]
+                        if woo_field == 'categories':
+                            # Assurez-vous que les catégories sont au format attendu par WooCommerce
+                            product_data[woo_field] = [{"id": int(cat_id)} for cat_id in str(value).split(',') if cat_id.isdigit()]
+                        elif woo_field == 'images':
+                            product_data[woo_field] = [{"src": img_url} for img_url in str(value).split(',') if img_url]
                         else:
-                            product_data[wp_field] = value
+                            product_data[woo_field] = value
 
             success, result = create_or_update_product(product_data)
             if success:
-                st.write(f"Produit {'mis à jour' if 'id' in product_data else 'créé'} avec succès : {product_data.get('title', 'Sans nom')}")
+                st.write(f"Produit {'mis à jour' if 'id' in product_data else 'créé'} avec succès : {product_data.get('name', 'Sans nom')}")
             else:
                 st.error(f"Erreur lors de l'importation/mise à jour du produit : {result}")
                 st.error(f"Données du produit : {json.dumps(product_data, ensure_ascii=False, indent=2)}")
@@ -71,14 +72,14 @@ def app():
         st.write("Aperçu des données :")
         st.write(df.head())
         
-        st.write("Associez les colonnes de votre CSV aux champs WordPress/WooCommerce :")
+        st.write("Associez les colonnes de votre CSV aux champs WooCommerce :")
         
-        wp_fields = ['id', 'title', 'content', 'status', 'regular_price', 'sale_price', 'categories', 'images', 'sku']
+        woo_fields = ['id', 'sku', 'type', 'name', 'short_description', 'description', 'categories', 'images', 'regular_price']
         column_options = [''] + df.columns.tolist()
         column_mapping = {}
         
-        for field in wp_fields:
-            column_mapping[field] = st.selectbox(f"Champ WordPress '{field}'", column_options)
+        for field in woo_fields:
+            column_mapping[field] = st.selectbox(f"Champ WooCommerce '{field}'", column_options)
 
         num_products = st.number_input("Nombre de produits à importer/mettre à jour", min_value=1, max_value=len(df), value=1)
 
