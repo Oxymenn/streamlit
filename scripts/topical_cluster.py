@@ -22,8 +22,8 @@ def perform_clustering(keywords, n_clusters=3):
     similarity_matrix = cosine_similarity(X)
     
     # Clustering
-    clustering = AgglomerativeClustering(n_clusters=n_clusters, affinity='precomputed', linkage='average')
-    labels = clustering.fit_predict(1 - similarity_matrix)
+    clustering = AgglomerativeClustering(n_clusters=n_clusters)
+    labels = clustering.fit_predict(similarity_matrix)
     
     cluster_data = {
         'Topic Clusters': labels, 
@@ -48,29 +48,32 @@ def app():
         if keywords_input:
             keywords = [kw.strip() for kw in keywords_input.split('\n') if kw.strip()]
 
-            with st.spinner("Clustering en cours..."):
-                cluster_df, n_clusters = perform_clustering(keywords, n_clusters)
+            if len(keywords) < n_clusters:
+                st.warning(f"Le nombre de mots-clés ({len(keywords)}) est inférieur au nombre de clusters demandé ({n_clusters}). Veuillez ajouter plus de mots-clés ou réduire le nombre de clusters.")
+            else:
+                with st.spinner("Clustering en cours..."):
+                    cluster_df, n_clusters = perform_clustering(keywords, n_clusters)
 
-            st.success(f"Clustering terminé ! {n_clusters} clusters trouvés.")
+                st.success(f"Clustering terminé ! {n_clusters} clusters trouvés.")
 
-            st.subheader("Mots-clés regroupés")
-            st.dataframe(cluster_df)
+                st.subheader("Mots-clés regroupés")
+                st.dataframe(cluster_df)
 
-            csv = cluster_df.to_csv(index=False)
-            st.download_button(
-                label="Télécharger les mots-clés regroupés (CSV)",
-                data=csv,
-                file_name="mots_cles_regroupes.csv",
-                mime="text/csv",
-            )
+                csv = cluster_df.to_csv(index=False)
+                st.download_button(
+                    label="Télécharger les mots-clés regroupés (CSV)",
+                    data=csv,
+                    file_name="mots_cles_regroupes.csv",
+                    mime="text/csv",
+                )
 
-            st.subheader("Distribution des clusters")
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.countplot(x='Topic Clusters', data=cluster_df, ax=ax)
-            plt.title("Distribution des mots-clés par cluster")
-            plt.xlabel("Cluster")
-            plt.ylabel("Nombre de mots-clés")
-            st.pyplot(fig)
+                st.subheader("Distribution des clusters")
+                fig, ax = plt.subplots(figsize=(10, 5))
+                sns.countplot(x='Topic Clusters', data=cluster_df, ax=ax)
+                plt.title("Distribution des mots-clés par cluster")
+                plt.xlabel("Cluster")
+                plt.ylabel("Nombre de mots-clés")
+                st.pyplot(fig)
 
         else:
             st.warning("Veuillez entrer des mots-clés avant de lancer le clustering.")
