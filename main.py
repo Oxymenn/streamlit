@@ -9,9 +9,6 @@ from scripts import post_article_wp
 from scripts import audit_on_page
 from scripts import import_product
 
-
-
-
 # Configuration des pages
 PAGES = {
     "Analyse + Proposition Maillage": analyse_proposition_maillage,
