@@ -74,6 +74,8 @@ def main():
 
         else:
             st.warning("Please enter some keywords before clustering.")
+def app():
+    st.title("Topical Cluster")
 
 if __name__ == "__main__":
     main()
