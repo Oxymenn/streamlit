@@ -129,6 +129,10 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
 
     return df_results, None
 
+def count_urls(urls_text):
+    urls = [url.strip() for url in urls_text.split('\n') if url.strip()]
+    return len(urls)
+
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
 
@@ -150,6 +154,10 @@ def app():
         st.session_state.additional_stopwords = ""
 
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
+    
+    # Affichage du nombre d'URLs copiées
+    url_count = count_urls(st.session_state.urls_to_analyze)
+    st.info(f"Nombre d'URLs copiées : {url_count}")
     
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
     if uploaded_file is not None:
