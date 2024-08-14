@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import dask.dataframe as dd
 import requests
 from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
@@ -7,6 +8,9 @@ import numpy as np
 import re
 from openai import OpenAI
 import time
+import concurrent.futures
+import pickle
+import os
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -26,9 +30,13 @@ stopwords_fr = {
     "été", "être"
 }
 
+@st.cache_resource
+def load_excel_file(file):
+    return dd.read_excel(file, engine='openpyxl')
+
 def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -58,14 +66,14 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-def get_embeddings(text, api_key):
+def get_embeddings_batch(texts, api_key):
     client = OpenAI(api_key=api_key)
     try:
         response = client.embeddings.create(
             model="text-embedding-3-small",
-            input=text
+            input=texts
         )
-        return response.data[0].embedding
+        return [data.embedding for data in response.data]
     except Exception as e:
         st.error(f"Erreur lors de la création des embeddings: {e}")
         return None
@@ -80,14 +88,34 @@ def calculate_similarity(embeddings):
 
 @st.cache_data
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
-    contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
-    contents = [content for content in contents if content]
+    # Charger ou créer le cache des embeddings
+    cache_file = 'embeddings_cache.pkl'
+    if os.path.exists(cache_file):
+        with open(cache_file, 'rb') as f:
+            embeddings_cache = pickle.load(f)
+    else:
+        embeddings_cache = {}
+
+    # Extraire et nettoyer le contenu en parallèle
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_url = {executor.submit(extract_and_clean_content, url, include_classes, exclude_classes, additional_stopwords): url for url in urls_list}
+        contents = {url: future.result() for future, url in future_to_url.items() if future.result() is not None}
 
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    embeddings = [get_embeddings(content, api_key) for content in contents]
-    embeddings = [emb for emb in embeddings if emb]
+    # Obtenir les embeddings (utiliser le cache si disponible)
+    urls_to_embed = [url for url in contents.keys() if url not in embeddings_cache]
+    if urls_to_embed:
+        new_embeddings = get_embeddings_batch([contents[url] for url in urls_to_embed], api_key)
+        for url, embedding in zip(urls_to_embed, new_embeddings):
+            embeddings_cache[url] = embedding
+
+    # Sauvegarder le cache mis à jour
+    with open(cache_file, 'wb') as f:
+        pickle.dump(embeddings_cache, f)
+
+    embeddings = [embeddings_cache[url] for url in urls_list if url in embeddings_cache]
 
     if not embeddings:
         return None, "Impossible de générer des embeddings pour les contenus extraits."
@@ -97,6 +125,10 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
     if similarity_matrix is None:
         return None, "Erreur lors du calcul de la similarité."
 
+    # Pré-filtrer les URLs pertinentes du fichier Excel
+    relevant_urls = set(urls_list)
+    df_excel_filtered = df_excel[df_excel[col_url].isin(relevant_urls)].compute()
+
     results = []
     for i, url_start in enumerate(urls_list):
         similarities = similarity_matrix[i]
@@ -105,7 +137,7 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start]
 
         for j, (url_dest, sim) in enumerate(similar_urls):
-            ancres_df = df_excel[df_excel[col_url] == url_dest]
+            ancres_df = df_excel_filtered[df_excel_filtered[col_url] == url_dest]
             ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
             ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
             
@@ -165,7 +197,7 @@ def app():
 
     if st.session_state.uploaded_file is not None and st.session_state.urls_to_analyze and api_key:
         try:
-            df_excel = pd.read_excel(st.session_state.uploaded_file)
+            df_excel = load_excel_file(st.session_state.uploaded_file)
 
             st.subheader("Sélectionnez les données GSC")
             col_url = st.selectbox("Sélectionnez la colonne contenant les URLs", df_excel.columns)
@@ -174,10 +206,6 @@ def app():
 
             if not all(col in df_excel.columns for col in [col_url, col_ancre, col_priorite]):
                 st.error("Erreur: Une ou plusieurs colonnes sélectionnées n'existent pas dans le fichier Excel.")
-                return
-
-            if not pd.to_numeric(df_excel[col_priorite], errors='coerce').notna().all():
-                st.error(f"Erreur: La colonne '{col_priorite}' contient des valeurs non numériques.")
                 return
 
             urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
