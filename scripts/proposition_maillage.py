@@ -30,9 +30,12 @@ stopwords_fr = {
     "été", "être"
 }
 
-@st.cache_resource
+@st.cache_data
 def load_excel_file(file):
-    return dd.read_excel(file, engine='openpyxl')
+    # Lire le fichier Excel avec pandas
+    df_pandas = pd.read_excel(file, engine='openpyxl')
+    # Convertir le DataFrame pandas en DataFrame Dask
+    return dd.from_pandas(df_pandas, npartitions=4)  # Ajustez le nombre de partitions selon vos besoins
 
 def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
