@@ -7,7 +7,7 @@ from scripts import cannibalisation_serp_gratuit
 from scripts import images_bulk
 from scripts import post_article_wp
 from scripts import audit_on_page
-from scripts import topical_cluster
+from scripts import extract_serp
 
 # Configuration des pages
 PAGES = {
@@ -19,7 +19,7 @@ PAGES = {
     "Images Bulk": images_bulk,
     "Post Article WP": post_article_wp,
     "Audit SEO On-page": audit_on_page,
-    "Topical Cluster": topical_cluster
+    "Extraction de SERP": extract_serp
 }
 
 # Titre principal
