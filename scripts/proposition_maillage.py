@@ -32,8 +32,7 @@ stopwords_fr = {
 
 @st.cache_data
 def load_excel_file(file):
-    df_pandas = pd.read_excel(file, engine='openpyxl')
-    return dd.from_pandas(df_pandas, npartitions=4)
+    return dd.read_excel(file, engine='openpyxl')
 
 def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
@@ -86,7 +85,8 @@ def calculate_similarity(embeddings):
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
-def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, _progress_callback, batch_size):
+@st.cache_data
+def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, _progress_callback, batch_size):
     cache_file = 'embeddings_cache.pkl'
     if os.path.exists(cache_file):
         with open(cache_file, 'rb') as f:
@@ -95,12 +95,12 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
         embeddings_cache = {}
 
     contents = {}
-    total_urls = len(urls_list)
+    total_urls = len(_urls_list)
     processed_urls = 0
 
     # Traitement par lots des URLs
-    for i in range(0, len(urls_list), batch_size):
-        batch_urls = urls_list[i:i+batch_size]
+    for i in range(0, len(_urls_list), batch_size):
+        batch_urls = _urls_list[i:i+batch_size]
         with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
             future_to_url = {executor.submit(extract_and_clean_content, url, include_classes, exclude_classes, additional_stopwords): url for url in batch_urls}
             for future in concurrent.futures.as_completed(future_to_url):
@@ -125,7 +125,7 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
     with open(cache_file, 'wb') as f:
         pickle.dump(embeddings_cache, f)
 
-    embeddings = [embeddings_cache[url] for url in urls_list if url in embeddings_cache]
+    embeddings = [embeddings_cache[url] for url in _urls_list if url in embeddings_cache]
 
     if not embeddings:
         return None, "Impossible de générer des embeddings pour les contenus extraits."
@@ -135,15 +135,15 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
     if similarity_matrix is None:
         return None, "Erreur lors du calcul de la similarité."
 
-    relevant_urls = set(urls_list)
+    relevant_urls = set(_urls_list)
     df_excel_filtered = _df_excel[_df_excel[col_url].isin(relevant_urls)].compute()
 
     results = []
-    for i, url_start in enumerate(urls_list):
+    for i, url_start in enumerate(_urls_list):
         similarities = similarity_matrix[i]
-        similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)
+        similar_urls = sorted(zip(_urls_list, similarities), key=lambda x: x[1], reverse=True)
         
-        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start]
+        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start][:100]  # Limit to top 100 similar URLs
 
         for j, (url_dest, sim) in enumerate(similar_urls):
             ancres_df = df_excel_filtered[df_excel_filtered[col_url] == url_dest]
@@ -217,7 +217,7 @@ def app():
                 return
 
             urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
-            max_similar_urls = len(urls_list) - 1
+            max_similar_urls = min(len(urls_list) - 1, 100)  # Limit to 100 max similar URLs
 
             st.subheader("Paramètres d'analyse")
             batch_size = st.selectbox("Taille du batch d'URLs à analyser", options=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100], index=4)
