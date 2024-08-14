@@ -1,19 +1,21 @@
 import streamlit as st
 import pandas as pd
 import dask.dataframe as dd
-import requests
+import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
-from openai import OpenAI
+from openai import AsyncOpenAI
 import time
 import concurrent.futures
 import pickle
 import os
 import logging
 import json
-from requests.exceptions import RequestException
+from functools import partial
+import multiprocessing
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -41,11 +43,11 @@ def load_excel_file(file):
     df = pd.read_excel(file, engine='openpyxl')
     return dd.from_pandas(df, npartitions=10)
 
-def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
+async def extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords):
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        async with session.get(url, timeout=10) as response:
+            html = await response.text()
+        soup = BeautifulSoup(html, 'html.parser')
 
         content = ""
         if include_classes:
@@ -77,17 +79,38 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
             return url, None
 
         return url, content
-    except RequestException as e:
-        logging.error(f"Erreur de requête pour l'URL {url}: {str(e)}")
-        return url, None
     except Exception as e:
-        logging.error(f"Erreur inattendue lors de l'extraction du contenu pour l'URL {url}: {str(e)}")
+        logging.error(f"Erreur lors de l'extraction du contenu pour l'URL {url}: {str(e)}")
         return url, None
 
-def get_embeddings_batch(texts, api_key):
-    client = OpenAI(api_key=api_key)
+class RateLimiter:
+    def __init__(self, rate_limit, time_period):
+        self.rate_limit = rate_limit
+        self.time_period = time_period
+        self.tokens = rate_limit
+        self.last_update = time.monotonic()
+
+    async def acquire(self):
+        while True:
+            current_time = time.monotonic()
+            time_passed = current_time - self.last_update
+            self.tokens += time_passed * (self.rate_limit / self.time_period)
+            if self.tokens > self.rate_limit:
+                self.tokens = self.rate_limit
+            self.last_update = current_time
+
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return
+            else:
+                await asyncio.sleep(self.time_period / self.rate_limit)
+
+rate_limiter = RateLimiter(rate_limit=50, time_period=60)  # 50 requests per minute
+
+async def get_embeddings_batch(client, texts):
+    await rate_limiter.acquire()
     try:
-        response = client.embeddings.create(
+        response = await client.embeddings.create(
             model="text-embedding-3-small",
             input=texts
         )
@@ -96,13 +119,25 @@ def get_embeddings_batch(texts, api_key):
         logging.error(f"Erreur lors de la création des embeddings: {str(e)}")
         return None
 
+def calculate_similarity_chunk(embeddings_chunk):
+    return cosine_similarity(embeddings_chunk)
+
 def calculate_similarity(embeddings):
     try:
-        similarity_matrix = cosine_similarity(embeddings)
-        return similarity_matrix
+        with multiprocessing.Pool() as pool:
+            chunk_size = 1000  # Adjust based on your system's capabilities
+            chunks = [embeddings[i:i+chunk_size] for i in range(0, len(embeddings), chunk_size)]
+            results = pool.map(calculate_similarity_chunk, chunks)
+        
+        return np.concatenate(results)
     except Exception as e:
         logging.error(f"Erreur lors du calcul de la similarité cosinus: {str(e)}")
         return None
+
+async def process_urls(urls, include_classes, exclude_classes, additional_stopwords):
+    async with aiohttp.ClientSession() as session:
+        tasks = [extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords) for url in urls]
+        return await asyncio.gather(*tasks)
 
 @st.cache_data
 def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, _progress_callback, batch_size):
@@ -134,6 +169,7 @@ def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, includ
         error_log = []
 
     total_urls = len(_urls_list)
+    client = AsyncOpenAI(api_key=api_key)
 
     # Traitement par lots des URLs
     for i in range(processed_urls, total_urls, batch_size):
@@ -141,17 +177,15 @@ def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, includ
         contents = {}
         
         try:
-            # Extraction et nettoyage du contenu
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(batch_size, 100)) as executor:
-                future_to_url = {executor.submit(extract_and_clean_content, url, include_classes, exclude_classes, additional_stopwords): url for url in batch_urls}
-                for future in concurrent.futures.as_completed(future_to_url):
-                    url, content = future.result()
-                    if content:
-                        contents[url] = content
-                    else:
-                        error_log.append({"url": url, "error": "Contenu non extrait ou vide"})
-                    processed_urls += 1
-                    _progress_callback(processed_urls, total_urls)
+            # Extraction et nettoyage du contenu de manière asynchrone
+            batch_results = asyncio.run(process_urls(batch_urls, include_classes, exclude_classes, additional_stopwords))
+            for url, content in batch_results:
+                if content:
+                    contents[url] = content
+                else:
+                    error_log.append({"url": url, "error": "Contenu non extrait ou vide"})
+                processed_urls += 1
+                _progress_callback(processed_urls, total_urls)
 
             # Traitement des embeddings pour ce batch
             urls_to_embed = [url for url in contents.keys() if url not in embeddings_cache]
@@ -159,7 +193,7 @@ def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, includ
                 for j in range(0, len(urls_to_embed), 100):  # Traitement par lots de 100 pour les embeddings
                     sub_batch = urls_to_embed[j:j+100]
                     try:
-                        new_embeddings = get_embeddings_batch([contents[url] for url in sub_batch], api_key)
+                        new_embeddings = asyncio.run(get_embeddings_batch(client, [contents[url] for url in sub_batch]))
                         for url, embedding in zip(sub_batch, new_embeddings):
                             embeddings_cache[url] = embedding
                     except Exception as e:
