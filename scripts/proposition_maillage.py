@@ -86,8 +86,7 @@ def calculate_similarity(embeddings):
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
-@st.cache_data
-def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, _progress_callback):
+def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, _progress_callback, batch_size):
     cache_file = 'embeddings_cache.pkl'
     if os.path.exists(cache_file):
         with open(cache_file, 'rb') as f:
@@ -99,15 +98,17 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
     total_urls = len(urls_list)
     processed_urls = 0
 
-    # Traitement parallèle des URLs
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_url = {executor.submit(extract_and_clean_content, url, include_classes, exclude_classes, additional_stopwords): url for url in urls_list}
-        for future in concurrent.futures.as_completed(future_to_url):
-            url, content = future.result()
-            if content:
-                contents[url] = content
-            processed_urls += 1
-            _progress_callback(processed_urls, total_urls)
+    # Traitement par lots des URLs
+    for i in range(0, len(urls_list), batch_size):
+        batch_urls = urls_list[i:i+batch_size]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+            future_to_url = {executor.submit(extract_and_clean_content, url, include_classes, exclude_classes, additional_stopwords): url for url in batch_urls}
+            for future in concurrent.futures.as_completed(future_to_url):
+                url, content = future.result()
+                if content:
+                    contents[url] = content
+                processed_urls += 1
+                _progress_callback(processed_urls, total_urls)
 
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
@@ -115,9 +116,8 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
     urls_to_embed = [url for url in contents.keys() if url not in embeddings_cache]
     if urls_to_embed:
         # Traitement par lots des embeddings
-        batch_size = 100  # Ajustez selon les limites de l'API
-        for i in range(0, len(urls_to_embed), batch_size):
-            batch = urls_to_embed[i:i+batch_size]
+        for i in range(0, len(urls_to_embed), 100):  # OpenAI limite à 100 entrées par requête
+            batch = urls_to_embed[i:i+100]
             new_embeddings = get_embeddings_batch([contents[url] for url in batch], api_key)
             for url, embedding in zip(batch, new_embeddings):
                 embeddings_cache[url] = embedding
@@ -220,6 +220,7 @@ def app():
             max_similar_urls = len(urls_list) - 1
 
             st.subheader("Paramètres d'analyse")
+            batch_size = st.selectbox("Taille du batch d'URLs à analyser", options=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100], index=4)
             st.session_state.num_similar_urls = st.number_input(
                 "Nombre d'URLs similaires à considérer", 
                 min_value=1, 
@@ -250,7 +251,7 @@ def app():
                     status_text.text(f"Progression : {progress}% | URLs analysées : {current}/{total} | Temps restant estimé : {remaining_time:.2f} secondes")
 
                 with st.spinner("Analyse en cours..."):
-                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, update_progress)
+                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, update_progress, batch_size)
 
                 end_time = time.time()
                 execution_time = end_time - start_time
@@ -262,7 +263,14 @@ def app():
                     st.warning("Aucun résultat n'a été généré.")
 
             if st.session_state.df_results is not None:
-                filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(st.session_state.num_similar_urls, 'Score de similarité')).reset_index(drop=True)
+                st.subheader("Résultats")
+                num_similar_urls = st.number_input(
+                    "Nombre d'URLs similaires à afficher", 
+                    min_value=1, 
+                    max_value=max_similar_urls, 
+                    value=st.session_state.num_similar_urls
+                )
+                filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(num_similar_urls, 'Score de similarité')).reset_index(drop=True)
                 st.dataframe(filtered_results)
 
                 csv = filtered_results.to_csv(index=False).encode('utf-8')
