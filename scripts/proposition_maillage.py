@@ -32,10 +32,8 @@ stopwords_fr = {
 
 @st.cache_data
 def load_excel_file(file):
-    # Lire le fichier Excel avec pandas
     df_pandas = pd.read_excel(file, engine='openpyxl')
-    # Convertir le DataFrame pandas en DataFrame Dask
-    return dd.from_pandas(df_pandas, npartitions=4)  # Ajustez le nombre de partitions selon vos besoins
+    return dd.from_pandas(df_pandas, npartitions=4)
 
 def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
@@ -66,7 +64,6 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
 
         return content
     except Exception as e:
-        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
 def get_embeddings_batch(texts, api_key):
@@ -90,8 +87,7 @@ def calculate_similarity(embeddings):
         return None
 
 @st.cache_data
-def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
-    # Charger ou créer le cache des embeddings
+def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, progress_callback):
     cache_file = 'embeddings_cache.pkl'
     if os.path.exists(cache_file):
         with open(cache_file, 'rb') as f:
@@ -99,22 +95,23 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
     else:
         embeddings_cache = {}
 
-    # Extraire et nettoyer le contenu en parallèle
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_url = {executor.submit(extract_and_clean_content, url, include_classes, exclude_classes, additional_stopwords): url for url in urls_list}
-        contents = {url: future.result() for future, url in future_to_url.items() if future.result() is not None}
+    contents = {}
+    total_urls = len(urls_list)
+    for i, url in enumerate(urls_list):
+        content = extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords)
+        if content:
+            contents[url] = content
+        progress_callback(i + 1, total_urls)
 
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    # Obtenir les embeddings (utiliser le cache si disponible)
     urls_to_embed = [url for url in contents.keys() if url not in embeddings_cache]
     if urls_to_embed:
         new_embeddings = get_embeddings_batch([contents[url] for url in urls_to_embed], api_key)
         for url, embedding in zip(urls_to_embed, new_embeddings):
             embeddings_cache[url] = embedding
 
-    # Sauvegarder le cache mis à jour
     with open(cache_file, 'wb') as f:
         pickle.dump(embeddings_cache, f)
 
@@ -128,7 +125,6 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
     if similarity_matrix is None:
         return None, "Erreur lors du calcul de la similarité."
 
-    # Pré-filtrer les URLs pertinentes du fichier Excel
     relevant_urls = set(urls_list)
     df_excel_filtered = _df_excel[_df_excel[col_url].isin(relevant_urls)].compute()
 
@@ -190,7 +186,6 @@ def app():
 
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
-    # Affichage du nombre d'URLs copiées
     url_count = count_urls(st.session_state.urls_to_analyze)
     st.info(f"Nombre d'URLs copiées : {url_count}")
     
@@ -213,7 +208,16 @@ def app():
 
             urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
             max_similar_urls = len(urls_list) - 1
-            st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("-"):
+                    st.session_state.num_similar_urls = max(1, st.session_state.num_similar_urls - 1)
+            with col2:
+                st.session_state.num_similar_urls = st.number_input("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
+            with col3:
+                if st.button("+"):
+                    st.session_state.num_similar_urls = min(max_similar_urls, st.session_state.num_similar_urls + 1)
 
             st.subheader("Filtrer le contenu HTML et termes")
             st.session_state.include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)", st.session_state.include_classes)
@@ -225,18 +229,20 @@ def app():
                 exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                start_time = time.time()
                 progress_bar = st.progress(0)
                 status_text = st.empty()
+                start_time = time.time()
+
+                def update_progress(current, total):
+                    progress = int((current / total) * 100)
+                    progress_bar.progress(progress)
+                    elapsed_time = time.time() - start_time
+                    estimated_total_time = elapsed_time * (total / current) if current > 0 else 0
+                    remaining_time = max(0, estimated_total_time - elapsed_time)
+                    status_text.text(f"Progression : {progress}% | URLs analysées : {current}/{total} | Temps restant estimé : {remaining_time:.2f} secondes")
 
                 with st.spinner("Analyse en cours..."):
-                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
-                    
-                    # Mise à jour de la barre de progression
-                    for percent_complete in range(100):
-                        time.sleep(0.01)
-                        progress_bar.progress(percent_complete + 1)
-                        status_text.text(f"Progression : {percent_complete + 1}%")
+                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, update_progress)
 
                 end_time = time.time()
                 execution_time = end_time - start_time
