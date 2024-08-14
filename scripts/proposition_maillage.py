@@ -12,7 +12,6 @@ import logging
 import json
 import hashlib
 import os
-from tqdm import tqdm
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -131,23 +130,23 @@ class RateLimiter:
 
 rate_limiter = RateLimiter(rate_limit=50, time_period=60)  # 50 requests per minute
 
-async def get_embeddings_batch(client, texts):
-    cache_key = f"embeddings_{hashlib.md5(''.join(texts).encode()).hexdigest()}"
-    cached_embeddings = cache.get(cache_key)
-    if cached_embeddings:
-        return cached_embeddings
+async def get_embedding(client, text):
+    cache_key = f"embedding_{hashlib.md5(text.encode()).hexdigest()}"
+    cached_embedding = cache.get(cache_key)
+    if cached_embedding:
+        return cached_embedding
 
     await rate_limiter.acquire()
     try:
         response = await client.embeddings.create(
             model="text-embedding-3-small",
-            input=texts
+            input=[text]
         )
-        embeddings = [data.embedding for data in response.data]
-        cache.set(cache_key, embeddings)
-        return embeddings
+        embedding = response.data[0].embedding
+        cache.set(cache_key, embedding)
+        return embedding
     except Exception as e:
-        logging.error(f"Erreur lors de la création des embeddings: {str(e)}")
+        logging.error(f"Erreur lors de la création de l'embedding: {str(e)}")
         return None
 
 def calculate_similarity(embeddings):
@@ -157,40 +156,29 @@ def calculate_similarity(embeddings):
         logging.error(f"Erreur lors du calcul de la similarité cosinus: {str(e)}")
         return None
 
-async def process_urls(urls, include_classes, exclude_classes, additional_stopwords):
-    async with aiohttp.ClientSession() as session:
-        tasks = [extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords) for url in urls]
-        return await asyncio.gather(*tasks)
+async def process_url(session, client, url, include_classes, exclude_classes, additional_stopwords):
+    _, content = await extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords)
+    if content:
+        embedding = await get_embedding(client, content)
+        return url, embedding
+    return url, None
 
 async def analyze_urls(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
     client = AsyncOpenAI(api_key=api_key)
-    contents = {}
     embeddings_cache = {}
     results = []
     error_log = []
 
-    # Extraction et nettoyage du contenu
-    batch_results = await process_urls(urls_list, include_classes, exclude_classes, additional_stopwords)
-    for url, content in batch_results:
-        if content:
-            contents[url] = content
+    async with aiohttp.ClientSession() as session:
+        tasks = [process_url(session, client, url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
+        processed_urls = await asyncio.gather(*tasks)
+
+    for url, embedding in processed_urls:
+        if embedding:
+            embeddings_cache[url] = embedding
         else:
-            error_log.append({"url": url, "error": "Contenu non extrait ou vide"})
+            error_log.append({"url": url, "error": "Échec de l'extraction du contenu ou de la création de l'embedding"})
 
-    # Création des embeddings
-    urls_to_embed = list(contents.keys())
-    for i in range(0, len(urls_to_embed), 100):
-        sub_batch = urls_to_embed[i:i+100]
-        try:
-            new_embeddings = await get_embeddings_batch(client, [contents[url] for url in sub_batch])
-            for url, embedding in zip(sub_batch, new_embeddings):
-                embeddings_cache[url] = embedding
-        except Exception as e:
-            logging.error(f"Erreur lors de la création des embeddings: {str(e)}")
-            for url in sub_batch:
-                error_log.append({"url": url, "error": f"Échec de création d'embedding: {str(e)}"})
-
-    # Calcul de similarité
     embeddings = [embeddings_cache[url] for url in urls_list if url in embeddings_cache]
     similarity_matrix = calculate_similarity(embeddings)
 
