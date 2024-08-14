@@ -6,6 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 from openai import OpenAI
+import time
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -185,8 +186,22 @@ def app():
                 exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                with st.spinner("Running..."):
+                start_time = time.time()
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                with st.spinner("Analyse en cours..."):
                     st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
+                    
+                    # Mise à jour de la barre de progression
+                    for percent_complete in range(100):
+                        time.sleep(0.01)
+                        progress_bar.progress(percent_complete + 1)
+                        status_text.text(f"Progression : {percent_complete + 1}%")
+
+                end_time = time.time()
+                execution_time = end_time - start_time
+                st.success(f"Analyse terminée en {execution_time:.2f} secondes.")
 
                 if error_message:
                     st.error(error_message)
