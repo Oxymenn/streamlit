@@ -219,15 +219,13 @@ def app():
             urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
             max_similar_urls = len(urls_list) - 1
 
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("-"):
-                    st.session_state.num_similar_urls = max(1, st.session_state.num_similar_urls - 1)
-            with col2:
-                st.session_state.num_similar_urls = st.number_input("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
-            with col3:
-                if st.button("+"):
-                    st.session_state.num_similar_urls = min(max_similar_urls, st.session_state.num_similar_urls + 1)
+            st.subheader("Paramètres d'analyse")
+            st.session_state.num_similar_urls = st.number_input(
+                "Nombre d'URLs similaires à considérer", 
+                min_value=1, 
+                max_value=max_similar_urls, 
+                value=min(5, max_similar_urls)
+            )
 
             st.subheader("Filtrer le contenu HTML et termes")
             st.session_state.include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)", st.session_state.include_classes)
