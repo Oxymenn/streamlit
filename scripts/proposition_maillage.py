@@ -141,38 +141,20 @@ async def process_urls(urls, include_classes, exclude_classes, additional_stopwo
 
 @st.cache_data
 def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, _progress_callback, batch_size):
-    cache_file = 'embeddings_cache.pkl'
-    results_file = 'intermediate_results.json'
-    error_log_file = 'error_log.json'
-    
-    # Chargement du cache des embeddings
-    if os.path.exists(cache_file):
-        with open(cache_file, 'rb') as f:
-            embeddings_cache = pickle.load(f)
-    else:
-        embeddings_cache = {}
-
-    # Chargement des résultats intermédiaires s'ils existent
-    if os.path.exists(results_file):
-        with open(results_file, 'r') as f:
-            results = json.load(f)
-        processed_urls = len(results)
-    else:
-        results = []
-        processed_urls = 0
-
-    # Chargement ou initialisation du log d'erreurs
-    if os.path.exists(error_log_file):
-        with open(error_log_file, 'r') as f:
-            error_log = json.load(f)
-    else:
-        error_log = []
+    if 'processed_urls' not in st.session_state:
+        st.session_state.processed_urls = 0
+    if 'results' not in st.session_state:
+        st.session_state.results = []
+    if 'embeddings_cache' not in st.session_state:
+        st.session_state.embeddings_cache = {}
+    if 'error_log' not in st.session_state:
+        st.session_state.error_log = []
 
     total_urls = len(_urls_list)
     client = AsyncOpenAI(api_key=api_key)
 
     # Traitement par lots des URLs
-    for i in range(processed_urls, total_urls, batch_size):
+    for i in range(st.session_state.processed_urls, total_urls, batch_size):
         batch_urls = _urls_list[i:i+batch_size]
         contents = {}
         
@@ -183,26 +165,27 @@ def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, includ
                 if content:
                     contents[url] = content
                 else:
-                    error_log.append({"url": url, "error": "Contenu non extrait ou vide"})
-                processed_urls += 1
-                _progress_callback(processed_urls, total_urls)
+                    st.session_state.error_log.append({"url": url, "error": "Contenu non extrait ou vide"})
+                st.session_state.processed_urls += 1
+                if st.session_state.processed_urls % 10 == 0:  # Mise à jour moins fréquente
+                    _progress_callback(st.session_state.processed_urls, total_urls)
 
             # Traitement des embeddings pour ce batch
-            urls_to_embed = [url for url in contents.keys() if url not in embeddings_cache]
+            urls_to_embed = [url for url in contents.keys() if url not in st.session_state.embeddings_cache]
             if urls_to_embed:
                 for j in range(0, len(urls_to_embed), 100):  # Traitement par lots de 100 pour les embeddings
                     sub_batch = urls_to_embed[j:j+100]
                     try:
                         new_embeddings = asyncio.run(get_embeddings_batch(client, [contents[url] for url in sub_batch]))
                         for url, embedding in zip(sub_batch, new_embeddings):
-                            embeddings_cache[url] = embedding
+                            st.session_state.embeddings_cache[url] = embedding
                     except Exception as e:
                         logging.error(f"Erreur lors de la création des embeddings: {str(e)}")
                         for url in sub_batch:
-                            error_log.append({"url": url, "error": f"Échec de création d'embedding: {str(e)}"})
+                            st.session_state.error_log.append({"url": url, "error": f"Échec de création d'embedding: {str(e)}"})
 
             # Calcul de similarité et ajout aux résultats pour ce batch
-            batch_embeddings = [embeddings_cache[url] for url in batch_urls if url in embeddings_cache]
+            batch_embeddings = [st.session_state.embeddings_cache[url] for url in batch_urls if url in st.session_state.embeddings_cache]
             if batch_embeddings:
                 similarity_matrix = calculate_similarity(batch_embeddings)
 
@@ -210,11 +193,11 @@ def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, includ
                 df_excel_filtered = _df_excel[_df_excel[col_url].isin(relevant_urls)].compute()
 
                 for j, url_start in enumerate(batch_urls):
-                    if url_start in embeddings_cache:
+                    if url_start in st.session_state.embeddings_cache:
                         similarities = similarity_matrix[j]
                         similar_urls = sorted(zip(batch_urls, similarities), key=lambda x: x[1], reverse=True)
                         
-                        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start and url in embeddings_cache][:100]
+                        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start and url in st.session_state.embeddings_cache][:100]
 
                         for k, (url_dest, sim) in enumerate(similar_urls):
                             ancres_df = df_excel_filtered[df_excel_filtered[col_url] == url_dest]
@@ -227,32 +210,24 @@ def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, includ
                             else:
                                 ancre = url_dest
 
-                            results.append({
+                            st.session_state.results.append({
                                 'URL de départ': url_start, 
                                 'URL de destination': url_dest, 
                                 'Ancre': ancre,
                                 'Score de similarité': sim
                             })
 
-            # Sauvegarde intermédiaire des résultats, du cache et du log d'erreurs
-            with open(results_file, 'w') as f:
-                json.dump(results, f)
-            with open(cache_file, 'wb') as f:
-                pickle.dump(embeddings_cache, f)
-            with open(error_log_file, 'w') as f:
-                json.dump(error_log, f)
-
         except Exception as e:
             logging.error(f"Erreur lors du traitement du batch {i}-{i+batch_size}: {str(e)}")
             for url in batch_urls:
-                error_log.append({"url": url, "error": f"Erreur de traitement du batch: {str(e)}"})
+                st.session_state.error_log.append({"url": url, "error": f"Erreur de traitement du batch: {str(e)}"})
             continue
 
-    if not results:
+    if not st.session_state.results:
         return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
 
-    df_results = pd.DataFrame(results)
-    return df_results, error_log
+    df_results = pd.DataFrame(st.session_state.results)
+    return df_results, st.session_state.error_log
 
 def count_urls(urls_text):
     urls = [url.strip() for url in urls_text.split('\n') if url.strip()]
