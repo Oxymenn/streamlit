@@ -179,34 +179,38 @@ async def analyze_urls(urls_list, df_excel, col_url, col_ancre, col_priorite, in
         else:
             error_log.append({"url": url, "error": "Échec de l'extraction du contenu ou de la création de l'embedding"})
 
-    embeddings = [embeddings_cache[url] for url in urls_list if url in embeddings_cache]
+    valid_urls = [url for url in urls_list if url in embeddings_cache]
+    embeddings = [embeddings_cache[url] for url in valid_urls]
+    
+    if not embeddings:
+        return results, error_log
+
     similarity_matrix = calculate_similarity(embeddings)
 
     if similarity_matrix is not None:
-        for i, url_start in enumerate(urls_list):
-            if url_start in embeddings_cache:
-                similarities = similarity_matrix[i]
-                similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)
+        for i, url_start in enumerate(valid_urls):
+            similarities = similarity_matrix[i]
+            similar_urls = sorted(zip(valid_urls, similarities), key=lambda x: x[1], reverse=True)
+            
+            similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start][:100]
+
+            for j, (url_dest, sim) in enumerate(similar_urls):
+                ancres_df = df_excel[df_excel[col_url] == url_dest]
+                ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
+                ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
                 
-                similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start and url in embeddings_cache][:100]
+                if not ancres_df.empty:
+                    ancres = ancres_df[col_ancre].tolist()
+                    ancre = ancres[j] if j < len(ancres) else ancres[0]
+                else:
+                    ancre = url_dest
 
-                for j, (url_dest, sim) in enumerate(similar_urls):
-                    ancres_df = df_excel[df_excel[col_url] == url_dest]
-                    ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
-                    ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
-                    
-                    if not ancres_df.empty:
-                        ancres = ancres_df[col_ancre].tolist()
-                        ancre = ancres[j] if j < len(ancres) else ancres[0]
-                    else:
-                        ancre = url_dest
-
-                    results.append({
-                        'URL de départ': url_start, 
-                        'URL de destination': url_dest, 
-                        'Ancre': ancre,
-                        'Score de similarité': sim
-                    })
+                results.append({
+                    'URL de départ': url_start, 
+                    'URL de destination': url_dest, 
+                    'Ancre': ancre,
+                    'Score de similarité': sim
+                })
 
     return results, error_log
 
