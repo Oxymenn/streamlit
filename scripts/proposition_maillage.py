@@ -62,9 +62,9 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
         all_stopwords = stopwords_fr.union(set(additional_stopwords))
         content = ' '.join([word for word in words if word not in all_stopwords])
 
-        return content
+        return url, content
     except Exception as e:
-        return None
+        return url, None
 
 def get_embeddings_batch(texts, api_key):
     client = OpenAI(api_key=api_key)
@@ -97,20 +97,30 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
 
     contents = {}
     total_urls = len(urls_list)
-    for i, url in enumerate(urls_list):
-        content = extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords)
-        if content:
-            contents[url] = content
-        progress_callback(i + 1, total_urls)
+    processed_urls = 0
+
+    # Traitement parallèle des URLs
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_url = {executor.submit(extract_and_clean_content, url, include_classes, exclude_classes, additional_stopwords): url for url in urls_list}
+        for future in concurrent.futures.as_completed(future_to_url):
+            url, content = future.result()
+            if content:
+                contents[url] = content
+            processed_urls += 1
+            progress_callback(processed_urls, total_urls)
 
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
     urls_to_embed = [url for url in contents.keys() if url not in embeddings_cache]
     if urls_to_embed:
-        new_embeddings = get_embeddings_batch([contents[url] for url in urls_to_embed], api_key)
-        for url, embedding in zip(urls_to_embed, new_embeddings):
-            embeddings_cache[url] = embedding
+        # Traitement par lots des embeddings
+        batch_size = 100  # Ajustez selon les limites de l'API
+        for i in range(0, len(urls_to_embed), batch_size):
+            batch = urls_to_embed[i:i+batch_size]
+            new_embeddings = get_embeddings_batch([contents[url] for url in batch], api_key)
+            for url, embedding in zip(batch, new_embeddings):
+                embeddings_cache[url] = embedding
 
     with open(cache_file, 'wb') as f:
         pickle.dump(embeddings_cache, f)
