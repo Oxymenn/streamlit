@@ -90,7 +90,7 @@ def calculate_similarity(embeddings):
         return None
 
 @st.cache_data
-def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
+def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
     # Charger ou créer le cache des embeddings
     cache_file = 'embeddings_cache.pkl'
     if os.path.exists(cache_file):
@@ -130,7 +130,7 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
 
     # Pré-filtrer les URLs pertinentes du fichier Excel
     relevant_urls = set(urls_list)
-    df_excel_filtered = df_excel[df_excel[col_url].isin(relevant_urls)].compute()
+    df_excel_filtered = _df_excel[_df_excel[col_url].isin(relevant_urls)].compute()
 
     results = []
     for i, url_start in enumerate(urls_list):
