@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import dask.dataframe as dd
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
@@ -9,13 +8,11 @@ import numpy as np
 import re
 from openai import AsyncOpenAI
 import time
-import concurrent.futures
-import pickle
-import os
 import logging
 import json
-from functools import partial
-import multiprocessing
+import hashlib
+import os
+from tqdm import tqdm
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -38,12 +35,38 @@ stopwords_fr = {
     "été", "être"
 }
 
+class Cache:
+    def __init__(self, cache_dir='cache'):
+        self.cache_dir = cache_dir
+        os.makedirs(cache_dir, exist_ok=True)
+
+    def _get_cache_path(self, key):
+        return os.path.join(self.cache_dir, hashlib.md5(key.encode()).hexdigest() + '.json')
+
+    def get(self, key):
+        path = self._get_cache_path(key)
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                return json.load(f)
+        return None
+
+    def set(self, key, value):
+        path = self._get_cache_path(key)
+        with open(path, 'w') as f:
+            json.dump(value, f)
+
+cache = Cache()
+
 @st.cache_data
 def load_excel_file(file):
-    df = pd.read_excel(file, engine='openpyxl')
-    return dd.from_pandas(df, npartitions=10)
+    return pd.read_excel(file, engine='openpyxl')
 
 async def extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords):
+    cache_key = f"content_{url}"
+    cached_content = cache.get(cache_key)
+    if cached_content:
+        return url, cached_content
+
     try:
         async with session.get(url, timeout=10) as response:
             html = await response.text()
@@ -78,6 +101,7 @@ async def extract_and_clean_content(session, url, include_classes, exclude_class
             logging.warning(f"Contenu vide après nettoyage pour l'URL: {url}")
             return url, None
 
+        cache.set(cache_key, content)
         return url, content
     except Exception as e:
         logging.error(f"Erreur lors de l'extraction du contenu pour l'URL {url}: {str(e)}")
@@ -108,28 +132,27 @@ class RateLimiter:
 rate_limiter = RateLimiter(rate_limit=50, time_period=60)  # 50 requests per minute
 
 async def get_embeddings_batch(client, texts):
+    cache_key = f"embeddings_{hashlib.md5(''.join(texts).encode()).hexdigest()}"
+    cached_embeddings = cache.get(cache_key)
+    if cached_embeddings:
+        return cached_embeddings
+
     await rate_limiter.acquire()
     try:
         response = await client.embeddings.create(
             model="text-embedding-3-small",
             input=texts
         )
-        return [data.embedding for data in response.data]
+        embeddings = [data.embedding for data in response.data]
+        cache.set(cache_key, embeddings)
+        return embeddings
     except Exception as e:
         logging.error(f"Erreur lors de la création des embeddings: {str(e)}")
         return None
 
-def calculate_similarity_chunk(embeddings_chunk):
-    return cosine_similarity(embeddings_chunk)
-
 def calculate_similarity(embeddings):
     try:
-        with multiprocessing.Pool() as pool:
-            chunk_size = 1000  # Adjust based on your system's capabilities
-            chunks = [embeddings[i:i+chunk_size] for i in range(0, len(embeddings), chunk_size)]
-            results = pool.map(calculate_similarity_chunk, chunks)
-        
-        return np.concatenate(results)
+        return cosine_similarity(embeddings)
     except Exception as e:
         logging.error(f"Erreur lors du calcul de la similarité cosinus: {str(e)}")
         return None
@@ -139,107 +162,73 @@ async def process_urls(urls, include_classes, exclude_classes, additional_stopwo
         tasks = [extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords) for url in urls]
         return await asyncio.gather(*tasks)
 
-@st.cache_data
-def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, _progress_callback, batch_size):
-    if 'processed_urls' not in st.session_state:
-        st.session_state.processed_urls = 0
-    if 'results' not in st.session_state:
-        st.session_state.results = []
-    if 'embeddings_cache' not in st.session_state:
-        st.session_state.embeddings_cache = {}
-    if 'error_log' not in st.session_state:
-        st.session_state.error_log = []
-
-    total_urls = len(_urls_list)
+async def analyze_urls(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
     client = AsyncOpenAI(api_key=api_key)
+    contents = {}
+    embeddings_cache = {}
+    results = []
+    error_log = []
 
-    # Traitement par lots des URLs
-    for i in range(st.session_state.processed_urls, total_urls, batch_size):
-        batch_urls = _urls_list[i:i+batch_size]
-        contents = {}
-        
+    # Extraction et nettoyage du contenu
+    batch_results = await process_urls(urls_list, include_classes, exclude_classes, additional_stopwords)
+    for url, content in batch_results:
+        if content:
+            contents[url] = content
+        else:
+            error_log.append({"url": url, "error": "Contenu non extrait ou vide"})
+
+    # Création des embeddings
+    urls_to_embed = list(contents.keys())
+    for i in range(0, len(urls_to_embed), 100):
+        sub_batch = urls_to_embed[i:i+100]
         try:
-            # Extraction et nettoyage du contenu de manière asynchrone
-            batch_results = asyncio.run(process_urls(batch_urls, include_classes, exclude_classes, additional_stopwords))
-            for url, content in batch_results:
-                if content:
-                    contents[url] = content
-                else:
-                    st.session_state.error_log.append({"url": url, "error": "Contenu non extrait ou vide"})
-                st.session_state.processed_urls += 1
-                if st.session_state.processed_urls % 10 == 0:  # Mise à jour moins fréquente
-                    _progress_callback(st.session_state.processed_urls, total_urls)
-
-            # Traitement des embeddings pour ce batch
-            urls_to_embed = [url for url in contents.keys() if url not in st.session_state.embeddings_cache]
-            if urls_to_embed:
-                for j in range(0, len(urls_to_embed), 100):  # Traitement par lots de 100 pour les embeddings
-                    sub_batch = urls_to_embed[j:j+100]
-                    try:
-                        new_embeddings = asyncio.run(get_embeddings_batch(client, [contents[url] for url in sub_batch]))
-                        for url, embedding in zip(sub_batch, new_embeddings):
-                            st.session_state.embeddings_cache[url] = embedding
-                    except Exception as e:
-                        logging.error(f"Erreur lors de la création des embeddings: {str(e)}")
-                        for url in sub_batch:
-                            st.session_state.error_log.append({"url": url, "error": f"Échec de création d'embedding: {str(e)}"})
-
-            # Calcul de similarité et ajout aux résultats pour ce batch
-            batch_embeddings = [st.session_state.embeddings_cache[url] for url in batch_urls if url in st.session_state.embeddings_cache]
-            if batch_embeddings:
-                similarity_matrix = calculate_similarity(batch_embeddings)
-
-                relevant_urls = set(batch_urls)
-                df_excel_filtered = _df_excel[_df_excel[col_url].isin(relevant_urls)].compute()
-
-                for j, url_start in enumerate(batch_urls):
-                    if url_start in st.session_state.embeddings_cache:
-                        similarities = similarity_matrix[j]
-                        similar_urls = sorted(zip(batch_urls, similarities), key=lambda x: x[1], reverse=True)
-                        
-                        similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start and url in st.session_state.embeddings_cache][:100]
-
-                        for k, (url_dest, sim) in enumerate(similar_urls):
-                            ancres_df = df_excel_filtered[df_excel_filtered[col_url] == url_dest]
-                            ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
-                            ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
-                            
-                            if not ancres_df.empty:
-                                ancres = ancres_df[col_ancre].tolist()
-                                ancre = ancres[k] if k < len(ancres) else ancres[0]
-                            else:
-                                ancre = url_dest
-
-                            st.session_state.results.append({
-                                'URL de départ': url_start, 
-                                'URL de destination': url_dest, 
-                                'Ancre': ancre,
-                                'Score de similarité': sim
-                            })
-
+            new_embeddings = await get_embeddings_batch(client, [contents[url] for url in sub_batch])
+            for url, embedding in zip(sub_batch, new_embeddings):
+                embeddings_cache[url] = embedding
         except Exception as e:
-            logging.error(f"Erreur lors du traitement du batch {i}-{i+batch_size}: {str(e)}")
-            for url in batch_urls:
-                st.session_state.error_log.append({"url": url, "error": f"Erreur de traitement du batch: {str(e)}"})
-            continue
+            logging.error(f"Erreur lors de la création des embeddings: {str(e)}")
+            for url in sub_batch:
+                error_log.append({"url": url, "error": f"Échec de création d'embedding: {str(e)}"})
 
-    if not st.session_state.results:
-        return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
+    # Calcul de similarité
+    embeddings = [embeddings_cache[url] for url in urls_list if url in embeddings_cache]
+    similarity_matrix = calculate_similarity(embeddings)
 
-    df_results = pd.DataFrame(st.session_state.results)
-    return df_results, st.session_state.error_log
+    if similarity_matrix is not None:
+        for i, url_start in enumerate(urls_list):
+            if url_start in embeddings_cache:
+                similarities = similarity_matrix[i]
+                similar_urls = sorted(zip(urls_list, similarities), key=lambda x: x[1], reverse=True)
+                
+                similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start and url in embeddings_cache][:100]
 
-def count_urls(urls_text):
-    urls = [url.strip() for url in urls_text.split('\n') if url.strip()]
-    return len(urls)
+                for j, (url_dest, sim) in enumerate(similar_urls):
+                    ancres_df = df_excel[df_excel[col_url] == url_dest]
+                    ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
+                    ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
+                    
+                    if not ancres_df.empty:
+                        ancres = ancres_df[col_ancre].tolist()
+                        ancre = ancres[j] if j < len(ancres) else ancres[0]
+                    else:
+                        ancre = url_dest
+
+                    results.append({
+                        'URL de départ': url_start, 
+                        'URL de destination': url_dest, 
+                        'Ancre': ancre,
+                        'Score de similarité': sim
+                    })
+
+    return results, error_log
 
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
 
     api_key = st.text_input("Entrez votre clé API OpenAI", type="password")
 
-    if 'df_results' not in st.session_state:
-        st.session_state.df_results = None
+    if 'results' not in st.session_state:
+        st.session_state.results = []
     if 'urls_to_analyze' not in st.session_state:
         st.session_state.urls_to_analyze = ""
     if 'uploaded_file' not in st.session_state:
@@ -255,7 +244,7 @@ def app():
 
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
-    url_count = count_urls(st.session_state.urls_to_analyze)
+    url_count = len([url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()])
     st.info(f"Nombre d'URLs copiées : {url_count}")
     
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
@@ -279,7 +268,6 @@ def app():
             max_similar_urls = min(len(urls_list) - 1, 100)  # Limit to 100 max similar URLs
 
             st.subheader("Paramètres d'analyse")
-            batch_size = st.selectbox("Taille du batch d'URLs à analyser", options=[10, 20, 50, 100, 200, 500], index=3)
             st.session_state.num_similar_urls = st.number_input(
                 "Nombre d'URLs similaires à considérer", 
                 min_value=1, 
@@ -301,24 +289,15 @@ def app():
                 status_text = st.empty()
                 start_time = time.time()
 
-                def update_progress(current, total):
-                    progress = int((current / total) * 100)
-                    progress_bar.progress(progress)
-                    elapsed_time = time.time() - start_time
-                    estimated_total_time = elapsed_time * (total / current) if current > 0 else 0
-                    remaining_time = max(0, estimated_total_time - elapsed_time)
-                    status_text.text(f"Progression : {progress}% | URLs analysées : {current}/{total} | Temps restant estimé : {remaining_time:.2f} secondes")
-
                 with st.spinner("Analyse en cours..."):
-                    st.session_state.df_results, error_log = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, update_progress, batch_size)
+                    results, error_log = asyncio.run(analyze_urls(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key))
+                    st.session_state.results = results
 
                 end_time = time.time()
                 execution_time = end_time - start_time
                 st.success(f"Analyse terminée en {execution_time:.2f} secondes.")
 
-                if isinstance(error_log, str):
-                    st.error(error_log)
-                elif st.session_state.df_results is None:
+                if not results:
                     st.warning("Aucun résultat n'a été généré.")
                 else:
                     st.info(f"Nombre d'erreurs rencontrées : {len(error_log)}")
@@ -330,15 +309,10 @@ def app():
                             mime='application/json'
                         )
 
-            if st.session_state.df_results is not None:
+            if st.session_state.results:
                 st.subheader("Résultats")
-                num_similar_urls = st.number_input(
-                    "Nombre d'URLs similaires à afficher", 
-                    min_value=1, 
-                    max_value=max_similar_urls, 
-                    value=st.session_state.num_similar_urls
-                )
-                filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(num_similar_urls, 'Score de similarité')).reset_index(drop=True)
+                df_results = pd.DataFrame(st.session_state.results)
+                filtered_results = df_results.groupby('URL de départ').apply(lambda x: x.nlargest(st.session_state.num_similar_urls, 'Score de similarité')).reset_index(drop=True)
                 st.dataframe(filtered_results)
 
                 csv = filtered_results.to_csv(index=False).encode('utf-8')
