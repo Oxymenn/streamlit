@@ -87,7 +87,7 @@ def calculate_similarity(embeddings):
         return None
 
 @st.cache_data
-def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, progress_callback):
+def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, _progress_callback):
     cache_file = 'embeddings_cache.pkl'
     if os.path.exists(cache_file):
         with open(cache_file, 'rb') as f:
@@ -107,7 +107,7 @@ def process_data(urls_list, _df_excel, col_url, col_ancre, col_priorite, include
             if content:
                 contents[url] = content
             processed_urls += 1
-            progress_callback(processed_urls, total_urls)
+            _progress_callback(processed_urls, total_urls)
 
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
