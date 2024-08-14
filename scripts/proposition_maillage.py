@@ -142,7 +142,7 @@ def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, includ
         
         try:
             # Extraction et nettoyage du contenu
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(batch_size, 100)) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(batch_size, 300)) as executor:
                 future_to_url = {executor.submit(extract_and_clean_content, url, include_classes, exclude_classes, additional_stopwords): url for url in batch_urls}
                 for future in concurrent.futures.as_completed(future_to_url):
                     url, content = future.result()
@@ -156,8 +156,8 @@ def process_data(_urls_list, _df_excel, col_url, col_ancre, col_priorite, includ
             # Traitement des embeddings pour ce batch
             urls_to_embed = [url for url in contents.keys() if url not in embeddings_cache]
             if urls_to_embed:
-                for j in range(0, len(urls_to_embed), 100):  # Traitement par lots de 100 pour les embeddings
-                    sub_batch = urls_to_embed[j:j+100]
+                for j in range(0, len(urls_to_embed), 200):  # Traitement par lots de 100 pour les embeddings
+                    sub_batch = urls_to_embed[j:j+200]
                     try:
                         new_embeddings = get_embeddings_batch([contents[url] for url in sub_batch], api_key)
                         for url, embedding in zip(sub_batch, new_embeddings):
