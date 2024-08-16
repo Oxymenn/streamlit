@@ -1,13 +1,11 @@
 import streamlit as st
 import pandas as pd
-import aiohttp
-import asyncio
+import requests
 from bs4 import BeautifulSoup
-from keybert import KeyBERT
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
+from openai import OpenAI
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -29,87 +27,88 @@ stopwords_fr = {
     "été", "être"
 }
 
-@st.cache_resource
-def get_sentence_model():
-    return SentenceTransformer('distiluse-base-multilingual-cased-v1')
-
-@st.cache_resource
-def get_keybert_model():
-    sentence_model = get_sentence_model()
-    return KeyBERT(model=sentence_model)
-
-async def fetch_content(session, url):
+def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
-        async with session.get(url, timeout=10) as response:
-            return await response.text()
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        content = ""
+        if include_classes:
+            for class_name in include_classes:
+                elements = soup.find_all(class_=class_name)
+                content += ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
+        else:
+            content = soup.get_text(separator=" ", strip=True)
+
+        if exclude_classes:
+            for class_name in exclude_classes:
+                for element in soup.find_all(class_=class_name):
+                    content = content.replace(element.get_text(separator=" ", strip=True), "")
+
+        content = re.sub(r'\s+', ' ', content)
+        content = content.lower()
+        content = re.sub(r'[^\w\s]', '', content)
+
+        words = content.split()
+        all_stopwords = stopwords_fr.union(set(additional_stopwords))
+        content = ' '.join([word for word in words if word not in all_stopwords])
+
+        return content
     except Exception as e:
-        st.error(f"Erreur lors de la récupération de {url}: {e}")
+        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-def clean_content(content, include_classes, exclude_classes, additional_stopwords):
-    if content is None:
+def get_embeddings(text, api_key):
+    client = OpenAI(api_key=api_key)
+    try:
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        st.error(f"Erreur lors de la création des embeddings: {e}")
         return None
-    soup = BeautifulSoup(content, 'html.parser')
 
-    if include_classes:
-        text = ' '.join([element.get_text(separator=" ", strip=True) for class_name in include_classes for element in soup.find_all(class_=class_name)])
-    else:
-        text = soup.get_text(separator=" ", strip=True)
+def calculate_similarity(embeddings):
+    try:
+        similarity_matrix = cosine_similarity(embeddings)
+        return similarity_matrix
+    except Exception as e:
+        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
+        return None
 
-    if exclude_classes:
-        for class_name in exclude_classes:
-            for element in soup.find_all(class_=class_name):
-                text = text.replace(element.get_text(separator=" ", strip=True), "")
-
-    text = re.sub(r'\s+', ' ', text.lower())
-    text = re.sub(r'[^\w\s]', '', text)
-
-    all_stopwords = stopwords_fr.union(set(additional_stopwords))
-    words = ' '.join([word for word in text.split() if word not in all_stopwords])
-
-    return words
-
-def extract_keywords(kw_model, content, top_n=5):
-    keywords = kw_model.extract_keywords(content, top_n=top_n, keyphrase_ngram_range=(1, 2))
-    return ' '.join([kw for kw, _ in keywords])
-
-def calculate_similarity(model, contents):
-    embeddings = model.encode(contents)
-    return cosine_similarity(embeddings)
+def format_time(seconds):
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 @st.cache_data
-def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
-    kw_model = get_keybert_model()
-    sentence_model = get_sentence_model()
-
-    async def fetch_all_content():
-        async with aiohttp.ClientSession() as session:
-            tasks = [fetch_content(session, url) for url in urls_list]
-            return await asyncio.gather(*tasks)
-
-    contents = asyncio.run(fetch_all_content())
-
-    # Ajustement dynamique du nombre de threads
-    max_workers = min(20, len(urls_list) // 10 + 1)
-
+def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
+    start_time = time.time()
+    max_workers = min(20, len(urls_list) // 10 + 1)  # Ajuste dynamiquement le nombre de threads
+    
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        clean_contents = list(executor.map(
-            lambda x: clean_content(x, include_classes, exclude_classes, additional_stopwords),
-            contents
-        ))
+        contents = list(executor.map(lambda url: extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords), urls_list))
+    
+    contents = [content for content in contents if content]
 
-    clean_contents = [content for content in clean_contents if content]
-
-    if not clean_contents:
+    if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        keyword_contents = list(executor.map(
-            lambda x: extract_keywords(kw_model, x),
-            clean_contents
-        ))
+        embeddings = list(executor.map(lambda content: get_embeddings(content, api_key), contents))
+    
+    embeddings = [emb for emb in embeddings if emb]
 
-    similarity_matrix = calculate_similarity(sentence_model, keyword_contents)
+    if not embeddings:
+        return None, "Impossible de générer des embeddings pour les contenus extraits."
+
+    similarity_matrix = calculate_similarity(embeddings)
+
+    if similarity_matrix is None:
+        return None, "Erreur lors du calcul de la similarité."
 
     results = []
     for i, url_start in enumerate(urls_list):
@@ -123,7 +122,11 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
             ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
             ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
             
-            ancre = ancres_df[col_ancre].iloc[min(j, len(ancres_df) - 1)] if not ancres_df.empty else url_dest
+            if not ancres_df.empty:
+                ancres = ancres_df[col_ancre].tolist()
+                ancre = ancres[j] if j < len(ancres) else ancres[0]
+            else:
+                ancre = url_dest
 
             results.append({
                 'URL de départ': url_start, 
@@ -137,15 +140,15 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
     if df_results.empty:
         return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
 
-    return df_results, None
+    end_time = time.time()
+    execution_time = end_time - start_time
 
-def format_time(seconds):
-    hours, remainder = divmod(seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+    return df_results, None, execution_time
 
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
+
+    api_key = st.text_input("Entrez votre clé API OpenAI", type="password")
 
     if 'df_results' not in st.session_state:
         st.session_state.df_results = None
@@ -164,14 +167,11 @@ def app():
 
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
-    urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
-    st.write(f"Nombre d'URLs à analyser : {len(urls_list)}")
-
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
     if uploaded_file is not None:
         st.session_state.uploaded_file = uploaded_file
 
-    if st.session_state.uploaded_file is not None and st.session_state.urls_to_analyze:
+    if st.session_state.uploaded_file is not None and st.session_state.urls_to_analyze and api_key:
         try:
             df_excel = pd.read_excel(st.session_state.uploaded_file)
 
@@ -188,6 +188,7 @@ def app():
                 st.error(f"Erreur: La colonne '{col_priorite}' contient des valeurs non numériques.")
                 return
 
+            urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
             max_similar_urls = len(urls_list) - 1
             st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
 
@@ -197,21 +198,24 @@ def app():
             st.session_state.additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)", st.session_state.additional_stopwords)
 
             if st.button("Exécuter l'analyse"):
-                with st.spinner("L'analyse est en cours. Veuillez patienter..."):
-                    include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
-                    exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
-                    additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
+                include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
+                exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
+                additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                    start_time = time.time()
-                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
-                    end_time = time.time()
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                time_text = st.empty()
 
-                    if error_message:
-                        st.error(error_message)
-                    elif st.session_state.df_results is None:
-                        st.warning("Aucun résultat n'a été généré.")
-                    else:
-                        st.success(f"Analyse terminée en {format_time(end_time - start_time)}. {len(urls_list)} URLs traitées.")
+                start_time = time.time()
+                
+                st.session_state.df_results, error_message, execution_time = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
+
+                if error_message:
+                    st.error(error_message)
+                elif st.session_state.df_results is None:
+                    st.warning("Aucun résultat n'a été généré.")
+                else:
+                    st.success(f"Analyse terminée en {format_time(execution_time)}. {len(urls_list)} URLs traitées.")
 
             if st.session_state.df_results is not None:
                 filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(st.session_state.num_similar_urls, 'Score de similarité')).reset_index(drop=True)
@@ -227,6 +231,9 @@ def app():
 
         except Exception as e:
             st.error(f"Erreur lors du traitement : {str(e)}")
+
+    elif not api_key:
+        st.warning("Veuillez entrer votre clé API OpenAI pour continuer.")
 
     if st.button("Réinitialiser l'analyse"):
         for key in list(st.session_state.keys()):
