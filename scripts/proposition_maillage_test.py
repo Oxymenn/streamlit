@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-import requests  # Importation ajoutée
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.common.by import By
@@ -47,7 +47,7 @@ def get_google_suggests(keyword, language, country):
 def scrape_serp(driver, keyword, language, country):
     url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
     driver.get(url)
-    time.sleep(random.randint(1, 3))  # Attente pour éviter de déclencher les captchas
+    time.sleep(random.uniform(1, 2))  # Attente pour éviter de déclencher les captchas
 
     paa = []
     related_searches = []
@@ -82,6 +82,7 @@ def scrape_loop(driver, keyword, language, country, scrapeLevels):
         if current_keyword.lower() in seen_keywords:
             continue
 
+        st.write(f"Scraping: {current_keyword} at level {current_level}")
         paa, related_searches, suggests = scrape_serp(driver, current_keyword, language, country)
         
         if current_level > 0:  # Ne pas ajouter le mot-clé de départ
@@ -95,6 +96,10 @@ def scrape_loop(driver, keyword, language, country, scrapeLevels):
             for suggest in suggests:
                 if suggest.lower() not in seen_keywords:
                     queue.append((suggest, current_level + 1))
+
+        # Arrêter si la queue devient trop longue
+        if len(queue) > 100:  # Limite arbitraire pour éviter les boucles infinies
+            break
 
     return all_suggests, all_paa, all_related_searches
 
