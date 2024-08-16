@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.common.by import By  # Importation nécessaire pour les sélecteurs
 from bs4 import BeautifulSoup
 import time
 import random
@@ -52,12 +53,12 @@ def scrape_serp(driver, keyword, language, country):
 
     try:
         # Scraping des People Also Ask (PAA)
-        paa_elements = driver.find_elements_by_css_selector("[class='xpc']")
+        paa_elements = driver.find_elements(By.CSS_SELECTOR, "[class='xpc']")
         for elem in paa_elements:
             paa.append(elem.text.strip())
 
         # Scraping des recherches associées
-        related_searches_elements = driver.find_elements_by_css_selector(".Q71vJc")
+        related_searches_elements = driver.find_elements(By.CSS_SELECTOR, ".Q71vJc")
         for elem in related_searches_elements:
             related_searches.append(elem.text.strip())
     except Exception as e:
