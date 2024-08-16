@@ -74,13 +74,14 @@ def calculate_similarity(kw_model, contents):
     embeddings = kw_model.model.encode(keyword_contents)
     return cosine_similarity(embeddings)
 
-async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, status_text):
+async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, status_text, progress_callback):
     kw_model = get_keybert_model()
 
     status_text.text("Récupération des contenus...")
     async with aiohttp.ClientSession() as session:
         tasks = [fetch_content(session, url) for url in urls_list]
         contents = await asyncio.gather(*tasks)
+    progress_callback(0.3)  # 30% progress after fetching
 
     status_text.text("Nettoyage des contenus...")
     with ThreadPoolExecutor() as executor:
@@ -88,6 +89,7 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
             lambda x: clean_content(x, include_classes, exclude_classes, additional_stopwords),
             contents
         ))
+    progress_callback(0.5)  # 50% progress after cleaning
 
     clean_contents = [content for content in clean_contents if content]
 
@@ -96,6 +98,7 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
 
     status_text.text("Calcul de la similarité...")
     similarity_matrix = calculate_similarity(kw_model, clean_contents)
+    progress_callback(0.7)  # 70% progress after similarity calculation
 
     status_text.text("Préparation des résultats...")
     results = []
@@ -120,6 +123,7 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
             })
 
     df_results = pd.DataFrame(results)
+    progress_callback(1.0)  # 100% progress after results preparation
 
     if df_results.empty:
         return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
@@ -196,16 +200,18 @@ def app():
                 time_text = st.empty()
 
                 async def run_analysis():
-                    return await process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, status_text)
+                    def update_progress(progress):
+                        progress_bar.progress(progress)
+                        elapsed_time = time.time() - start_time
+                        estimated_total_time = elapsed_time / progress if progress > 0 else 0
+                        remaining_time = max(estimated_total_time - elapsed_time, 0)
+                        time_text.text(f"Temps écoulé : {format_time(elapsed_time)} | Temps restant estimé : {format_time(remaining_time)}")
+
+                    return await process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, status_text, update_progress)
 
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 future = asyncio.ensure_future(run_analysis())
-                
-                while not future.done():
-                    elapsed_time = time.time() - start_time
-                    time_text.text(f"Temps écoulé : {format_time(elapsed_time)}")
-                    time.sleep(0.1)
                 
                 st.session_state.df_results, error_message = loop.run_until_complete(future)
 
@@ -239,3 +245,4 @@ def app():
 
 if __name__ == "__main__":
     app()
+    
