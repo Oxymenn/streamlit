@@ -55,7 +55,7 @@ def scrape_serp(keyword, language, country):
 
 # Fonction pour gérer la boucle de scraping à plusieurs niveaux
 def scrape_loop(keyword, language, country, scrapeLevels):
-    results = []
+    all_suggests = []
     queue = [(keyword, 0)]
     seen_paa = {}
     seen_related_searches = {}
@@ -66,12 +66,10 @@ def scrape_loop(keyword, language, country, scrapeLevels):
             continue
 
         paa, related_searches, suggests = scrape_serp(current_keyword, language, country)
-        results.append({
-            "keyword": current_keyword,
-            "paa": paa,
-            "related_searches": related_searches,
-            "suggests": suggests
-        })
+        
+        # Ajouter les suggest au niveau actuel
+        if current_level > 0:  # Ne pas ajouter le mot-clé de départ
+            all_suggests.append(current_keyword)
 
         # Empêcher le scraping en double
         scrapeado.append(current_keyword.lower())
@@ -85,7 +83,7 @@ def scrape_loop(keyword, language, country, scrapeLevels):
                     seen_related_searches[suggest] = related_searches
                     queue.append((suggest, current_level + 1))
 
-    return results
+    return all_suggests
 
 # Définition de la fonction principale `app`
 def app():
@@ -115,8 +113,11 @@ def app():
         data = []
         for i, keyword in enumerate(keywords):
             if keyword.strip():  # Ignorer les lignes vides
-                results = scrape_loop(keyword, language, country, scrapeLevels)
-                data.extend(results)
+                all_suggests = scrape_loop(keyword, language, country, scrapeLevels)
+                data.append({
+                    "keyword": keyword,
+                    "suggests": "\n".join(all_suggests)
+                })
             
             # Mise à jour de la barre de progression
             progress = (i + 1) / total_keywords
@@ -137,9 +138,6 @@ def app():
 
         # Générer le DataFrame
         df = pd.DataFrame(data)
-        df['paa'] = df['paa'].apply(lambda x: "\n".join(x))
-        df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
-        df['suggests'] = df['suggests'].apply(lambda x: "\n".join(x))
 
         # Écrire le DataFrame directement dans un fichier Excel
         file_name = "serp_data.xlsx"
@@ -159,3 +157,4 @@ def app():
 # Appel de la fonction `app` dans le bloc principal
 if __name__ == "__main__":
     app()
+
