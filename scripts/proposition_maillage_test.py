@@ -30,8 +30,12 @@ stopwords_fr = {
 }
 
 @st.cache_resource
+def get_sentence_model():
+    return SentenceTransformer("distiluse-base-multilingual-cased-v1")
+
+@st.cache_resource
 def get_keybert_model():
-    sentence_model = SentenceTransformer("distiluse-base-multilingual-cased-v1")
+    sentence_model = get_sentence_model()
     return KeyBERT(model=sentence_model)
 
 async def fetch_content(session, url):
@@ -69,14 +73,14 @@ def extract_keywords(kw_model, content, top_n=5):
     keywords = kw_model.extract_keywords(content, top_n=top_n, keyphrase_ngram_range=(1, 2))
     return ' '.join([kw for kw, _ in keywords])
 
-def calculate_similarity(kw_model, contents):
-    keyword_contents = [extract_keywords(kw_model, content) for content in contents]
-    embeddings = kw_model.model.encode(keyword_contents)
+def calculate_similarity(sentence_model, contents):
+    embeddings = sentence_model.encode(contents)
     return cosine_similarity(embeddings)
 
 @st.cache_data
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
     kw_model = get_keybert_model()
+    sentence_model = get_sentence_model()
 
     async def fetch_all_content():
         async with aiohttp.ClientSession() as session:
@@ -96,7 +100,8 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
     if not clean_contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    similarity_matrix = calculate_similarity(kw_model, clean_contents)
+    keyword_contents = [extract_keywords(kw_model, content) for content in clean_contents]
+    similarity_matrix = calculate_similarity(sentence_model, keyword_contents)
 
     results = []
     for i, url_start in enumerate(urls_list):
