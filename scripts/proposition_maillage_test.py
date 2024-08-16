@@ -16,31 +16,11 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0"
 ]
 
-# Liste d'exemples de proxies (à remplacer par des proxies fonctionnels)
-PROXIES = [
-    "http://111.222.333.444:8080",
-    "http://555.666.777.888:3128",
-    "http://999.888.777.666:8080",
-    # Ajoutez ici vos propres proxies
-]
-
-# Fonction pour faire une requête avec gestion des erreurs de proxy
-def make_request_with_proxy(url, headers):
-    for _ in range(len(PROXIES)):  # Essayer chaque proxy une fois
-        proxy = {"http": random.choice(PROXIES), "https": random.choice(PROXIES)}
-        try:
-            response = requests.get(url, headers=headers, proxies=proxy, timeout=5)
-            response.raise_for_status()  # Vérifie si la requête est réussie
-            return response
-        except (requests.exceptions.ProxyError, requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-            continue  # Si le proxy échoue, essayer un autre
-    raise requests.exceptions.ProxyError("Tous les proxies ont échoué")
-
 # Fonction pour récupérer les Google Suggest
 def get_google_suggests(keyword, language='fr', country='fr'):
     headers = {"User-Agent": random.choice(USER_AGENTS)}
     url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
-    response = make_request_with_proxy(url, headers)
+    response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content, 'html.parser')
     return [sugg['data'] for sugg in soup.find_all('suggestion')]
 
@@ -48,7 +28,7 @@ def get_google_suggests(keyword, language='fr', country='fr'):
 def get_related_searches(keyword, language='fr', country='fr'):
     headers = {"User-Agent": random.choice(USER_AGENTS)}
     url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
-    response = make_request_with_proxy(url, headers)
+    response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     
     related_searches = []
@@ -65,14 +45,22 @@ def get_related_searches(keyword, language='fr', country='fr'):
 def app():
     st.title("Google SERP Scraper")
 
+    # Sélecteurs pour la langue et le pays
+    language = st.selectbox("Sélectionnez la langue pour le scraping", options=["fr", "en", "es", "de", "it", "pt"])
+    country = st.selectbox("Sélectionnez le pays pour le scraping", options=["fr", "us", "es", "de", "it", "pt"])
+
     st.write("Collez vos mots-clés (un par ligne) dans la zone de texte ci-dessous :")
 
     keywords_input = st.text_area("Mots-clés", height=200)
     keywords = keywords_input.splitlines()
+    
+    # Affichage du nombre de mots-clés
+    num_keywords = len([k for k in keywords if k.strip()])  # Ne compte que les lignes non vides
+    st.write(f"Nombre de mots-clés copiés : {num_keywords}")
 
     if st.button("Scraper les données"):
         start_time = time.time()  # Démarrer le chronomètre
-        total_keywords = len(keywords)
+        total_keywords = num_keywords
         progress_bar = st.progress(0)
         status_text = st.empty()
         timer_text = st.empty()
@@ -80,18 +68,15 @@ def app():
         data = []
         for i, keyword in enumerate(keywords):
             if keyword.strip():  # Ignorer les lignes vides
-                try:
-                    suggests = get_google_suggests(keyword)
-                    related_searches, paa = get_related_searches(keyword)
-                    data.append({
-                        "keyword": keyword,
-                        "suggests": suggests,
-                        "related_searches": related_searches,
-                        "paa": paa
-                    })
-                except requests.exceptions.ProxyError:
-                    st.error(f"Impossible de scraper {keyword} après avoir essayé tous les proxies.")
-
+                suggests = get_google_suggests(keyword, language=language, country=country)
+                related_searches, paa = get_related_searches(keyword, language=language, country=country)
+                data.append({
+                    "keyword": keyword,
+                    "suggests": suggests,
+                    "related_searches": related_searches,
+                    "paa": paa
+                })
+            
             # Mise à jour de la barre de progression
             progress = (i + 1) / total_keywords
             progress_bar.progress(progress)
