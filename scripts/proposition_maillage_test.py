@@ -3,7 +3,8 @@ import pandas as pd
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
-from sklearn.feature_extraction.text import TfidfVectorizer
+from gensim.models import Word2Vec
+from gensim.utils import simple_preprocess
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
@@ -28,9 +29,32 @@ stopwords_fr = {
     "été", "être"
 }
 
+python
+
+Copier
+import streamlit as st
+import pandas as pd
+import aiohttp
+import asyncio
+from bs4 import BeautifulSoup
+from gensim.models import Word2Vec
+from gensim.utils import simple_preprocess
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+import re
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+# Liste de stopwords en français (inchangée)
+stopwords_fr = {
+    "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
+    # ... (le reste de la liste inchangé)
+    "été", "être"
+}
+
 async def extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords):
     try:
-        async with session.get(url) as response:
+        async with session.get(url, timeout=10) as response:
             response.raise_for_status()
             html = await response.text()
 
@@ -50,18 +74,32 @@ async def extract_and_clean_content(session, url, include_classes, exclude_class
         content = re.sub(r'[^\w\s]', '', content)
 
         all_stopwords = stopwords_fr.union(set(additional_stopwords))
-        content = ' '.join(word for word in content.split() if word not in all_stopwords)
+        words = [word for word in simple_preprocess(content) if word not in all_stopwords]
 
-        return content
+        return words
     except Exception as e:
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-def calculate_similarity(contents):
+def train_word2vec_model(all_words):
+    model = Word2Vec(sentences=all_words, vector_size=100, window=5, min_count=1, workers=4)
+    return model
+
+def get_document_vector(model, words):
+    vector = np.zeros(model.vector_size)
+    count = 0
+    for word in words:
+        if word in model.wv:
+            vector += model.wv[word]
+            count += 1
+    if count > 0:
+        vector /= count
+    return vector
+
+def calculate_similarity(model, contents):
     try:
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform(contents)
-        return cosine_similarity(tfidf_matrix)
+        document_vectors = [get_document_vector(model, words) for words in contents]
+        return cosine_similarity(document_vectors)
     except Exception as e:
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
@@ -77,7 +115,10 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    similarity_matrix = calculate_similarity(contents)
+    # Train Word2Vec model
+    model = train_word2vec_model(contents)
+
+    similarity_matrix = calculate_similarity(model, contents)
 
     if similarity_matrix is None:
         return None, "Erreur lors du calcul de la similarité."
@@ -116,7 +157,7 @@ def format_time(seconds):
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 def app():
-    st.title("Proposition de Maillage Interne Personnalisé")
+    st.title("Proposition de Maillage Interne Personnalisé avec Word2Vec")
 
     if 'df_results' not in st.session_state:
         st.session_state.df_results = None
@@ -189,9 +230,14 @@ def app():
                     while not future.done():
                         elapsed_time = time.time() - start_time
                         progress = min(elapsed_time / (len(urls_list) * 2), 1.0)  # Estimation grossière
+                        urls_analyzed = int(progress * len(urls_list))
+                        remaining_urls = len(urls_list) - urls_analyzed
+                        estimated_total_time = elapsed_time / progress if progress > 0 else 0
+                        estimated_remaining_time = max(estimated_total_time - elapsed_time, 0)
+
                         progress_bar.progress(progress)
-                        status_text.text(f"URLs analysées : {int(progress * len(urls_list))}/{len(urls_list)}")
-                        time_text.text(f"Temps écoulé : {format_time(elapsed_time)}")
+                        status_text.text(f"URLs analysées : {urls_analyzed}/{len(urls_list)}")
+                        time_text.text(f"Temps écoulé : {format_time(elapsed_time)} | Temps restant estimé : {format_time(estimated_remaining_time)}")
                         time.sleep(0.1)
                     
                     error_message = loop.run_until_complete(future)
