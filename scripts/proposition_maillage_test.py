@@ -3,15 +3,14 @@ import pandas as pd
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
-from gensim.models import Word2Vec
-from gensim.utils import simple_preprocess
+from keybert import KeyBERT
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-# Liste de stopwords en français (inchangée)
+# Liste de stopwords en français
 stopwords_fr = {
     "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
@@ -26,29 +25,6 @@ stopwords_fr = {
     "si", "sien", "son", "sont", "sous", "soyez", "sujet", "sur", "ta", 
     "tandis", "tellement", "tels", "tes", "ton", "tous", "tout", "trop", 
     "très", "tu", "votre", "vous", "vu", "ça", "étaient", "état", "étions", 
-    "été", "être"
-}
-
-python
-
-Copier
-import streamlit as st
-import pandas as pd
-import aiohttp
-import asyncio
-from bs4 import BeautifulSoup
-from gensim.models import Word2Vec
-from gensim.utils import simple_preprocess
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
-import re
-import time
-from concurrent.futures import ThreadPoolExecutor
-
-# Liste de stopwords en français (inchangée)
-stopwords_fr = {
-    "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
-    # ... (le reste de la liste inchangé)
     "été", "être"
 }
 
@@ -74,32 +50,23 @@ async def extract_and_clean_content(session, url, include_classes, exclude_class
         content = re.sub(r'[^\w\s]', '', content)
 
         all_stopwords = stopwords_fr.union(set(additional_stopwords))
-        words = [word for word in simple_preprocess(content) if word not in all_stopwords]
+        words = ' '.join([word for word in content.split() if word not in all_stopwords])
 
         return words
     except Exception as e:
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-def train_word2vec_model(all_words):
-    model = Word2Vec(sentences=all_words, vector_size=100, window=5, min_count=1, workers=4)
-    return model
+def extract_keywords(kw_model, content, top_n=5):
+    keywords = kw_model.extract_keywords(content, top_n=top_n, keyphrase_ngram_range=(1, 2))
+    return ' '.join([kw for kw, _ in keywords])
 
-def get_document_vector(model, words):
-    vector = np.zeros(model.vector_size)
-    count = 0
-    for word in words:
-        if word in model.wv:
-            vector += model.wv[word]
-            count += 1
-    if count > 0:
-        vector /= count
-    return vector
-
-def calculate_similarity(model, contents):
+def calculate_similarity(contents):
     try:
-        document_vectors = [get_document_vector(model, words) for words in contents]
-        return cosine_similarity(document_vectors)
+        kw_model = KeyBERT()
+        keyword_contents = [extract_keywords(kw_model, content) for content in contents]
+        vectorizer = kw_model.model.encode(keyword_contents)
+        return cosine_similarity(vectorizer)
     except Exception as e:
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
@@ -115,10 +82,7 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    # Train Word2Vec model
-    model = train_word2vec_model(contents)
-
-    similarity_matrix = calculate_similarity(model, contents)
+    similarity_matrix = calculate_similarity(contents)
 
     if similarity_matrix is None:
         return None, "Erreur lors du calcul de la similarité."
@@ -157,7 +121,7 @@ def format_time(seconds):
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 def app():
-    st.title("Proposition de Maillage Interne Personnalisé avec Word2Vec")
+    st.title("Proposition de Maillage Interne Personnalisé avec KeyBERT")
 
     if 'df_results' not in st.session_state:
         st.session_state.df_results = None
