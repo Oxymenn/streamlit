@@ -24,7 +24,12 @@ def get_google_suggests(keyword, language, country):
     url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content, 'html.parser')
-    return [sugg['data'] for sugg in soup.find_all('suggestion')]
+    suggests = [sugg['data'] for sugg in soup.find_all('suggestion')]
+    
+    # Debugging output
+    print(f"Google Suggests for {keyword}: {suggests}")
+    
+    return suggests
 
 # Fonction pour scraper les résultats de recherche
 def scrape_serp(keyword, language, country):
@@ -37,7 +42,7 @@ def scrape_serp(keyword, language, country):
     related_searches = []
 
     # Scraping des People Also Ask (PAA)
-    paa_elements = soup.select('[role="heading"]')
+    paa_elements = soup.select('div[role="heading"]')  # Debugging
     for elem in paa_elements:
         text = elem.get_text(strip=True)
         paa.append(text)
@@ -48,7 +53,10 @@ def scrape_serp(keyword, language, country):
         text = elem.get_text(strip=True)
         related_searches.append(text)
     
-    # Scraping des Google Suggest
+    # Debugging output
+    print(f"PAA for {keyword}: {paa}")
+    print(f"Related Searches for {keyword}: {related_searches}")
+    
     suggests = get_google_suggests(keyword, language, country)
 
     return paa, related_searches, suggests
@@ -118,6 +126,12 @@ def app():
         for i, keyword in enumerate(keywords):
             if keyword.strip():  # Ignorer les lignes vides
                 all_suggests, all_paa, all_related_searches = scrape_loop(keyword, language, country, scrapeLevels)
+                
+                # Debugging output
+                print(f"Final Suggests for {keyword}: {all_suggests}")
+                print(f"Final PAA for {keyword}: {all_paa}")
+                print(f"Final Related Searches for {keyword}: {all_related_searches}")
+                
                 data.append({
                     "keyword": keyword,
                     "suggests": "\n".join(all_suggests),
