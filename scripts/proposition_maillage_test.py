@@ -4,13 +4,19 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
 from keybert import KeyBERT
-from transformers import CamembertModel, CamembertTokenizer
 from sklearn.metrics.pairwise import cosine_similarity
-import torch
 import numpy as np
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+
+try:
+    from transformers import CamembertModel, CamembertTokenizer
+    import torch
+    CAMEMBERT_AVAILABLE = True
+except ImportError:
+    CAMEMBERT_AVAILABLE = False
+    st.warning("CamemBERT n'est pas disponible. Le script utilisera une alternative.")
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -32,14 +38,23 @@ stopwords_fr = {
 
 @st.cache_resource
 def get_camembert_model():
-    tokenizer = CamembertTokenizer.from_pretrained("camembert-base")
-    model = CamembertModel.from_pretrained("camembert-base")
-    return tokenizer, model
+    if CAMEMBERT_AVAILABLE:
+        tokenizer = CamembertTokenizer.from_pretrained("camembert-base")
+        model = CamembertModel.from_pretrained("camembert-base")
+        return tokenizer, model
+    else:
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
+        return model, model
 
 @st.cache_resource
 def get_keybert_model():
-    tokenizer, model = get_camembert_model()
-    return KeyBERT(model=model)
+    if CAMEMBERT_AVAILABLE:
+        tokenizer, model = get_camembert_model()
+        return KeyBERT(model=model)
+    else:
+        model = get_camembert_model()[0]  # We only need the first returned value here
+        return KeyBERT(model=model)
 
 async def fetch_content(session, url):
     try:
@@ -76,17 +91,21 @@ def extract_keywords(kw_model, content, top_n=5):
     keywords = kw_model.extract_keywords(content, top_n=top_n, keyphrase_ngram_range=(1, 2))
     return ' '.join([kw for kw, _ in keywords])
 
-def calculate_similarity(tokenizer, model, contents):
-    with torch.no_grad():
-        inputs = tokenizer(contents, padding=True, truncation=True, return_tensors="pt", max_length=512)
-        outputs = model(**inputs)
-        embeddings = outputs.last_hidden_state[:, 0, :].numpy()
+def calculate_similarity(model, contents):
+    if CAMEMBERT_AVAILABLE:
+        tokenizer, camembert_model = model
+        with torch.no_grad():
+            inputs = tokenizer(contents, padding=True, truncation=True, return_tensors="pt", max_length=512)
+            outputs = camembert_model(**inputs)
+            embeddings = outputs.last_hidden_state[:, 0, :].numpy()
+    else:
+        embeddings = model.encode(contents)
     return cosine_similarity(embeddings)
 
 @st.cache_data
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
     kw_model = get_keybert_model()
-    tokenizer, model = get_camembert_model()
+    model = get_camembert_model()
 
     async def fetch_all_content():
         async with aiohttp.ClientSession() as session:
@@ -107,7 +126,7 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
     keyword_contents = [extract_keywords(kw_model, content) for content in clean_contents]
-    similarity_matrix = calculate_similarity(tokenizer, model, keyword_contents)
+    similarity_matrix = calculate_similarity(model, keyword_contents)
 
     results = []
     for i, url_start in enumerate(urls_list):
