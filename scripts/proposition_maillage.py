@@ -74,15 +74,33 @@ async def extract_and_clean_content(session, url, include_classes, exclude_class
 
 async def get_embeddings(texts, api_key):
     client = AsyncOpenAI(api_key=api_key)
-    try:
-        response = await client.embeddings.create(
-            model="text-embedding-3-small",
-            input=texts
-        )
-        return [data.embedding for data in response.data]
-    except Exception as e:
-        st.error(f"Erreur lors de la création des embeddings: {e}")
-        return None
+    max_tokens_per_request = 250000
+    all_embeddings = []
+
+    for i in range(0, len(texts), 10):  # Traiter par lots de 10 textes
+        batch = texts[i:i+10]
+        total_tokens = sum(len(text.split()) for text in batch)
+
+        if total_tokens > max_tokens_per_request:
+            st.warning(f"Lot {i//10 + 1} trop grand ({total_tokens} tokens). Réduction...")
+            while total_tokens > max_tokens_per_request:
+                batch = batch[:-1]
+                total_tokens = sum(len(text.split()) for text in batch)
+
+        try:
+            response = await client.embeddings.create(
+                model="text-embedding-3-small",
+                input=batch
+            )
+            all_embeddings.extend([data.embedding for data in response.data])
+            
+            # Attendre 60 secondes après chaque lot pour respecter la limite TPM
+            await asyncio.sleep(60)
+        except Exception as e:
+            st.error(f"Erreur lors de la création des embeddings pour le lot {i//10 + 1}: {e}")
+            return None
+
+    return all_embeddings
 
 def calculate_similarity(embeddings):
     try:
