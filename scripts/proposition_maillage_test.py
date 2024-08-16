@@ -95,7 +95,7 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
     contents = [content for content in contents if content]
 
     if not contents:
-        return None, "Aucun contenu n'a pu être extrait des URLs fournies."
+        return None, "Aucun contenu n'a pu être extrait des URLs fournies.", time.time() - start_time
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         embeddings = list(executor.map(lambda content: get_embeddings(content, api_key), contents))
@@ -103,12 +103,12 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
     embeddings = [emb for emb in embeddings if emb]
 
     if not embeddings:
-        return None, "Impossible de générer des embeddings pour les contenus extraits."
+        return None, "Impossible de générer des embeddings pour les contenus extraits.", time.time() - start_time
 
     similarity_matrix = calculate_similarity(embeddings)
 
     if similarity_matrix is None:
-        return None, "Erreur lors du calcul de la similarité."
+        return None, "Erreur lors du calcul de la similarité.", time.time() - start_time
 
     results = []
     for i, url_start in enumerate(urls_list):
@@ -138,12 +138,9 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
     df_results = pd.DataFrame(results)
 
     if df_results.empty:
-        return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
+        return None, "Aucun résultat n'a été trouvé avec les critères spécifiés.", time.time() - start_time
 
-    end_time = time.time()
-    execution_time = end_time - start_time
-
-    return df_results, None, execution_time
+    return df_results, None, time.time() - start_time
 
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
@@ -208,7 +205,8 @@ def app():
 
                 start_time = time.time()
                 
-                st.session_state.df_results, error_message, execution_time = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
+                with st.spinner("L'analyse est en cours. Veuillez patienter..."):
+                    st.session_state.df_results, error_message, execution_time = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
 
                 if error_message:
                     st.error(error_message)
