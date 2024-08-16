@@ -56,6 +56,8 @@ def scrape_serp(keyword, language, country):
 # Fonction pour gérer la boucle de scraping à plusieurs niveaux
 def scrape_loop(keyword, language, country, scrapeLevels):
     all_suggests = []
+    all_paa = []
+    all_related_searches = []
     queue = [(keyword, 0)]
     seen_paa = {}
     seen_related_searches = {}
@@ -67,9 +69,11 @@ def scrape_loop(keyword, language, country, scrapeLevels):
 
         paa, related_searches, suggests = scrape_serp(current_keyword, language, country)
         
-        # Ajouter les suggest au niveau actuel
+        # Ajouter les résultats au niveau actuel
         if current_level > 0:  # Ne pas ajouter le mot-clé de départ
             all_suggests.append(current_keyword)
+            all_paa.extend(paa)
+            all_related_searches.extend(related_searches)
 
         # Empêcher le scraping en double
         scrapeado.append(current_keyword.lower())
@@ -83,7 +87,7 @@ def scrape_loop(keyword, language, country, scrapeLevels):
                     seen_related_searches[suggest] = related_searches
                     queue.append((suggest, current_level + 1))
 
-    return all_suggests
+    return all_suggests, all_paa, all_related_searches
 
 # Définition de la fonction principale `app`
 def app():
@@ -113,10 +117,12 @@ def app():
         data = []
         for i, keyword in enumerate(keywords):
             if keyword.strip():  # Ignorer les lignes vides
-                all_suggests = scrape_loop(keyword, language, country, scrapeLevels)
+                all_suggests, all_paa, all_related_searches = scrape_loop(keyword, language, country, scrapeLevels)
                 data.append({
                     "keyword": keyword,
-                    "suggests": "\n".join(all_suggests)
+                    "suggests": "\n".join(all_suggests),
+                    "paa": "\n".join(all_paa),
+                    "related_searches": "\n".join(all_related_searches)
                 })
             
             # Mise à jour de la barre de progression
@@ -157,4 +163,3 @@ def app():
 # Appel de la fonction `app` dans le bloc principal
 if __name__ == "__main__":
     app()
-
