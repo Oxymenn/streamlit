@@ -4,19 +4,12 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
 from keybert import KeyBERT
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-
-try:
-    from transformers import CamembertModel, CamembertTokenizer
-    import torch
-    CAMEMBERT_AVAILABLE = True
-except ImportError:
-    CAMEMBERT_AVAILABLE = False
-    st.warning("CamemBERT n'est pas disponible. Le script utilisera une alternative.")
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -37,24 +30,13 @@ stopwords_fr = {
 }
 
 @st.cache_resource
-def get_camembert_model():
-    if CAMEMBERT_AVAILABLE:
-        tokenizer = CamembertTokenizer.from_pretrained("camembert-base")
-        model = CamembertModel.from_pretrained("camembert-base")
-        return tokenizer, model
-    else:
-        from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
-        return model, model
+def get_sentence_model():
+    return SentenceTransformer('distiluse-base-multilingual-cased-v1')
 
 @st.cache_resource
 def get_keybert_model():
-    if CAMEMBERT_AVAILABLE:
-        tokenizer, model = get_camembert_model()
-        return KeyBERT(model=model)
-    else:
-        model = get_camembert_model()[0]  # We only need the first returned value here
-        return KeyBERT(model=model)
+    sentence_model = get_sentence_model()
+    return KeyBERT(model=sentence_model)
 
 async def fetch_content(session, url):
     try:
@@ -92,20 +74,13 @@ def extract_keywords(kw_model, content, top_n=5):
     return ' '.join([kw for kw, _ in keywords])
 
 def calculate_similarity(model, contents):
-    if CAMEMBERT_AVAILABLE:
-        tokenizer, camembert_model = model
-        with torch.no_grad():
-            inputs = tokenizer(contents, padding=True, truncation=True, return_tensors="pt", max_length=512)
-            outputs = camembert_model(**inputs)
-            embeddings = outputs.last_hidden_state[:, 0, :].numpy()
-    else:
-        embeddings = model.encode(contents)
+    embeddings = model.encode(contents)
     return cosine_similarity(embeddings)
 
 @st.cache_data
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
     kw_model = get_keybert_model()
-    model = get_camembert_model()
+    sentence_model = get_sentence_model()
 
     async def fetch_all_content():
         async with aiohttp.ClientSession() as session:
@@ -114,7 +89,10 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
 
     contents = asyncio.run(fetch_all_content())
 
-    with ThreadPoolExecutor() as executor:
+    # Ajustement dynamique du nombre de threads
+    max_workers = min(20, len(urls_list) // 10 + 1)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         clean_contents = list(executor.map(
             lambda x: clean_content(x, include_classes, exclude_classes, additional_stopwords),
             contents
@@ -125,8 +103,13 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
     if not clean_contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    keyword_contents = [extract_keywords(kw_model, content) for content in clean_contents]
-    similarity_matrix = calculate_similarity(model, keyword_contents)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        keyword_contents = list(executor.map(
+            lambda x: extract_keywords(kw_model, x),
+            clean_contents
+        ))
+
+    similarity_matrix = calculate_similarity(sentence_model, keyword_contents)
 
     results = []
     for i, url_start in enumerate(urls_list):
@@ -162,7 +145,7 @@ def format_time(seconds):
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 def app():
-    st.title("Proposition de Maillage Interne Personnalisé avec CamemBERT")
+    st.title("Proposition de Maillage Interne Personnalisé")
 
     if 'df_results' not in st.session_state:
         st.session_state.df_results = None
