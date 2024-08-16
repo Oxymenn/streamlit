@@ -1,22 +1,7 @@
 import streamlit as st
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.firefox.service import Service as FirefoxService
-from webdriver_manager.firefox import GeckoDriverManager
-from selenium.webdriver.common.by import By
-import time
-from bs4 import BeautifulSoup
 import requests
-
-# Configuration de Selenium avec Firefox et geckodriver
-def init_driver():
-    options = webdriver.FirefoxOptions()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1366,768')
-
-    return webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
+from bs4 import BeautifulSoup
 
 # Fonction pour récupérer les Google Suggest
 def get_google_suggests(keyword, language='fr', country='fr'):
@@ -24,34 +9,22 @@ def get_google_suggests(keyword, language='fr', country='fr'):
     soup = BeautifulSoup(r.content, 'html.parser')
     return [sugg['data'] for sugg in soup.find_all('suggestion')]
 
-# Fonction pour scraper les SERP pour un mot-clé donné
-def scrape_keyword_data(driver, keyword, language='fr', country='fr'):
+# Fonction pour récupérer les résultats des recherches associées
+def get_related_searches(keyword, language='fr', country='fr'):
     url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
-    driver.get(url)
-    time.sleep(2)  # Temps de chargement de la page
-
-    paa = []
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
     related_searches = []
-
-    # Scraping des People Also Ask (PAA)
-    paa_elements = driver.find_elements(By.CSS_SELECTOR, "[class='xpc']")
-    for elem in paa_elements:
-        paa.append(elem.text.strip())
-
-    # Scraping des recherches associées
-    related_searches_elements = driver.find_elements(By.CSS_SELECTOR, ".Q71vJc")
-    for elem in related_searches_elements:
-        related_searches.append(elem.text.strip())
-
-    # Scraping des Google Suggest
-    suggests = get_google_suggests(keyword, language, country)
-
-    return {
-        "keyword": keyword,
-        "paa": paa,
-        "related_searches": related_searches,
-        "suggests": suggests
-    }
+    for suggestion in soup.select('.Q71vJc'):
+        related_searches.append(suggestion.get_text())
+    
+    paa = []
+    for question in soup.select('.xpc'):
+        paa.append(question.get_text())
+    
+    return related_searches, paa
 
 # Définition de la fonction principale `app`
 def app():
@@ -63,23 +36,25 @@ def app():
     keywords = keywords_input.splitlines()
 
     if st.button("Scraper les données"):
-        driver = init_driver()
-
         data = []
         for keyword in keywords:
             if keyword.strip():  # Ignorer les lignes vides
                 st.write(f"Scraping pour le mot-clé : {keyword}")
-                result = scrape_keyword_data(driver, keyword)
-                data.append(result)
+                suggests = get_google_suggests(keyword)
+                related_searches, paa = get_related_searches(keyword)
+                data.append({
+                    "keyword": keyword,
+                    "suggests": suggests,
+                    "related_searches": related_searches,
+                    "paa": paa
+                })
                 st.write(f"Données récupérées pour {keyword}")
-
-        driver.quit()
 
         # Générer le DataFrame et l'exporter en Excel
         df = pd.DataFrame(data)
-        df['paa'] = df['paa'].apply(lambda x: "\n".join(x))
-        df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
         df['suggests'] = df['suggests'].apply(lambda x: "\n".join(x))
+        df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
+        df['paa'] = df['paa'].apply(lambda x: "\n".join(x))
 
         st.write(df)
 
