@@ -15,5 +15,3 @@ matplotlib
 seaborn
 lxml
 aiohttp
-keybert
-transformers
