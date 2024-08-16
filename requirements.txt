@@ -16,4 +16,3 @@ seaborn
 lxml
 aiohttp
 gensim
-scipy==1.7.3
