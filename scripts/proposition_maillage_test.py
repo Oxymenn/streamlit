@@ -5,6 +5,7 @@ from selenium.webdriver.common.by import By
 import time
 from bs4 import BeautifulSoup
 import requests
+from webdriver_manager.chrome import ChromeDriverManager
 
 # Configuration de Selenium pour fonctionner sans interface graphique
 def init_driver():
@@ -14,7 +15,8 @@ def init_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1366,768')
     options.add_argument("user-agent=Mozilla/5.0")
-    return webdriver.Chrome(options=options)
+    # Utilisation de webdriver-manager pour gérer ChromeDriver
+    return webdriver.Chrome(ChromeDriverManager().install(), options=options)
 
 # Fonction pour récupérer les Google Suggest
 def get_google_suggests(keyword, language='fr', country='fr'):
