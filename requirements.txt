@@ -13,5 +13,4 @@ python-wordpress-xmlrpc
 cloudscraper
 matplotlib
 seaborn
-dask
-aiohttp
+lxml
