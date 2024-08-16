@@ -9,6 +9,7 @@ import numpy as np
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -61,9 +62,13 @@ def extract_keywords(kw_model, content, top_n=5):
     keywords = kw_model.extract_keywords(content, top_n=top_n, keyphrase_ngram_range=(1, 2))
     return ' '.join([kw for kw, _ in keywords])
 
+@st.cache_resource
+def get_keybert_model():
+    return KeyBERT()
+
 def calculate_similarity(contents):
     try:
-        kw_model = KeyBERT()
+        kw_model = get_keybert_model()
         keyword_contents = [extract_keywords(kw_model, content) for content in contents]
         vectorizer = kw_model.model.encode(keyword_contents)
         return cosine_similarity(vectorizer)
@@ -71,7 +76,6 @@ def calculate_similarity(contents):
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
-@st.cache_data
 async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
     async with aiohttp.ClientSession() as session:
         tasks = [extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
@@ -82,11 +86,13 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
+    yield "Calcul de la similarité en cours..."
     similarity_matrix = calculate_similarity(contents)
 
     if similarity_matrix is None:
         return None, "Erreur lors du calcul de la similarité."
 
+    yield "Préparation des résultats..."
     results = []
     for i, url_start in enumerate(urls_list):
         similarities = similarity_matrix[i]
@@ -174,6 +180,8 @@ def app():
             st.session_state.additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)", st.session_state.additional_stopwords)
 
             if st.button("Exécuter l'analyse"):
+                st.warning("L'analyse peut prendre plusieurs minutes, surtout pour un grand nombre d'URLs. Veuillez patienter.")
+                
                 include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
                 exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
@@ -184,8 +192,13 @@ def app():
                 time_text = st.empty()
 
                 async def run_analysis():
-                    st.session_state.df_results, error_message = await process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
-                    return error_message
+                    generator = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
+                    async for status in generator:
+                        if isinstance(status, str):
+                            status_text.text(status)
+                        else:
+                            st.session_state.df_results, error_message = status
+                            return error_message
 
                 with ThreadPoolExecutor() as executor:
                     loop = asyncio.new_event_loop()
@@ -200,7 +213,6 @@ def app():
                         estimated_remaining_time = max(estimated_total_time - elapsed_time, 0)
 
                         progress_bar.progress(progress)
-                        status_text.text(f"URLs analysées : {urls_analyzed}/{len(urls_list)}")
                         time_text.text(f"Temps écoulé : {format_time(elapsed_time)} | Temps restant estimé : {format_time(estimated_remaining_time)}")
                         time.sleep(0.1)
                     
