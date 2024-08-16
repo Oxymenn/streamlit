@@ -72,13 +72,30 @@ async def extract_and_clean_content(session, url, include_classes, exclude_class
         st.warning(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
+class RateLimiter:
+    def __init__(self, max_calls, period):
+        self.max_calls = max_calls
+        self.period = period
+        self.calls = []
+
+    async def wait(self):
+        now = time.time()
+        self.calls = [call for call in self.calls if call > now - self.period]
+        if len(self.calls) >= self.max_calls:
+            sleep_time = self.calls[0] - (now - self.period)
+            await asyncio.sleep(sleep_time)
+        self.calls.append(time.time())
+
+# Utilisation dans la fonction get_embeddings
+rate_limiter = RateLimiter(max_calls=3, period=60)  # 3 appels par minute
+
 async def get_embeddings(texts, api_key):
     client = AsyncOpenAI(api_key=api_key)
     max_tokens_per_request = 250000
     all_embeddings = []
 
-    for i in range(0, len(texts), 10):  # Traiter par lots de 10 textes
-        batch = texts[i:i+10]
+    for i in range(0, len(texts), 5):  # Traiter par lots de 5 textes
+    batch = texts[i:i+5]
         total_tokens = sum(len(text.split()) for text in batch)
 
         if total_tokens > max_tokens_per_request:
@@ -95,7 +112,7 @@ async def get_embeddings(texts, api_key):
             all_embeddings.extend([data.embedding for data in response.data])
             
             # Attendre 60 secondes après chaque lot pour respecter la limite TPM
-            await asyncio.sleep(60)
+            await asyncio.sleep(120)
         except Exception as e:
             st.error(f"Erreur lors de la création des embeddings pour le lot {i//10 + 1}: {e}")
             return None
