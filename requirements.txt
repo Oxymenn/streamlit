@@ -17,3 +17,4 @@ lxml
 aiohttp
 selenium
 undetected-chromedriver
+webdriver-manager
