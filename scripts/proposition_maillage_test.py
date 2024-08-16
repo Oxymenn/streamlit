@@ -27,7 +27,7 @@ def get_google_suggests(keyword, language, country):
     suggests = [sugg['data'] for sugg in soup.find_all('suggestion')]
     
     # Debugging output
-    print(f"Google Suggests for {keyword}: {suggests}")
+    st.write(f"Google Suggests for {keyword}: {suggests[:5]}...")  # Afficher seulement les 5 premiers pour éviter la surcharge
     
     return suggests
 
@@ -42,7 +42,7 @@ def scrape_serp(keyword, language, country):
     related_searches = []
 
     # Scraping des People Also Ask (PAA)
-    paa_elements = soup.select('div[role="heading"]')  # Debugging
+    paa_elements = soup.select('div[role="heading"]')
     for elem in paa_elements:
         text = elem.get_text(strip=True)
         paa.append(text)
@@ -54,8 +54,8 @@ def scrape_serp(keyword, language, country):
         related_searches.append(text)
     
     # Debugging output
-    print(f"PAA for {keyword}: {paa}")
-    print(f"Related Searches for {keyword}: {related_searches}")
+    st.write(f"PAA for {keyword}: {paa[:5]}...")  # Afficher seulement les 5 premiers pour éviter la surcharge
+    st.write(f"Related Searches for {keyword}: {related_searches[:5]}...")
     
     suggests = get_google_suggests(keyword, language, country)
 
@@ -128,9 +128,9 @@ def app():
                 all_suggests, all_paa, all_related_searches = scrape_loop(keyword, language, country, scrapeLevels)
                 
                 # Debugging output
-                print(f"Final Suggests for {keyword}: {all_suggests}")
-                print(f"Final PAA for {keyword}: {all_paa}")
-                print(f"Final Related Searches for {keyword}: {all_related_searches}")
+                st.write(f"Final Suggests for {keyword}: {all_suggests[:5]}...")  # Afficher seulement les 5 premiers pour éviter la surcharge
+                st.write(f"Final PAA for {keyword}: {all_paa[:5]}...")
+                st.write(f"Final Related Searches for {keyword}: {all_related_searches[:5]}...")
                 
                 data.append({
                     "keyword": keyword,
