@@ -1,8 +1,4 @@
 import streamlit as st
-
-# Configuration de la page en mode wide dès le début
-st.set_page_config(layout="wide")
-
 import pandas as pd
 import aiohttp
 import asyncio
