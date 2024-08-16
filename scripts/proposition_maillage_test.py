@@ -8,7 +8,7 @@ import random
 import pandas as pd
 
 # Fonction pour installer chromedriver et configurer Chrome
-@st.experimental_singleton
+@st.cache_resource
 def install_chromedriver():
     os.system('sbase install chromedriver')
     os.system('ln -s /home/appuser/venv/lib/python3.7/site-packages/seleniumbase/drivers/chromedriver /home/appuser/venv/bin/chromedriver')
