@@ -4,8 +4,9 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
 from keybert import KeyBERT
-from sentence_transformers import SentenceTransformer
+from transformers import CamembertModel, CamembertTokenizer
 from sklearn.metrics.pairwise import cosine_similarity
+import torch
 import numpy as np
 import re
 import time
@@ -30,13 +31,15 @@ stopwords_fr = {
 }
 
 @st.cache_resource
-def get_sentence_model():
-    return SentenceTransformer("distiluse-base-multilingual-cased-v1")
+def get_camembert_model():
+    tokenizer = CamembertTokenizer.from_pretrained("camembert-base")
+    model = CamembertModel.from_pretrained("camembert-base")
+    return tokenizer, model
 
 @st.cache_resource
 def get_keybert_model():
-    sentence_model = get_sentence_model()
-    return KeyBERT(model=sentence_model)
+    tokenizer, model = get_camembert_model()
+    return KeyBERT(model=model)
 
 async def fetch_content(session, url):
     try:
@@ -73,14 +76,17 @@ def extract_keywords(kw_model, content, top_n=5):
     keywords = kw_model.extract_keywords(content, top_n=top_n, keyphrase_ngram_range=(1, 2))
     return ' '.join([kw for kw, _ in keywords])
 
-def calculate_similarity(sentence_model, contents):
-    embeddings = sentence_model.encode(contents)
+def calculate_similarity(tokenizer, model, contents):
+    with torch.no_grad():
+        inputs = tokenizer(contents, padding=True, truncation=True, return_tensors="pt", max_length=512)
+        outputs = model(**inputs)
+        embeddings = outputs.last_hidden_state[:, 0, :].numpy()
     return cosine_similarity(embeddings)
 
 @st.cache_data
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
     kw_model = get_keybert_model()
-    sentence_model = get_sentence_model()
+    tokenizer, model = get_camembert_model()
 
     async def fetch_all_content():
         async with aiohttp.ClientSession() as session:
@@ -101,7 +107,7 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
     keyword_contents = [extract_keywords(kw_model, content) for content in clean_contents]
-    similarity_matrix = calculate_similarity(sentence_model, keyword_contents)
+    similarity_matrix = calculate_similarity(tokenizer, model, keyword_contents)
 
     results = []
     for i, url_start in enumerate(urls_list):
@@ -137,7 +143,7 @@ def format_time(seconds):
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 def app():
-    st.title("Proposition de Maillage Interne Personnalisé avec Sentence Transformers")
+    st.title("Proposition de Maillage Interne Personnalisé avec CamemBERT")
 
     if 'df_results' not in st.session_state:
         st.session_state.df_results = None
