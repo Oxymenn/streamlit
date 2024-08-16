@@ -74,33 +74,30 @@ def calculate_similarity(kw_model, contents):
     embeddings = kw_model.model.encode(keyword_contents)
     return cosine_similarity(embeddings)
 
-async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, status_text, progress_callback):
+@st.cache_data
+def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
     kw_model = get_keybert_model()
 
-    status_text.text("Récupération des contenus...")
-    async with aiohttp.ClientSession() as session:
-        tasks = [fetch_content(session, url) for url in urls_list]
-        contents = await asyncio.gather(*tasks)
-    progress_callback(0.3)  # 30% progress after fetching
+    async def fetch_all_content():
+        async with aiohttp.ClientSession() as session:
+            tasks = [fetch_content(session, url) for url in urls_list]
+            return await asyncio.gather(*tasks)
 
-    status_text.text("Nettoyage des contenus...")
+    contents = asyncio.run(fetch_all_content())
+
     with ThreadPoolExecutor() as executor:
         clean_contents = list(executor.map(
             lambda x: clean_content(x, include_classes, exclude_classes, additional_stopwords),
             contents
         ))
-    progress_callback(0.5)  # 50% progress after cleaning
 
     clean_contents = [content for content in clean_contents if content]
 
     if not clean_contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    status_text.text("Calcul de la similarité...")
     similarity_matrix = calculate_similarity(kw_model, clean_contents)
-    progress_callback(0.7)  # 70% progress after similarity calculation
 
-    status_text.text("Préparation des résultats...")
     results = []
     for i, url_start in enumerate(urls_list):
         similarities = similarity_matrix[i]
@@ -123,7 +120,6 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
             })
 
     df_results = pd.DataFrame(results)
-    progress_callback(1.0)  # 100% progress after results preparation
 
     if df_results.empty:
         return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
@@ -188,40 +184,21 @@ def app():
             st.session_state.additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)", st.session_state.additional_stopwords)
 
             if st.button("Exécuter l'analyse"):
-                st.warning("L'analyse peut prendre plusieurs minutes, surtout pour un grand nombre d'URLs. Veuillez patienter.")
-                
-                include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
-                exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
-                additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
+                with st.spinner("L'analyse est en cours. Veuillez patienter..."):
+                    include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
+                    exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
+                    additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                start_time = time.time()
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                time_text = st.empty()
+                    start_time = time.time()
+                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
+                    end_time = time.time()
 
-                async def run_analysis():
-                    def update_progress(progress):
-                        progress_bar.progress(progress)
-                        elapsed_time = time.time() - start_time
-                        estimated_total_time = elapsed_time / progress if progress > 0 else 0
-                        remaining_time = max(estimated_total_time - elapsed_time, 0)
-                        time_text.text(f"Temps écoulé : {format_time(elapsed_time)} | Temps restant estimé : {format_time(remaining_time)}")
-
-                    return await process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, status_text, update_progress)
-
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                future = asyncio.ensure_future(run_analysis())
-                
-                st.session_state.df_results, error_message = loop.run_until_complete(future)
-
-                status_text.text(f"Analyse terminée. {len(urls_list)} URLs traitées.")
-                time_text.text(f"Temps total : {format_time(time.time() - start_time)}")
-
-                if error_message:
-                    st.error(error_message)
-                elif st.session_state.df_results is None:
-                    st.warning("Aucun résultat n'a été généré.")
+                    if error_message:
+                        st.error(error_message)
+                    elif st.session_state.df_results is None:
+                        st.warning("Aucun résultat n'a été généré.")
+                    else:
+                        st.success(f"Analyse terminée en {format_time(end_time - start_time)}. {len(urls_list)} URLs traitées.")
 
             if st.session_state.df_results is not None:
                 filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(st.session_state.num_similar_urls, 'Score de similarité')).reset_index(drop=True)
@@ -245,4 +222,3 @@ def app():
 
 if __name__ == "__main__":
     app()
-    
