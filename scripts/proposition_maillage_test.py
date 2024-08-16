@@ -1,12 +1,96 @@
+import streamlit as st
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+import re
+from openai import OpenAI
+import time
+
+# Liste de stopwords en français
+stopwords_fr = {
+    "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
+    "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
+    "dans", "des", "du", "dedans", "dehors", "depuis", "devrait", "doit", 
+    "donc", "dos", "début", "elle", "elles", "en", "encore", "essai", 
+    "est", "et", "eu", "fait", "faites", "fois", "font", "hors", "ici", 
+    "il", "ils", "je", "juste", "la", "le", "les", "leur", "là", "ma", 
+    "maintenant", "mais", "mes", "mien", "moins", "mon", "mot", "même", 
+    "ni", "nommés", "notre", "nous", "ou", "où", "par", "parce", "pas", 
+    "peut", "peu", "plupart", "pour", "pourquoi", "quand", "que", "quel", 
+    "quelle", "quelles", "quels", "qui", "sa", "sans", "ses", "seulement", 
+    "si", "sien", "son", "sont", "sous", "soyez", "sujet", "sur", "ta", 
+    "tandis", "tellement", "tels", "tes", "ton", "tous", "tout", "trop", 
+    "très", "tu", "votre", "vous", "vu", "ça", "étaient", "état", "étions", 
+    "été", "être"
+}
+
+def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        content = ""
+        if include_classes:
+            for class_name in include_classes:
+                elements = soup.find_all(class_=class_name)
+                content += ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
+        else:
+            content = soup.get_text(separator=" ", strip=True)
+
+        if exclude_classes:
+            for class_name in exclude_classes:
+                for element in soup.find_all(class_=class_name):
+                    content = content.replace(element.get_text(separator=" ", strip=True), "")
+
+        content = re.sub(r'\s+', ' ', content)
+        content = content.lower()
+        content = re.sub(r'[^\w\s]', '', content)
+
+        words = content.split()
+        all_stopwords = stopwords_fr.union(set(additional_stopwords))
+        content = ' '.join([word for word in words if word not in all_stopwords])
+
+        return content
+    except Exception as e:
+        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
+        return None
+
+def get_embeddings(text, api_key):
+    client = OpenAI(api_key=api_key)
+    try:
+        # Tronquer le texte si nécessaire
+        max_tokens = 8191
+        if len(text.split()) > max_tokens:
+            text = ' '.join(text.split()[:max_tokens])
+        
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        st.error(f"Erreur détaillée lors de la création des embeddings: {str(e)}")
+        return None
+
+def calculate_similarity(embeddings):
+    try:
+        similarity_matrix = cosine_similarity(embeddings)
+        return similarity_matrix
+    except Exception as e:
+        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
+        return None
+
 def format_time(seconds):
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
-@st.cache_data
+@st.cache(allow_output_mutation=True)
 def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
     start_time = time.time()
-    max_workers = min(20, len(urls_list) // 10 + 1)  # Ajuste dynamiquement le nombre de threads
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -21,10 +105,11 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         status_text.text(f"Analysé {current}/{total} URLs")
         time_text.text(f"Temps écoulé: {format_time(elapsed_time)} | Temps restant estimé: {format_time(remaining_time)}")
     
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        contents = list(executor.map(lambda url: extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords), urls_list))
-        for i, _ in enumerate(contents, 1):
-            update_progress(i, len(urls_list))
+    contents = []
+    for i, url in enumerate(urls_list):
+        content = extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords)
+        contents.append(content)
+        update_progress(i+1, len(urls_list))
     
     contents = [content for content in contents if content]
 
@@ -32,10 +117,11 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         return None, "Aucun contenu n'a pu être extrait des URLs fournies.", time.time() - start_time
 
     status_text.text("Génération des embeddings...")
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        embeddings = list(executor.map(lambda content: get_embeddings(content, api_key), contents))
-        for i, _ in enumerate(embeddings, 1):
-            update_progress(i, len(contents))
+    embeddings = []
+    for i, content in enumerate(contents):
+        embedding = get_embeddings(content, api_key)
+        embeddings.append(embedding)
+        update_progress(i+1, len(contents))
     
     embeddings = [emb for emb in embeddings if emb is not None]
 
