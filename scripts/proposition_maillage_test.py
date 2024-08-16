@@ -25,10 +25,6 @@ def get_google_suggests(keyword, language, country):
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content, 'html.parser')
     suggests = [sugg['data'] for sugg in soup.find_all('suggestion')]
-    
-    # Debugging output
-    st.write(f"Google Suggests for {keyword}: {suggests[:5]}...")  # Afficher seulement les 5 premiers pour éviter la surcharge
-    
     return suggests
 
 # Fonction pour scraper les résultats de recherche
@@ -52,11 +48,7 @@ def scrape_serp(keyword, language, country):
     for elem in related_searches_elements:
         text = elem.get_text(strip=True)
         related_searches.append(text)
-    
-    # Debugging output
-    st.write(f"PAA for {keyword}: {paa[:5]}...")  # Afficher seulement les 5 premiers pour éviter la surcharge
-    st.write(f"Related Searches for {keyword}: {related_searches[:5]}...")
-    
+
     suggests = get_google_suggests(keyword, language, country)
 
     return paa, related_searches, suggests
@@ -76,14 +68,12 @@ def scrape_loop(keyword, language, country, scrapeLevels):
             continue
 
         paa, related_searches, suggests = scrape_serp(current_keyword, language, country)
-        
-        # Ajouter les résultats au niveau actuel
+
         if current_level > 0:  # Ne pas ajouter le mot-clé de départ
             all_suggests.append(current_keyword)
             all_paa.extend(paa)
             all_related_searches.extend(related_searches)
 
-        # Empêcher le scraping en double
         scrapeado.append(current_keyword.lower())
 
         if current_level < scrapeLevels:
@@ -126,11 +116,6 @@ def app():
         for i, keyword in enumerate(keywords):
             if keyword.strip():  # Ignorer les lignes vides
                 all_suggests, all_paa, all_related_searches = scrape_loop(keyword, language, country, scrapeLevels)
-                
-                # Debugging output
-                st.write(f"Final Suggests for {keyword}: {all_suggests[:5]}...")  # Afficher seulement les 5 premiers pour éviter la surcharge
-                st.write(f"Final PAA for {keyword}: {all_paa[:5]}...")
-                st.write(f"Final Related Searches for {keyword}: {all_related_searches[:5]}...")
                 
                 data.append({
                     "keyword": keyword,
