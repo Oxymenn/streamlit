@@ -37,7 +37,7 @@ def scrape_serp(keyword, language, country):
     related_searches = []
 
     # Scraping des People Also Ask (PAA)
-    paa_elements = soup.select('.xpc')
+    paa_elements = soup.select('[role="heading"]')
     for elem in paa_elements:
         text = elem.get_text(strip=True)
         paa.append(text)
@@ -143,22 +143,25 @@ def app():
             timer_text.text(f"Temps écoulé: {elapsed_time_str} | Temps restant estimé: {remaining_time_str}")
 
         # Générer le DataFrame
-        df = pd.DataFrame(data)
+        if data:  # Vérifie si des données ont été récupérées
+            df = pd.DataFrame(data)
 
-        # Écrire le DataFrame directement dans un fichier Excel
-        file_name = "serp_data.xlsx"
-        df.to_excel(file_name, index=False, engine='openpyxl')
+            # Écrire le DataFrame directement dans un fichier Excel
+            file_name = "serp_data.xlsx"
+            df.to_excel(file_name, index=False, engine='openpyxl')
 
-        # Télécharger le fichier Excel
-        with open(file_name, "rb") as file:
-            st.download_button(
-                label="Télécharger le fichier Excel",
-                data=file,
-                file_name=file_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            # Télécharger le fichier Excel
+            with open(file_name, "rb") as file:
+                st.download_button(
+                    label="Télécharger le fichier Excel",
+                    data=file,
+                    file_name=file_name,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
-        st.success("Scraping terminé et fichier Excel généré avec succès.")
+            st.success("Scraping terminé et fichier Excel généré avec succès.")
+        else:
+            st.warning("Aucune donnée n'a été récupérée. Veuillez vérifier les paramètres et réessayer.")
 
 # Appel de la fonction `app` dans le bloc principal
 if __name__ == "__main__":
