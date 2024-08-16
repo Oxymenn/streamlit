@@ -14,7 +14,7 @@ def init_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1366,768')
     options.add_argument("user-agent=Mozilla/5.0")
-    # Utilisation de undetected-chromedriver pour contourner les détections
+    # Utilisation de undetected-chromedriver sans spécifier binary_location
     return uc.Chrome(options=options)
 
 # Fonction pour récupérer les Google Suggest
