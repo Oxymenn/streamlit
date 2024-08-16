@@ -85,6 +85,3 @@ if st.button("Scraper les données"):
     st.download_button(label="Télécharger le fichier Excel", data=excel_file, file_name="serp_data.xlsx")
 
     st.success("Scraping terminé et fichier Excel généré avec succès.")
-
-if __name__ == "__main__":
-    app()
