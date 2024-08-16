@@ -95,7 +95,7 @@ async def get_embeddings(texts, api_key):
     all_embeddings = []
 
     for i in range(0, len(texts), 5):  # Traiter par lots de 5 textes
-    batch = texts[i:i+5]
+        batch = texts[i:i+5]
         total_tokens = sum(len(text.split()) for text in batch)
 
         if total_tokens > max_tokens_per_request:
