@@ -156,6 +156,11 @@ def app():
 
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
+    # Nouvelle fonctionnalité : Compter le nombre d'URLs entrées
+    urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
+    num_urls = len(urls_list)
+    st.write(f"Nombre d'URLs entrées : {num_urls}")
+    
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
     if uploaded_file is not None:
         st.session_state.uploaded_file = uploaded_file
@@ -177,7 +182,6 @@ def app():
                 st.error(f"Erreur: La colonne '{col_priorite}' contient des valeurs non numériques.")
                 return
 
-            urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
             max_similar_urls = len(urls_list) - 1
             st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
 
