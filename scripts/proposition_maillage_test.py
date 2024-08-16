@@ -1,21 +1,22 @@
 import streamlit as st
 import pandas as pd
-import undetected_chromedriver as uc
+from selenium import webdriver
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from webdriver_manager.firefox import GeckoDriverManager
 from selenium.webdriver.common.by import By
 import time
 from bs4 import BeautifulSoup
 import requests
 
-# Configuration de Selenium avec undetected-chromedriver pour éviter la détection
+# Configuration de Selenium avec Firefox et geckodriver
 def init_driver():
-    options = uc.ChromeOptions()
+    options = webdriver.FirefoxOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1366,768')
-    options.add_argument("user-agent=Mozilla/5.0")
-    # Utilisation de undetected-chromedriver sans spécifier binary_location
-    return uc.Chrome(options=options)
+
+    return webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
 
 # Fonction pour récupérer les Google Suggest
 def get_google_suggests(keyword, language='fr', country='fr'):
