@@ -1,13 +1,14 @@
 import streamlit as st
 import pandas as pd
-import requests
+import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
-from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
-from openai import OpenAI
+from openai import AsyncOpenAI
+import lxml
 
-# Liste de stopwords en français
+# Liste de stopwords en français (inchangée)
 stopwords_fr = {
     "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
@@ -25,17 +26,22 @@ stopwords_fr = {
     "été", "être"
 }
 
-def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+# Compile regex patterns
+WHITESPACE_REGEX = re.compile(r'\s+')
+PUNCTUATION_REGEX = re.compile(r'[^\w\s]')
 
-        content = ""
+async def extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords):
+    try:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            text = await response.text()
+        
+        soup = BeautifulSoup(text, 'lxml')
+
         if include_classes:
-            for class_name in include_classes:
-                elements = soup.find_all(class_=class_name)
-                content += ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
+            content = ' '.join([element.get_text(separator=" ", strip=True) 
+                                for class_name in include_classes 
+                                for element in soup.find_all(class_=class_name)])
         else:
             content = soup.get_text(separator=" ", strip=True)
 
@@ -44,9 +50,9 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
                 for element in soup.find_all(class_=class_name):
                     content = content.replace(element.get_text(separator=" ", strip=True), "")
 
-        content = re.sub(r'\s+', ' ', content)
         content = content.lower()
-        content = re.sub(r'[^\w\s]', '', content)
+        content = PUNCTUATION_REGEX.sub('', content)
+        content = WHITESPACE_REGEX.sub(' ', content)
 
         words = content.split()
         all_stopwords = stopwords_fr.union(set(additional_stopwords))
@@ -57,36 +63,40 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-def get_embeddings(text, api_key):
-    client = OpenAI(api_key=api_key)
+@st.cache_data
+async def get_embeddings(texts, api_key):
+    client = AsyncOpenAI(api_key=api_key)
     try:
-        response = client.embeddings.create(
+        response = await client.embeddings.create(
             model="text-embedding-3-small",
-            input=text
+            input=texts
         )
-        return response.data[0].embedding
+        return [data.embedding for data in response.data]
     except Exception as e:
         st.error(f"Erreur lors de la création des embeddings: {e}")
         return None
 
 def calculate_similarity(embeddings):
     try:
-        similarity_matrix = cosine_similarity(embeddings)
-        return similarity_matrix
+        embeddings_array = np.array(embeddings)
+        similarity_matrix = np.dot(embeddings_array, embeddings_array.T)
+        norms = np.linalg.norm(embeddings_array, axis=1, keepdims=True)
+        return similarity_matrix / (norms @ norms.T)
     except Exception as e:
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
 @st.cache_data
-def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
-    contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
+async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
+    async with aiohttp.ClientSession() as session:
+        contents = await asyncio.gather(*[extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords) for url in urls_list])
+    
     contents = [content for content in contents if content]
 
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    embeddings = [get_embeddings(content, api_key) for content in contents]
-    embeddings = [emb for emb in embeddings if emb]
+    embeddings = await get_embeddings(contents, api_key)
 
     if not embeddings:
         return None, "Impossible de générer des embeddings pour les contenus extraits."
@@ -103,16 +113,12 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         
         similar_urls = [(url, sim) for url, sim in similar_urls if url != url_start]
 
+        ancres_df = df_excel[df_excel[col_url].isin([url for url, _ in similar_urls])]
+        ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
+        ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_url, col_ancre, col_priorite]]
+        
         for j, (url_dest, sim) in enumerate(similar_urls):
-            ancres_df = df_excel[df_excel[col_url] == url_dest]
-            ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
-            ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
-            
-            if not ancres_df.empty:
-                ancres = ancres_df[col_ancre].tolist()
-                ancre = ancres[j] if j < len(ancres) else ancres[0]
-            else:
-                ancre = url_dest
+            ancre = ancres_df[ancres_df[col_url] == url_dest][col_ancre].iloc[0] if not ancres_df[ancres_df[col_url] == url_dest].empty else url_dest
 
             results.append({
                 'URL de départ': url_start, 
@@ -186,7 +192,7 @@ def app():
                 additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
                 with st.spinner("Running..."):
-                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key)
+                    st.session_state.df_results, error_message = asyncio.run(process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key))
 
                 if error_message:
                     st.error(error_message)
@@ -218,5 +224,3 @@ def app():
 
 if __name__ == "__main__":
     app()
-
-
