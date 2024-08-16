@@ -51,37 +51,42 @@ def scrape_keyword_data(driver, keyword, language='fr', country='fr'):
         "suggests": suggests
     }
 
-# Streamlit UI
-st.title("Google SERP Scraper")
+# Définition de la fonction principale `app`
+def app():
+    st.title("Google SERP Scraper")
 
-st.write("Collez vos mots-clés (un par ligne) dans la zone de texte ci-dessous :")
+    st.write("Collez vos mots-clés (un par ligne) dans la zone de texte ci-dessous :")
 
-keywords_input = st.text_area("Mots-clés", height=200)
-keywords = keywords_input.splitlines()
+    keywords_input = st.text_area("Mots-clés", height=200)
+    keywords = keywords_input.splitlines()
 
-if st.button("Scraper les données"):
-    driver = init_driver()
+    if st.button("Scraper les données"):
+        driver = init_driver()
 
-    data = []
-    for keyword in keywords:
-        if keyword.strip():  # Ignorer les lignes vides
-            st.write(f"Scraping pour le mot-clé : {keyword}")
-            result = scrape_keyword_data(driver, keyword)
-            data.append(result)
-            st.write(f"Données récupérées pour {keyword}")
+        data = []
+        for keyword in keywords:
+            if keyword.strip():  # Ignorer les lignes vides
+                st.write(f"Scraping pour le mot-clé : {keyword}")
+                result = scrape_keyword_data(driver, keyword)
+                data.append(result)
+                st.write(f"Données récupérées pour {keyword}")
 
-    driver.quit()
+        driver.quit()
 
-    # Générer le DataFrame et l'exporter en Excel
-    df = pd.DataFrame(data)
-    df['paa'] = df['paa'].apply(lambda x: "\n".join(x))
-    df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
-    df['suggests'] = df['suggests'].apply(lambda x: "\n".join(x))
+        # Générer le DataFrame et l'exporter en Excel
+        df = pd.DataFrame(data)
+        df['paa'] = df['paa'].apply(lambda x: "\n".join(x))
+        df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
+        df['suggests'] = df['suggests'].apply(lambda x: "\n".join(x))
 
-    st.write(df)
+        st.write(df)
 
-    # Générer le fichier Excel
-    excel_file = df.to_excel(index=False, engine='xlsxwriter')
-    st.download_button(label="Télécharger le fichier Excel", data=excel_file, file_name="serp_data.xlsx")
+        # Générer le fichier Excel
+        excel_file = df.to_excel(index=False, engine='xlsxwriter')
+        st.download_button(label="Télécharger le fichier Excel", data=excel_file, file_name="serp_data.xlsx")
 
-    st.success("Scraping terminé et fichier Excel généré avec succès.")
+        st.success("Scraping terminé et fichier Excel généré avec succès.")
+
+# Appel de la fonction `app` dans le bloc principal
+if __name__ == "__main__":
+    app()
