@@ -1,8 +1,9 @@
 import streamlit as st
 import os
+import requests  # Importation ajoutée
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.common.by import By  # Importation nécessaire pour les sélecteurs
+from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 import time
 import random
