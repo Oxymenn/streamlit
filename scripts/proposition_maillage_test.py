@@ -1,22 +1,21 @@
 import streamlit as st
 import pandas as pd
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 import time
 from bs4 import BeautifulSoup
 import requests
-from webdriver_manager.chrome import ChromeDriverManager
 
-# Configuration de Selenium pour fonctionner sans interface graphique
+# Configuration de Selenium avec undetected-chromedriver pour éviter la détection
 def init_driver():
-    options = webdriver.ChromeOptions()
+    options = uc.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1366,768')
     options.add_argument("user-agent=Mozilla/5.0")
-    # Utilisation de webdriver-manager pour gérer ChromeDriver
-    return webdriver.Chrome(ChromeDriverManager().install(), options=options)
+    # Utilisation de undetected-chromedriver pour contourner les détections
+    return uc.Chrome(options=options)
 
 # Fonction pour récupérer les Google Suggest
 def get_google_suggests(keyword, language='fr', country='fr'):
