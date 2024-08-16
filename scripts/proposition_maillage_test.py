@@ -1,13 +1,16 @@
 import streamlit as st
 import pandas as pd
-import requests
+import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
 
-# Liste de stopwords en français
+# Liste de stopwords en français (inchangée)
 stopwords_fr = {
     "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
@@ -25,17 +28,16 @@ stopwords_fr = {
     "été", "être"
 }
 
-def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
+async def extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords):
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        async with session.get(url) as response:
+            response.raise_for_status()
+            html = await response.text()
 
-        content = ""
+        soup = BeautifulSoup(html, 'html.parser')
+
         if include_classes:
-            for class_name in include_classes:
-                elements = soup.find_all(class_=class_name)
-                content += ' '.join([element.get_text(separator=" ", strip=True) for element in elements])
+            content = ' '.join([element.get_text(separator=" ", strip=True) for class_name in include_classes for element in soup.find_all(class_=class_name)])
         else:
             content = soup.get_text(separator=" ", strip=True)
 
@@ -44,13 +46,11 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
                 for element in soup.find_all(class_=class_name):
                     content = content.replace(element.get_text(separator=" ", strip=True), "")
 
-        content = re.sub(r'\s+', ' ', content)
-        content = content.lower()
+        content = re.sub(r'\s+', ' ', content.lower())
         content = re.sub(r'[^\w\s]', '', content)
 
-        words = content.split()
         all_stopwords = stopwords_fr.union(set(additional_stopwords))
-        content = ' '.join([word for word in words if word not in all_stopwords])
+        content = ' '.join(word for word in content.split() if word not in all_stopwords)
 
         return content
     except Exception as e:
@@ -61,15 +61,17 @@ def calculate_similarity(contents):
     try:
         vectorizer = TfidfVectorizer()
         tfidf_matrix = vectorizer.fit_transform(contents)
-        similarity_matrix = cosine_similarity(tfidf_matrix)
-        return similarity_matrix
+        return cosine_similarity(tfidf_matrix)
     except Exception as e:
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
 @st.cache_data
-def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
-    contents = [extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
+async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
+    async with aiohttp.ClientSession() as session:
+        tasks = [extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
+        contents = await asyncio.gather(*tasks)
+
     contents = [content for content in contents if content]
 
     if not contents:
@@ -92,11 +94,7 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
             ancres_df[col_priorite] = pd.to_numeric(ancres_df[col_priorite], errors='coerce')
             ancres_df = ancres_df.sort_values(col_priorite, ascending=False)[[col_ancre, col_priorite]]
             
-            if not ancres_df.empty:
-                ancres = ancres_df[col_ancre].tolist()
-                ancre = ancres[j] if j < len(ancres) else ancres[0]
-            else:
-                ancre = url_dest
+            ancre = ancres_df[col_ancre].iloc[min(j, len(ancres_df) - 1)] if not ancres_df.empty else url_dest
 
             results.append({
                 'URL de départ': url_start, 
@@ -111,6 +109,11 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
         return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
 
     return df_results, None
+
+def format_time(seconds):
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 def app():
     st.title("Proposition de Maillage Interne Personnalisé")
@@ -132,6 +135,10 @@ def app():
 
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
+    # Ajout du compteur d'URLs
+    urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
+    st.write(f"Nombre d'URLs à analyser : {len(urls_list)}")
+
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
     if uploaded_file is not None:
         st.session_state.uploaded_file = uploaded_file
@@ -153,7 +160,6 @@ def app():
                 st.error(f"Erreur: La colonne '{col_priorite}' contient des valeurs non numériques.")
                 return
 
-            urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
             max_similar_urls = len(urls_list) - 1
             st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
 
@@ -167,8 +173,32 @@ def app():
                 exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
                 additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                with st.spinner("Running..."):
-                    st.session_state.df_results, error_message = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
+                start_time = time.time()
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                time_text = st.empty()
+
+                async def run_analysis():
+                    st.session_state.df_results, error_message = await process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
+                    return error_message
+
+                with ThreadPoolExecutor() as executor:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    future = asyncio.ensure_future(run_analysis())
+                    while not future.done():
+                        elapsed_time = time.time() - start_time
+                        progress = min(elapsed_time / (len(urls_list) * 2), 1.0)  # Estimation grossière
+                        progress_bar.progress(progress)
+                        status_text.text(f"URLs analysées : {int(progress * len(urls_list))}/{len(urls_list)}")
+                        time_text.text(f"Temps écoulé : {format_time(elapsed_time)}")
+                        time.sleep(0.1)
+                    
+                    error_message = loop.run_until_complete(future)
+
+                progress_bar.progress(1.0)
+                status_text.text(f"Analyse terminée. {len(urls_list)} URLs traitées.")
+                time_text.text(f"Temps total : {format_time(time.time() - start_time)}")
 
                 if error_message:
                     st.error(error_message)
