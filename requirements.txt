@@ -16,4 +16,3 @@ seaborn
 lxml
 aiohttp
 nltk
-gensim
