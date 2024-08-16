@@ -15,4 +15,3 @@ matplotlib
 seaborn
 lxml
 aiohttp
-nltk
