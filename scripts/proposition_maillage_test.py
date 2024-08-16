@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from collections import Counter
 import time
 import random
-from io import BytesIO
 
 # Liste d'exemples de User-Agents
 USER_AGENTS = [
@@ -16,38 +16,88 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0"
 ]
 
+# Initialisation des variables globales
+scrapeado = []
+contadorPreguntas = []
+contadorBusquedas = []
+contadorSuggest = []
+
 # Fonction pour récupérer les Google Suggest
-def get_google_suggests(keyword, language='fr', country='fr'):
+def get_google_suggests(keyword, language, country):
     headers = {"User-Agent": random.choice(USER_AGENTS)}
     url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content, 'html.parser')
     return [sugg['data'] for sugg in soup.find_all('suggestion')]
 
-# Fonction pour récupérer les résultats des recherches associées
-def get_related_searches(keyword, language='fr', country='fr'):
+# Fonction pour scraper les résultats de recherche
+def scrape_serp(keyword, language, country, level):
     headers = {"User-Agent": random.choice(USER_AGENTS)}
     url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    related_searches = []
-    for suggestion in soup.select('.Q71vJc'):
-        related_searches.append(suggestion.get_text())
-    
     paa = []
-    for question in soup.select('.xpc'):
-        paa.append(question.get_text())
+    related_searches = []
+
+    # Scraping des People Also Ask (PAA)
+    paa_elements = soup.select('.xpc')
+    for elem in paa_elements:
+        text = elem.get_text(strip=True)
+        paa.append(text)
+        contadorPreguntas.append(text.lower())
+
+    # Scraping des recherches associées
+    related_searches_elements = soup.select('.Q71vJc')
+    for elem in related_searches_elements:
+        text = elem.get_text(strip=True)
+        related_searches.append(text)
+        contadorBusquedas.append(text.lower())
     
-    return related_searches, paa
+    # Scraping des Google Suggest
+    suggests = get_google_suggests(keyword, language, country)
+    contadorSuggest.extend(suggests)
+
+    # Empêcher le scraping en double
+    scrapeado.append(keyword.lower())
+
+    return paa, related_searches, suggests
+
+# Fonction pour gérer la boucle de scraping à plusieurs niveaux
+def scrape_loop(keyword, language, country, scrapeLevels, loopPAA):
+    results = []
+    queue = [(keyword, 0)]
+
+    while queue:
+        current_keyword, current_level = queue.pop(0)
+        if current_keyword.lower() in scrapeado:
+            continue
+        paa, related_searches, suggests = scrape_serp(current_keyword, language, country, current_level)
+
+        results.append({
+            "keyword": current_keyword,
+            "paa": paa,
+            "related_searches": related_searches,
+            "suggests": suggests
+        })
+
+        if current_level < scrapeLevels:
+            if loopPAA:
+                queue.extend([(p, current_level + 1) for p in paa if p.lower() not in scrapeado])
+            else:
+                queue.extend([(r, current_level + 1) for r in related_searches if r.lower() not in scrapeado])
+
+    return results
 
 # Définition de la fonction principale `app`
 def app():
-    st.title("Google SERP Scraper")
+    st.title("Google SERP Scraper Avancé")
 
-    # Sélecteurs pour la langue et le pays
+    # Sélecteurs pour la langue, le pays, et autres paramètres
     language = st.selectbox("Sélectionnez la langue pour le scraping", options=["fr", "en", "es", "de", "it", "pt"])
     country = st.selectbox("Sélectionnez le pays pour le scraping", options=["fr", "us", "es", "de", "it", "pt"])
+    scrapeLevels = st.slider("Niveaux de scraping (scrapeLevels)", 1, 3, 2)
+    loopPAA = st.checkbox("Suivre les 'People Also Ask' au lieu des requêtes similaires", value=False)
 
     st.write("Collez vos mots-clés (un par ligne) dans la zone de texte ci-dessous :")
 
@@ -68,14 +118,8 @@ def app():
         data = []
         for i, keyword in enumerate(keywords):
             if keyword.strip():  # Ignorer les lignes vides
-                suggests = get_google_suggests(keyword, language=language, country=country)
-                related_searches, paa = get_related_searches(keyword, language=language, country=country)
-                data.append({
-                    "keyword": keyword,
-                    "suggests": suggests,
-                    "related_searches": related_searches,
-                    "paa": paa
-                })
+                results = scrape_loop(keyword, language, country, scrapeLevels, loopPAA)
+                data.extend(results)
             
             # Mise à jour de la barre de progression
             progress = (i + 1) / total_keywords
@@ -96,9 +140,9 @@ def app():
 
         # Générer le DataFrame
         df = pd.DataFrame(data)
-        df['suggests'] = df['suggests'].apply(lambda x: "\n".join(x))
-        df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
         df['paa'] = df['paa'].apply(lambda x: "\n".join(x))
+        df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
+        df['suggests'] = df['suggests'].apply(lambda x: "\n".join(x))
 
         # Écrire le DataFrame directement dans un fichier Excel
         file_name = "serp_data.xlsx"
