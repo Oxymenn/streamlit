@@ -1,4 +1,8 @@
 import streamlit as st
+
+# Configuration de la page en mode wide dès le début
+st.set_page_config(layout="wide")
+
 import pandas as pd
 import aiohttp
 import asyncio
@@ -10,7 +14,7 @@ import lxml
 from io import BytesIO
 import time
 
-# Liste de stopwords en français (inchangée)
+# Liste de stopwords en français
 stopwords_fr = {
     "alors", "au", "aucuns", "aussi", "autre", "avant", "avec", "avoir", "bon", 
     "car", "ce", "cela", "ces", "ceux", "chaque", "ci", "comme", "comment", 
@@ -158,7 +162,6 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     return df_results, None
 
 def app():
-    st.set_page_config(layout="wide")
     st.title("Proposition de Maillage Interne Personnalisé")
 
     api_key = st.text_input("Entrez votre clé API OpenAI", type="password")
