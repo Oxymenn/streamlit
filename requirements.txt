@@ -15,4 +15,5 @@ matplotlib
 seaborn
 lxml
 aiohttp
+nltk
 gensim
