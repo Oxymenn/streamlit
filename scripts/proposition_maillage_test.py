@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from io import BytesIO
 
 # Fonction pour récupérer les Google Suggest
 def get_google_suggests(keyword, language='fr', country='fr'):
@@ -50,17 +51,28 @@ def app():
                 })
                 st.write(f"Données récupérées pour {keyword}")
 
-        # Générer le DataFrame et l'exporter en Excel
+        # Générer le DataFrame
         df = pd.DataFrame(data)
         df['suggests'] = df['suggests'].apply(lambda x: "\n".join(x))
         df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
         df['paa'] = df['paa'].apply(lambda x: "\n".join(x))
 
-        st.write(df)
+        # Écrire le DataFrame dans un fichier Excel en mémoire avec openpyxl
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+            writer.save()
+        
+        # Positionner le buffer au début du fichier
+        output.seek(0)
 
-        # Générer le fichier Excel
-        excel_file = df.to_excel(index=False, engine='xlsxwriter')
-        st.download_button(label="Télécharger le fichier Excel", data=excel_file, file_name="serp_data.xlsx")
+        # Télécharger le fichier Excel
+        st.download_button(
+            label="Télécharger le fichier Excel",
+            data=output,
+            file_name="serp_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
         st.success("Scraping terminé et fichier Excel généré avec succès.")
 
