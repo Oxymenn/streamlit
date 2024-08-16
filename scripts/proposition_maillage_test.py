@@ -16,7 +16,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0"
 ]
 
-# Liste d'exemples de proxies
+# Liste d'exemples de proxies (à remplacer par des proxies fonctionnels)
 PROXIES = [
     "http://111.222.333.444:8080",
     "http://555.666.777.888:3128",
@@ -24,22 +24,31 @@ PROXIES = [
     # Ajoutez ici vos propres proxies
 ]
 
+# Fonction pour faire une requête avec gestion des erreurs de proxy
+def make_request_with_proxy(url, headers):
+    for _ in range(len(PROXIES)):  # Essayer chaque proxy une fois
+        proxy = {"http": random.choice(PROXIES), "https": random.choice(PROXIES)}
+        try:
+            response = requests.get(url, headers=headers, proxies=proxy, timeout=5)
+            response.raise_for_status()  # Vérifie si la requête est réussie
+            return response
+        except (requests.exceptions.ProxyError, requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            continue  # Si le proxy échoue, essayer un autre
+    raise requests.exceptions.ProxyError("Tous les proxies ont échoué")
+
 # Fonction pour récupérer les Google Suggest
 def get_google_suggests(keyword, language='fr', country='fr'):
     headers = {"User-Agent": random.choice(USER_AGENTS)}
-    proxy = {"http": random.choice(PROXIES), "https": random.choice(PROXIES)}
-    
-    r = requests.get(f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}', headers=headers, proxies=proxy)
-    soup = BeautifulSoup(r.content, 'html.parser')
+    url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
+    response = make_request_with_proxy(url, headers)
+    soup = BeautifulSoup(response.content, 'html.parser')
     return [sugg['data'] for sugg in soup.find_all('suggestion')]
 
 # Fonction pour récupérer les résultats des recherches associées
 def get_related_searches(keyword, language='fr', country='fr'):
-    url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
     headers = {"User-Agent": random.choice(USER_AGENTS)}
-    proxy = {"http": random.choice(PROXIES), "https": random.choice(PROXIES)}
-    
-    response = requests.get(url, headers=headers, proxies=proxy)
+    url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
+    response = make_request_with_proxy(url, headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     
     related_searches = []
@@ -71,15 +80,18 @@ def app():
         data = []
         for i, keyword in enumerate(keywords):
             if keyword.strip():  # Ignorer les lignes vides
-                suggests = get_google_suggests(keyword)
-                related_searches, paa = get_related_searches(keyword)
-                data.append({
-                    "keyword": keyword,
-                    "suggests": suggests,
-                    "related_searches": related_searches,
-                    "paa": paa
-                })
-            
+                try:
+                    suggests = get_google_suggests(keyword)
+                    related_searches, paa = get_related_searches(keyword)
+                    data.append({
+                        "keyword": keyword,
+                        "suggests": suggests,
+                        "related_searches": related_searches,
+                        "paa": paa
+                    })
+                except requests.exceptions.ProxyError:
+                    st.error(f"Impossible de scraper {keyword} après avoir essayé tous les proxies.")
+
             # Mise à jour de la barre de progression
             progress = (i + 1) / total_keywords
             progress_bar.progress(progress)
