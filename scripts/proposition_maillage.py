@@ -7,6 +7,8 @@ import numpy as np
 import re
 from openai import AsyncOpenAI
 import lxml
+from io import BytesIO
+import time
 
 # Liste de stopwords en français (inchangée)
 stopwords_fr = {
@@ -30,9 +32,13 @@ stopwords_fr = {
 WHITESPACE_REGEX = re.compile(r'\s+')
 PUNCTUATION_REGEX = re.compile(r'[^\w\s]')
 
+@st.cache_data
+def load_excel_file(uploaded_file):
+    return pd.read_excel(BytesIO(uploaded_file.getvalue()))
+
 async def extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords):
     try:
-        async with session.get(url) as response:
+        async with session.get(url, timeout=10) as response:
             response.raise_for_status()
             text = await response.text()
         
@@ -59,11 +65,13 @@ async def extract_and_clean_content(session, url, include_classes, exclude_class
         content = ' '.join([word for word in words if word not in all_stopwords])
 
         return content
+    except asyncio.TimeoutError:
+        st.warning(f"Timeout lors de l'extraction du contenu de {url}")
+        return None
     except Exception as e:
-        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
+        st.warning(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-@st.cache_data
 async def get_embeddings(texts, api_key):
     client = AsyncOpenAI(api_key=api_key)
     try:
@@ -86,13 +94,28 @@ def calculate_similarity(embeddings):
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
         return None
 
-@st.cache_data
-async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key):
+async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, progress_bar, status_text, timer_text):
+    start_time = time.time()
     async with aiohttp.ClientSession() as session:
-        contents = await asyncio.gather(*[extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords) for url in urls_list])
+        contents = []
+        for i, url in enumerate(urls_list):
+            content = await extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords)
+            if content:
+                contents.append(content)
+            
+            progress = (i + 1) / len(urls_list)
+            progress_bar.progress(progress)
+            
+            elapsed_time = time.time() - start_time
+            estimated_total_time = elapsed_time / progress
+            remaining_time = estimated_total_time - elapsed_time
+            
+            hours, rem = divmod(remaining_time, 3600)
+            minutes, seconds = divmod(rem, 60)
+            
+            status_text.text(f"URLs analysées : {i+1}/{len(urls_list)}")
+            timer_text.text(f"Temps restant estimé : {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}")
     
-    contents = [content for content in contents if content]
-
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
@@ -135,6 +158,7 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     return df_results, None
 
 def app():
+    st.set_page_config(layout="wide")
     st.title("Proposition de Maillage Interne Personnalisé")
 
     api_key = st.text_input("Entrez votre clé API OpenAI", type="password")
@@ -145,6 +169,8 @@ def app():
         st.session_state.urls_to_analyze = ""
     if 'uploaded_file' not in st.session_state:
         st.session_state.uploaded_file = None
+    if 'df_excel' not in st.session_state:
+        st.session_state.df_excel = None
     if 'num_similar_urls' not in st.session_state:
         st.session_state.num_similar_urls = 5
     if 'include_classes' not in st.session_state:
@@ -156,67 +182,79 @@ def app():
 
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
-    # Nouvelle fonctionnalité : Compter le nombre d'URLs entrées
     urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
     num_urls = len(urls_list)
     st.write(f"Nombre d'URLs entrées : {num_urls}")
     
     uploaded_file = st.file_uploader("Importer le fichier Excel contenant les URLs, ancres et indices de priorité", type=["xlsx"])
-    if uploaded_file is not None:
+    if uploaded_file is not None and uploaded_file != st.session_state.uploaded_file:
         st.session_state.uploaded_file = uploaded_file
+        with st.spinner("Chargement du fichier Excel..."):
+            st.session_state.df_excel = load_excel_file(uploaded_file)
+        st.success("Fichier Excel chargé avec succès!")
 
-    if st.session_state.uploaded_file is not None and st.session_state.urls_to_analyze and api_key:
-        try:
-            df_excel = pd.read_excel(st.session_state.uploaded_file)
+    if st.session_state.df_excel is not None and st.session_state.urls_to_analyze and api_key:
+        df_excel = st.session_state.df_excel
 
-            st.subheader("Sélectionnez les données GSC")
+        col1, col2, col3 = st.columns(3)
+        with col1:
             col_url = st.selectbox("Sélectionnez la colonne contenant les URLs", df_excel.columns)
+        with col2:
             col_ancre = st.selectbox("Sélectionnez la colonne contenant les ancres", df_excel.columns)
+        with col3:
             col_priorite = st.selectbox("Sélectionnez la colonne contenant l'indice de priorité (nombre d'impressions)", df_excel.columns)
 
-            if not all(col in df_excel.columns for col in [col_url, col_ancre, col_priorite]):
-                st.error("Erreur: Une ou plusieurs colonnes sélectionnées n'existent pas dans le fichier Excel.")
-                return
+        if not all(col in df_excel.columns for col in [col_url, col_ancre, col_priorite]):
+            st.error("Erreur: Une ou plusieurs colonnes sélectionnées n'existent pas dans le fichier Excel.")
+            return
 
-            if not pd.to_numeric(df_excel[col_priorite], errors='coerce').notna().all():
-                st.error(f"Erreur: La colonne '{col_priorite}' contient des valeurs non numériques.")
-                return
+        if not pd.to_numeric(df_excel[col_priorite], errors='coerce').notna().all():
+            st.error(f"Erreur: La colonne '{col_priorite}' contient des valeurs non numériques.")
+            return
 
-            max_similar_urls = len(urls_list) - 1
-            st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
+        max_similar_urls = len(urls_list) - 1
+        st.session_state.num_similar_urls = st.slider("Nombre d'URLs similaires à considérer", min_value=1, max_value=max_similar_urls, value=st.session_state.num_similar_urls)
 
-            st.subheader("Filtrer le contenu HTML et termes")
+        col1, col2, col3 = st.columns(3)
+        with col1:
             st.session_state.include_classes = st.text_area("Classes HTML à analyser exclusivement (une classe par ligne, optionnel)", st.session_state.include_classes)
+        with col2:
             st.session_state.exclude_classes = st.text_area("Classes HTML à exclure de l'analyse (une classe par ligne, optionnel)", st.session_state.exclude_classes)
+        with col3:
             st.session_state.additional_stopwords = st.text_area("Termes/stopwords supplémentaires à exclure de l'analyse (un terme par ligne, optionnel)", st.session_state.additional_stopwords)
 
-            if st.button("Exécuter l'analyse"):
-                include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
-                exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
-                additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
+        if st.button("Exécuter l'analyse"):
+            include_classes = [cls.strip() for cls in st.session_state.include_classes.split('\n') if cls.strip()]
+            exclude_classes = [cls.strip() for cls in st.session_state.exclude_classes.split('\n') if cls.strip()]
+            additional_stopwords = [word.strip() for word in st.session_state.additional_stopwords.split('\n') if word.strip()]
 
-                with st.spinner("Running..."):
-                    st.session_state.df_results, error_message = asyncio.run(process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key))
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            timer_text = st.empty()
 
-                if error_message:
-                    st.error(error_message)
-                elif st.session_state.df_results is None:
-                    st.warning("Aucun résultat n'a été généré.")
+            with st.spinner("Analyse en cours..."):
+                st.session_state.df_results, error_message = asyncio.run(process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, api_key, progress_bar, status_text, timer_text))
 
-            if st.session_state.df_results is not None:
-                filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(st.session_state.num_similar_urls, 'Score de similarité')).reset_index(drop=True)
-                st.dataframe(filtered_results)
+            progress_bar.empty()
+            status_text.empty()
+            timer_text.empty()
 
-                csv = filtered_results.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Télécharger les résultats (CSV)",
-                    data=csv,
-                    file_name='maillage_interne_personnalise.csv',
-                    mime='text/csv'
-                )
+            if error_message:
+                st.error(error_message)
+            elif st.session_state.df_results is None:
+                st.warning("Aucun résultat n'a été généré.")
 
-        except Exception as e:
-            st.error(f"Erreur lors du traitement : {str(e)}")
+        if st.session_state.df_results is not None:
+            filtered_results = st.session_state.df_results.groupby('URL de départ').apply(lambda x: x.nlargest(st.session_state.num_similar_urls, 'Score de similarité')).reset_index(drop=True)
+            st.dataframe(filtered_results)
+
+            csv = filtered_results.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Télécharger les résultats (CSV)",
+                data=csv,
+                file_name='maillage_interne_personnalise.csv',
+                mime='text/csv'
+            )
 
     elif not api_key:
         st.warning("Veuillez entrer votre clé API OpenAI pour continuer.")
