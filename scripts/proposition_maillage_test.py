@@ -2,15 +2,10 @@ import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
-from gensim.models import KeyedVectors
-import nltk
-from nltk.tokenize import word_tokenize
-
-# Télécharger les ressources NLTK nécessaires
-nltk.download('punkt', quiet=True)
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -29,12 +24,6 @@ stopwords_fr = {
     "très", "tu", "votre", "vous", "vu", "ça", "étaient", "état", "étions", 
     "été", "être"
 }
-
-@st.cache_resource
-def load_word2vec_model():
-    return KeyedVectors.load_word2vec_format('path_to_your_word2vec_model.bin', binary=True)
-
-word2vec_model = load_word2vec_model()
 
 def extract_and_clean_content(url, include_classes, exclude_classes, additional_stopwords):
     try:
@@ -68,17 +57,11 @@ def extract_and_clean_content(url, include_classes, exclude_classes, additional_
         st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
         return None
 
-def get_embeddings(text):
-    tokens = word_tokenize(text.lower())
-    valid_tokens = [token for token in tokens if token in word2vec_model.key_to_index]
-    if not valid_tokens:
-        return None
-    embeddings = [word2vec_model[token] for token in valid_tokens]
-    return np.mean(embeddings, axis=0)
-
-def calculate_similarity(embeddings):
+def calculate_similarity(contents):
     try:
-        similarity_matrix = cosine_similarity(embeddings)
+        vectorizer = TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform(contents)
+        similarity_matrix = cosine_similarity(tfidf_matrix)
         return similarity_matrix
     except Exception as e:
         st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
@@ -92,13 +75,7 @@ def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_
     if not contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    embeddings = [get_embeddings(content) for content in contents]
-    embeddings = [emb for emb in embeddings if emb is not None]
-
-    if not embeddings:
-        return None, "Impossible de générer des embeddings pour les contenus extraits."
-
-    similarity_matrix = calculate_similarity(embeddings)
+    similarity_matrix = calculate_similarity(contents)
 
     if similarity_matrix is None:
         return None, "Erreur lors du calcul de la similarité."
