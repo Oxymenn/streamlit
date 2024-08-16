@@ -4,6 +4,7 @@ import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
 from keybert import KeyBERT
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
@@ -28,72 +29,69 @@ stopwords_fr = {
     "été", "être"
 }
 
-async def extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords):
+@st.cache_resource
+def get_keybert_model():
+    sentence_model = SentenceTransformer("distiluse-base-multilingual-cased-v1")
+    return KeyBERT(model=sentence_model)
+
+async def fetch_content(session, url):
     try:
         async with session.get(url, timeout=10) as response:
-            response.raise_for_status()
-            html = await response.text()
-
-        soup = BeautifulSoup(html, 'html.parser')
-
-        if include_classes:
-            content = ' '.join([element.get_text(separator=" ", strip=True) for class_name in include_classes for element in soup.find_all(class_=class_name)])
-        else:
-            content = soup.get_text(separator=" ", strip=True)
-
-        if exclude_classes:
-            for class_name in exclude_classes:
-                for element in soup.find_all(class_=class_name):
-                    content = content.replace(element.get_text(separator=" ", strip=True), "")
-
-        content = re.sub(r'\s+', ' ', content.lower())
-        content = re.sub(r'[^\w\s]', '', content)
-
-        all_stopwords = stopwords_fr.union(set(additional_stopwords))
-        words = ' '.join([word for word in content.split() if word not in all_stopwords])
-
-        return words
+            return await response.text()
     except Exception as e:
-        st.error(f"Erreur lors de l'extraction du contenu de {url}: {e}")
+        st.error(f"Erreur lors de la récupération de {url}: {e}")
         return None
+
+def clean_content(content, include_classes, exclude_classes, additional_stopwords):
+    soup = BeautifulSoup(content, 'html.parser')
+
+    if include_classes:
+        text = ' '.join([element.get_text(separator=" ", strip=True) for class_name in include_classes for element in soup.find_all(class_=class_name)])
+    else:
+        text = soup.get_text(separator=" ", strip=True)
+
+    if exclude_classes:
+        for class_name in exclude_classes:
+            for element in soup.find_all(class_=class_name):
+                text = text.replace(element.get_text(separator=" ", strip=True), "")
+
+    text = re.sub(r'\s+', ' ', text.lower())
+    text = re.sub(r'[^\w\s]', '', text)
+
+    all_stopwords = stopwords_fr.union(set(additional_stopwords))
+    words = ' '.join([word for word in text.split() if word not in all_stopwords])
+
+    return words
 
 def extract_keywords(kw_model, content, top_n=5):
     keywords = kw_model.extract_keywords(content, top_n=top_n, keyphrase_ngram_range=(1, 2))
     return ' '.join([kw for kw, _ in keywords])
 
-@st.cache_resource
-def get_keybert_model():
-    return KeyBERT()
-
-def calculate_similarity(contents):
-    try:
-        kw_model = get_keybert_model()
-        keyword_contents = [extract_keywords(kw_model, content) for content in contents]
-        vectorizer = kw_model.model.encode(keyword_contents)
-        return cosine_similarity(vectorizer)
-    except Exception as e:
-        st.error(f"Erreur lors du calcul de la similarité cosinus: {e}")
-        return None
+def calculate_similarity(kw_model, contents):
+    keyword_contents = [extract_keywords(kw_model, content) for content in contents]
+    embeddings = kw_model.model.encode(keyword_contents)
+    return cosine_similarity(embeddings)
 
 async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
+    kw_model = get_keybert_model()
+
     async with aiohttp.ClientSession() as session:
-        tasks = [extract_and_clean_content(session, url, include_classes, exclude_classes, additional_stopwords) for url in urls_list]
+        tasks = [fetch_content(session, url) for url in urls_list]
         contents = await asyncio.gather(*tasks)
 
-    contents = [content for content in contents if content]
+    with ThreadPoolExecutor() as executor:
+        clean_contents = list(executor.map(
+            lambda x: clean_content(x[0], include_classes, exclude_classes, additional_stopwords) if x[0] else None,
+            zip(contents)
+        ))
 
-    if not contents:
-        yield None, "Aucun contenu n'a pu être extrait des URLs fournies."
-        return
+    clean_contents = [content for content in clean_contents if content]
 
-    yield "Calcul de la similarité en cours..."
-    similarity_matrix = calculate_similarity(contents)
+    if not clean_contents:
+        return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
-    if similarity_matrix is None:
-        yield None, "Erreur lors du calcul de la similarité."
-        return
+    similarity_matrix = calculate_similarity(kw_model, clean_contents)
 
-    yield "Préparation des résultats..."
     results = []
     for i, url_start in enumerate(urls_list):
         similarities = similarity_matrix[i]
@@ -118,9 +116,9 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     df_results = pd.DataFrame(results)
 
     if df_results.empty:
-        yield None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
-    else:
-        yield df_results, None
+        return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
+
+    return df_results, None
 
 def format_time(seconds):
     hours, remainder = divmod(seconds, 3600)
@@ -128,7 +126,7 @@ def format_time(seconds):
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 def app():
-    st.title("Proposition de Maillage Interne Personnalisé avec KeyBERT")
+    st.title("Proposition de Maillage Interne Personnalisé avec Sentence Transformers")
 
     if 'df_results' not in st.session_state:
         st.session_state.df_results = None
@@ -147,7 +145,6 @@ def app():
 
     st.session_state.urls_to_analyze = st.text_area("Collez ici les URLs à analyser (une URL par ligne)", st.session_state.urls_to_analyze)
     
-    # Ajout du compteur d'URLs
     urls_list = [url.strip() for url in st.session_state.urls_to_analyze.split('\n') if url.strip()]
     st.write(f"Nombre d'URLs à analyser : {len(urls_list)}")
 
@@ -193,13 +190,7 @@ def app():
                 time_text = st.empty()
 
                 async def run_analysis():
-                    generator = process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
-                    async for status in generator:
-                        if isinstance(status, str):
-                            status_text.text(status)
-                        else:
-                            st.session_state.df_results, error_message = status
-                            return error_message
+                    return await process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
 
                 with ThreadPoolExecutor() as executor:
                     loop = asyncio.new_event_loop()
@@ -207,17 +198,13 @@ def app():
                     future = asyncio.ensure_future(run_analysis())
                     while not future.done():
                         elapsed_time = time.time() - start_time
-                        progress = min(elapsed_time / (len(urls_list) * 2), 1.0)  # Estimation grossière
-                        urls_analyzed = int(progress * len(urls_list))
-                        remaining_urls = len(urls_list) - urls_analyzed
-                        estimated_total_time = elapsed_time / progress if progress > 0 else 0
-                        estimated_remaining_time = max(estimated_total_time - elapsed_time, 0)
-
+                        progress = min(elapsed_time / (len(urls_list) * 2), 1.0)
                         progress_bar.progress(progress)
-                        time_text.text(f"Temps écoulé : {format_time(elapsed_time)} | Temps restant estimé : {format_time(estimated_remaining_time)}")
+                        status_text.text(f"Analyse en cours... {int(progress * 100)}% terminé")
+                        time_text.text(f"Temps écoulé : {format_time(elapsed_time)}")
                         time.sleep(0.1)
                     
-                    error_message = loop.run_until_complete(future)
+                    st.session_state.df_results, error_message = loop.run_until_complete(future)
 
                 progress_bar.progress(1.0)
                 status_text.text(f"Analyse terminée. {len(urls_list)} URLs traitées.")
