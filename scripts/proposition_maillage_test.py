@@ -9,7 +9,6 @@ import numpy as np
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 
 # Liste de stopwords en français
 stopwords_fr = {
@@ -84,13 +83,15 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     contents = [content for content in contents if content]
 
     if not contents:
-        return None, "Aucun contenu n'a pu être extrait des URLs fournies."
+        yield None, "Aucun contenu n'a pu être extrait des URLs fournies."
+        return
 
     yield "Calcul de la similarité en cours..."
     similarity_matrix = calculate_similarity(contents)
 
     if similarity_matrix is None:
-        return None, "Erreur lors du calcul de la similarité."
+        yield None, "Erreur lors du calcul de la similarité."
+        return
 
     yield "Préparation des résultats..."
     results = []
@@ -117,9 +118,9 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     df_results = pd.DataFrame(results)
 
     if df_results.empty:
-        return None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
-
-    return df_results, None
+        yield None, "Aucun résultat n'a été trouvé avec les critères spécifiés."
+    else:
+        yield df_results, None
 
 def format_time(seconds):
     hours, remainder = divmod(seconds, 3600)
