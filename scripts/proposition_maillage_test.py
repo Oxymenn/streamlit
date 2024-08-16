@@ -43,6 +43,8 @@ async def fetch_content(session, url):
         return None
 
 def clean_content(content, include_classes, exclude_classes, additional_stopwords):
+    if content is None:
+        return None
     soup = BeautifulSoup(content, 'html.parser')
 
     if include_classes:
@@ -72,17 +74,19 @@ def calculate_similarity(kw_model, contents):
     embeddings = kw_model.model.encode(keyword_contents)
     return cosine_similarity(embeddings)
 
-async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords):
+async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, status_text):
     kw_model = get_keybert_model()
 
+    status_text.text("Récupération des contenus...")
     async with aiohttp.ClientSession() as session:
         tasks = [fetch_content(session, url) for url in urls_list]
         contents = await asyncio.gather(*tasks)
 
+    status_text.text("Nettoyage des contenus...")
     with ThreadPoolExecutor() as executor:
         clean_contents = list(executor.map(
-            lambda x: clean_content(x[0], include_classes, exclude_classes, additional_stopwords) if x[0] else None,
-            zip(contents)
+            lambda x: clean_content(x, include_classes, exclude_classes, additional_stopwords),
+            contents
         ))
 
     clean_contents = [content for content in clean_contents if content]
@@ -90,8 +94,10 @@ async def process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, in
     if not clean_contents:
         return None, "Aucun contenu n'a pu être extrait des URLs fournies."
 
+    status_text.text("Calcul de la similarité...")
     similarity_matrix = calculate_similarity(kw_model, clean_contents)
 
+    status_text.text("Préparation des résultats...")
     results = []
     for i, url_start in enumerate(urls_list):
         similarities = similarity_matrix[i]
@@ -190,23 +196,19 @@ def app():
                 time_text = st.empty()
 
                 async def run_analysis():
-                    return await process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords)
+                    return await process_data(urls_list, df_excel, col_url, col_ancre, col_priorite, include_classes, exclude_classes, additional_stopwords, status_text)
 
-                with ThreadPoolExecutor() as executor:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    future = asyncio.ensure_future(run_analysis())
-                    while not future.done():
-                        elapsed_time = time.time() - start_time
-                        progress = min(elapsed_time / (len(urls_list) * 2), 1.0)
-                        progress_bar.progress(progress)
-                        status_text.text(f"Analyse en cours... {int(progress * 100)}% terminé")
-                        time_text.text(f"Temps écoulé : {format_time(elapsed_time)}")
-                        time.sleep(0.1)
-                    
-                    st.session_state.df_results, error_message = loop.run_until_complete(future)
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                future = asyncio.ensure_future(run_analysis())
+                
+                while not future.done():
+                    elapsed_time = time.time() - start_time
+                    time_text.text(f"Temps écoulé : {format_time(elapsed_time)}")
+                    time.sleep(0.1)
+                
+                st.session_state.df_results, error_message = loop.run_until_complete(future)
 
-                progress_bar.progress(1.0)
                 status_text.text(f"Analyse terminée. {len(urls_list)} URLs traitées.")
                 time_text.text(f"Temps total : {format_time(time.time() - start_time)}")
 
