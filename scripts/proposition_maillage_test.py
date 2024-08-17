@@ -2,111 +2,98 @@ import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-import random
-import concurrent.futures
+import time
+from io import BytesIO
 
-# Liste d'agents utilisateurs
-USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Safari/605.1.15',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59'
-]
-
-def get_random_header():
-    return {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-    }
-
-def get_soup(url):
-    response = requests.get(url, headers=get_random_header())
-    return BeautifulSoup(response.text, 'html.parser')
-
-def get_suggest(keyword, language='fr', country='fr'):
-    url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
-    soup = get_soup(url)
+# Fonction pour récupérer les Google Suggest
+def get_google_suggests(keyword, language='fr', country='fr'):
+    r = requests.get(f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}')
+    soup = BeautifulSoup(r.content, 'html.parser')
     return [sugg['data'] for sugg in soup.find_all('suggestion')]
 
-def scrape_serp(keyword, language='fr', country='fr'):
-    url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}"
-    soup = get_soup(url)
+# Fonction pour récupérer les résultats des recherches associées
+def get_related_searches(keyword, language='fr', country='fr'):
+    url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
     
-    results = {
-        'PAA': [],
-        'related_searches': [],
-        'suggest': get_suggest(keyword, language, country)
-    }
+    related_searches = []
+    for suggestion in soup.select('.Q71vJc'):
+        related_searches.append(suggestion.get_text())
     
-    # Scraping des PAA
-    paa_elements = soup.select("[class^='xpc']")  # Sélecteur adapté pour les PAA
-    for paa in paa_elements:
-        results['PAA'].append(paa.get_text().strip())
+    paa = []
+    for question in soup.select('.xpc'):
+        paa.append(question.get_text())
     
-    # Scraping des recherches associées
-    related_searches_elements = soup.select(".Q71vJc")  # Sélecteur pour les recherches associées
-    for search in related_searches_elements:
-        results['related_searches'].append(search.get_text().strip())
-    
-    return results
+    return related_searches, paa
 
-def recursive_scrape(keyword, depth, max_depth):
-    if depth > max_depth:
-        return {}
-    
-    results = scrape_serp(keyword)
-    
-    if depth < max_depth:
-        for suggest in results['suggest'][:3]:  # Limitation aux 3 premières suggestions
-            suggest_results = recursive_scrape(suggest, depth + 1, max_depth)
-            for key in suggest_results:
-                results[key].extend(suggest_results[key])
-    
-    return results
-
-def scrape_keyword(keyword, max_depth):
-    return recursive_scrape(keyword, 1, max_depth)
-
+# Définition de la fonction principale `app`
 def app():
     st.title("Google SERP Scraper")
-    
-    keywords = st.text_area("Entrez les mots-clés (un par ligne) :")
-    depth = st.slider("Sélectionnez la profondeur", 1, 5, 1)
-    
-    if st.button("Lancer le scraping"):
-        keywords_list = [kw.strip() for kw in keywords.split('\n') if kw.strip()]
-        
-        progress_bar = st.progress(0)
-        results = {}
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_keyword = {executor.submit(scrape_keyword, keyword, depth): keyword for keyword in keywords_list}
-            for i, future in enumerate(concurrent.futures.as_completed(future_to_keyword)):
-                keyword = future_to_keyword[future]
-                try:
-                    results[keyword] = future.result()
-                except Exception as exc:
-                    st.error(f'{keyword} a généré une exception: {exc}')
-                progress_bar.progress((i + 1) / len(keywords_list))
-        
-        # Créer un DataFrame
-        df = pd.DataFrame(index=keywords_list, columns=['PAA', 'Recherches associées', 'Suggest'])
-        
-        for keyword in results:
-            df.at[keyword, 'PAA'] = ', '.join(results[keyword]['PAA'])
-            df.at[keyword, 'Recherches associées'] = ', '.join(results[keyword]['related_searches'])
-            df.at[keyword, 'Suggest'] = ', '.join(results[keyword]['suggest'])
-        
-        # Enregistrer dans un fichier Excel
-        df.to_excel("serp_results.xlsx")
-        
-        st.success("Scraping terminé ! Résultats enregistrés dans 'serp_results.xlsx'")
-        st.dataframe(df)
 
+    st.write("Collez vos mots-clés (un par ligne) dans la zone de texte ci-dessous :")
+
+    keywords_input = st.text_area("Mots-clés", height=200)
+    keywords = keywords_input.splitlines()
+
+    if st.button("Scraper les données"):
+        start_time = time.time()  # Démarrer le chronomètre
+        total_keywords = len(keywords)
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        timer_text = st.empty()
+
+        data = []
+        for i, keyword in enumerate(keywords):
+            if keyword.strip():  # Ignorer les lignes vides
+                suggests = get_google_suggests(keyword)
+                related_searches, paa = get_related_searches(keyword)
+                data.append({
+                    "keyword": keyword,
+                    "suggests": suggests,
+                    "related_searches": related_searches,
+                    "paa": paa
+                })
+            
+            # Mise à jour de la barre de progression
+            progress = (i + 1) / total_keywords
+            progress_bar.progress(progress)
+
+            # Calcul du temps écoulé et estimation du temps restant
+            elapsed_time = time.time() - start_time
+            estimated_total_time = elapsed_time / progress
+            remaining_time = estimated_total_time - elapsed_time
+
+            # Conversion du temps en heures, minutes, secondes
+            elapsed_time_str = time.strftime('%H:%M:%S', time.gmtime(elapsed_time))
+            remaining_time_str = time.strftime('%H:%M:%S', time.gmtime(remaining_time))
+
+            # Mise à jour du texte d'état et du timer
+            status_text.text(f"Scraping {i+1} sur {total_keywords} mots-clés")
+            timer_text.text(f"Temps écoulé: {elapsed_time_str} | Temps restant estimé: {remaining_time_str}")
+
+        # Générer le DataFrame
+        df = pd.DataFrame(data)
+        df['suggests'] = df['suggests'].apply(lambda x: "\n".join(x))
+        df['related_searches'] = df['related_searches'].apply(lambda x: "\n".join(x))
+        df['paa'] = df['paa'].apply(lambda x: "\n".join(x))
+
+        # Écrire le DataFrame directement dans un fichier Excel
+        file_name = "serp_data.xlsx"
+        df.to_excel(file_name, index=False, engine='openpyxl')
+
+        # Télécharger le fichier Excel
+        with open(file_name, "rb") as file:
+            st.download_button(
+                label="Télécharger le fichier Excel",
+                data=file,
+                file_name=file_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        st.success("Scraping terminé et fichier Excel généré avec succès.")
+
+# Appel de la fonction `app` dans le bloc principal
 if __name__ == "__main__":
     app()
