@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -9,16 +11,17 @@ from bs4 import BeautifulSoup
 import requests
 import time
 import random
-import openpyxl
 
+@st.cache_resource
 def setup_driver():
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument("user-agent=Mozilla/5.0")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
     options.add_argument("--window-size=1366,768")
-    return webdriver.Chrome(options=options)
+    service = Service(ChromeDriverManager().install())
+    return webdriver.Chrome(service=service, options=options)
 
 def get_suggest(keyword, language='fr', country='fr'):
     url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
@@ -41,7 +44,7 @@ def scrape_serp(driver, keyword, language='fr', country='fr'):
     # Scrape PAA
     try:
         paa_elements = WebDriverWait(driver, 10).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "[class='xpc']"))
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.xpc"))
         )
         for paa in paa_elements:
             results['PAA'].append(paa.text.strip())
@@ -51,7 +54,7 @@ def scrape_serp(driver, keyword, language='fr', country='fr'):
     # Scrape related searches
     try:
         related_searches = WebDriverWait(driver, 10).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".Q71vJc"))
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.Q71vJc"))
         )
         for search in related_searches:
             results['related_searches'].append(search.text.strip())
@@ -67,7 +70,7 @@ def recursive_scrape(driver, keyword, depth, max_depth):
     results = scrape_serp(driver, keyword)
     
     if depth < max_depth:
-        for suggest in results['suggest']:
+        for suggest in results['suggest'][:3]:  # Limit to first 3 suggestions to avoid excessive scraping
             suggest_results = recursive_scrape(driver, suggest, depth + 1, max_depth)
             for key in suggest_results:
                 results[key].extend(suggest_results[key])
@@ -78,20 +81,18 @@ def main():
     st.title("Google SERP Scraper")
     
     keywords = st.text_area("Enter keywords (one per line):")
-    depth = st.slider("Select depth", 1, 10, 1)
+    depth = st.slider("Select depth", 1, 5, 1)  # Reduced max depth to 5 to avoid excessive scraping
     
     if st.button("Start Scraping"):
         driver = setup_driver()
         
         results = {}
-        keywords_list = keywords.split('\n')
+        keywords_list = [kw.strip() for kw in keywords.split('\n') if kw.strip()]
         
         progress_bar = st.progress(0)
         
         for i, keyword in enumerate(keywords_list):
-            keyword = keyword.strip()
-            if keyword:
-                results[keyword] = recursive_scrape(driver, keyword, 1, depth)
+            results[keyword] = recursive_scrape(driver, keyword, 1, depth)
             progress_bar.progress((i + 1) / len(keywords_list))
         
         driver.quit()
