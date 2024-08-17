@@ -37,7 +37,10 @@ def setup_driver():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument(f"user-agent={random.choice(USER_AGENTS)}")
+    
+    # Installation de la version correcte de ChromeDriver pour Chromium
     service = Service(ChromeDriverManager().install())
+    
     return webdriver.Chrome(service=service, options=options)
 
 def get_soup(url):
@@ -61,7 +64,7 @@ def scrape_serp(driver, keyword, language='fr', country='fr'):
         'suggest': get_suggest(keyword, language, country)
     }
     
-    # Scrape PAA
+    # Scraping des PAA
     try:
         paa_elements = WebDriverWait(driver, 10).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.related-question-pair"))
@@ -72,7 +75,7 @@ def scrape_serp(driver, keyword, language='fr', country='fr'):
     except Exception as e:
         st.error(f"Erreur lors du scraping des PAA pour {keyword}: {e}")
     
-    # Scrape related searches
+    # Scraping des recherches associées
     try:
         related_searches_elements = WebDriverWait(driver, 10).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a.k8XOCe"))
@@ -91,7 +94,7 @@ def recursive_scrape(driver, keyword, depth, max_depth):
     results = scrape_serp(driver, keyword)
     
     if depth < max_depth:
-        for suggest in results['suggest'][:3]:  # Limitation aux 3 premières suggestions
+        for suggest in results['suggest'][:3]:  # Limitation aux 3 premières suggestions pour éviter un scraping excessif
             suggest_results = recursive_scrape(driver, suggest, depth + 1, max_depth)
             for key in suggest_results:
                 results[key].extend(suggest_results[key])
@@ -107,10 +110,10 @@ def scrape_keyword(keyword, max_depth):
 def app():
     st.title("Google SERP Scraper")
     
-    keywords = st.text_area("Enter keywords (one per line):")
-    depth = st.slider("Select depth", 1, 5, 1)
+    keywords = st.text_area("Entrez les mots-clés (un par ligne) :")
+    depth = st.slider("Sélectionnez la profondeur", 1, 5, 1)
     
-    if st.button("Start Scraping"):
+    if st.button("Lancer le scraping"):
         keywords_list = [kw.strip() for kw in keywords.split('\n') if kw.strip()]
         
         progress_bar = st.progress(0)
@@ -123,21 +126,21 @@ def app():
                 try:
                     results[keyword] = future.result()
                 except Exception as exc:
-                    st.error(f'{keyword} generated an exception: {exc}')
+                    st.error(f'{keyword} a généré une exception: {exc}')
                 progress_bar.progress((i + 1) / len(keywords_list))
         
-        # Create DataFrame
-        df = pd.DataFrame(index=keywords_list, columns=['PAA', 'Related Searches', 'Suggest'])
+        # Créer un DataFrame
+        df = pd.DataFrame(index=keywords_list, columns=['PAA', 'Recherches associées', 'Suggest'])
         
         for keyword in results:
             df.at[keyword, 'PAA'] = ', '.join(results[keyword]['PAA'])
-            df.at[keyword, 'Related Searches'] = ', '.join(results[keyword]['related_searches'])
+            df.at[keyword, 'Recherches associées'] = ', '.join(results[keyword]['related_searches'])
             df.at[keyword, 'Suggest'] = ', '.join(results[keyword]['suggest'])
         
-        # Save to Excel
+        # Enregistrer dans un fichier Excel
         df.to_excel("serp_results.xlsx")
         
-        st.success("Scraping completed! Results saved to 'serp_results.xlsx'")
+        st.success("Scraping terminé ! Résultats enregistrés dans 'serp_results.xlsx'")
         st.dataframe(df)
 
 if __name__ == "__main__":
