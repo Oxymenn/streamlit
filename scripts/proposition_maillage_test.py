@@ -49,7 +49,7 @@ def scrape_serp(keyword, language='fr', country='fr'):
         results['PAA'].append(paa.text.strip())
     
     # Scraping des recherches associées
-    related_searches_elements = soup.select("a.oIk2Cb")
+    related_searches_elements = soup.select("oIk2Cb")
     for search in related_searches_elements:
         results['related_searches'].append(search.text.strip())
     
