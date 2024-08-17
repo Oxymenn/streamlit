@@ -5,7 +5,12 @@ from bs4 import BeautifulSoup
 import random
 import time
 import concurrent.futures
-import re
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 
 # Liste d'agents utilisateurs
 USER_AGENTS = [
@@ -26,6 +31,15 @@ def get_random_header():
         'Upgrade-Insecure-Requests': '1',
     }
 
+def setup_driver():
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument(f"user-agent={random.choice(USER_AGENTS)}")
+    service = Service(ChromeDriverManager().install())
+    return webdriver.Chrome(service=service, options=options)
+
 def get_soup(url):
     response = requests.get(url, headers=get_random_header())
     return BeautifulSoup(response.text, 'html.parser')
@@ -35,9 +49,11 @@ def get_suggest(keyword, language='fr', country='fr'):
     soup = get_soup(url)
     return [sugg['data'] for sugg in soup.find_all('suggestion')]
 
-def scrape_serp(keyword, language='fr', country='fr'):
+def scrape_serp(driver, keyword, language='fr', country='fr'):
     url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}"
-    soup = get_soup(url)
+    driver.get(url)
+    
+    time.sleep(random.uniform(1, 3))  # Attente aléatoire pour éviter le blocage
     
     results = {
         'PAA': [],
@@ -46,33 +62,47 @@ def scrape_serp(keyword, language='fr', country='fr'):
     }
     
     # Scrape PAA
-    paa_elements = soup.select('div.xpc')
-    for paa in paa_elements:
-        results['PAA'].append(paa.text.strip())
+    try:
+        paa_elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.related-question-pair"))
+        )
+        for paa in paa_elements:
+            question = paa.find_element(By.CSS_SELECTOR, "span").text
+            results['PAA'].append(question)
+    except Exception as e:
+        st.error(f"Erreur lors du scraping des PAA pour {keyword}: {e}")
     
     # Scrape related searches
-    related_searches = soup.select('div.Q71vJc')
-    for search in related_searches:
-        results['related_searches'].append(search.text.strip())
+    try:
+        related_searches_elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a.k8XOCe"))
+        )
+        for search in related_searches_elements:
+            results['related_searches'].append(search.text.strip())
+    except Exception as e:
+        st.error(f"Erreur lors du scraping des recherches associées pour {keyword}: {e}")
     
     return results
 
-def recursive_scrape(keyword, depth, max_depth):
+def recursive_scrape(driver, keyword, depth, max_depth):
     if depth > max_depth:
         return {}
     
-    results = scrape_serp(keyword)
+    results = scrape_serp(driver, keyword)
     
     if depth < max_depth:
-        for suggest in results['suggest'][:3]:  # Limit to first 3 suggestions
-            suggest_results = recursive_scrape(suggest, depth + 1, max_depth)
+        for suggest in results['suggest'][:3]:  # Limitation aux 3 premières suggestions
+            suggest_results = recursive_scrape(driver, suggest, depth + 1, max_depth)
             for key in suggest_results:
                 results[key].extend(suggest_results[key])
     
     return results
 
 def scrape_keyword(keyword, max_depth):
-    return recursive_scrape(keyword, 1, max_depth)
+    driver = setup_driver()
+    results = recursive_scrape(driver, keyword, 1, max_depth)
+    driver.quit()
+    return results
 
 def app():
     st.title("Google SERP Scraper")
