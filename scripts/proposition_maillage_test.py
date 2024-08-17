@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 import requests
 import time
 import random
+import openpyxl
 
 @st.cache_resource
 def setup_driver():
@@ -70,18 +71,18 @@ def recursive_scrape(driver, keyword, depth, max_depth):
     results = scrape_serp(driver, keyword)
     
     if depth < max_depth:
-        for suggest in results['suggest'][:3]:  # Limit to first 3 suggestions to avoid excessive scraping
+        for suggest in results['suggest'][:3]:  # Limitation aux 3 premières suggestions
             suggest_results = recursive_scrape(driver, suggest, depth + 1, max_depth)
             for key in suggest_results:
                 results[key].extend(suggest_results[key])
     
     return results
 
-def main():
+def app():
     st.title("Google SERP Scraper")
     
     keywords = st.text_area("Enter keywords (one per line):")
-    depth = st.slider("Select depth", 1, 5, 1)  # Reduced max depth to 5 to avoid excessive scraping
+    depth = st.slider("Select depth", 1, 5, 1)  # Limitation à une profondeur de 5
     
     if st.button("Start Scraping"):
         driver = setup_driver()
@@ -97,7 +98,7 @@ def main():
         
         driver.quit()
         
-        # Create DataFrame
+        # Créer un DataFrame
         df = pd.DataFrame(index=keywords_list, columns=['PAA', 'Related Searches', 'Suggest'])
         
         for keyword in results:
@@ -105,11 +106,11 @@ def main():
             df.at[keyword, 'Related Searches'] = ', '.join(results[keyword]['related_searches'])
             df.at[keyword, 'Suggest'] = ', '.join(results[keyword]['suggest'])
         
-        # Save to Excel
+        # Sauvegarder en Excel
         df.to_excel("serp_results.xlsx")
         
         st.success("Scraping completed! Results saved to 'serp_results.xlsx'")
         st.dataframe(df)
 
 if __name__ == "__main__":
-    main()
+    app()
