@@ -32,7 +32,7 @@ def scrape_serp(driver, keyword, language='fr', country='fr'):
     url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}"
     driver.get(url)
     
-    time.sleep(random.uniform(1, 3))
+    time.sleep(random.uniform(1, 3))  # Attente aléatoire pour éviter le blocage
     
     results = {
         'PAA': [],
@@ -43,17 +43,18 @@ def scrape_serp(driver, keyword, language='fr', country='fr'):
     # Scrape PAA
     try:
         paa_elements = WebDriverWait(driver, 10).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.xpc"))
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.related-question-pair"))
         )
         for paa in paa_elements:
-            results['PAA'].append(paa.text.strip())
+            question = paa.find_element(By.CSS_SELECTOR, "div.yuRUbf > a > h3").text
+            results['PAA'].append(question)
     except TimeoutException:
         pass
     
     # Scrape related searches
     try:
         related_searches = WebDriverWait(driver, 10).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.Q71vJc"))
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a.k8XOCe"))
         )
         for search in related_searches:
             results['related_searches'].append(search.text.strip())
