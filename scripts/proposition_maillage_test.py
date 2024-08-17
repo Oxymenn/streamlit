@@ -44,14 +44,14 @@ def scrape_serp(keyword, language='fr', country='fr'):
     }
     
     # Scraping des PAA
-    paa_elements = soup.select("div.related-question-pair")
+    paa_elements = soup.select("[class^='xpc']")  # Sélecteur adapté pour les PAA
     for paa in paa_elements:
-        results['PAA'].append(paa.text.strip())
+        results['PAA'].append(paa.get_text().strip())
     
     # Scraping des recherches associées
-    related_searches_elements = soup.select("oIk2Cb")
+    related_searches_elements = soup.select(".Q71vJc")  # Sélecteur pour les recherches associées
     for search in related_searches_elements:
-        results['related_searches'].append(search.text.strip())
+        results['related_searches'].append(search.get_text().strip())
     
     return results
 
