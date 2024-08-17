@@ -93,7 +93,7 @@ def scrape_loop(driver, keyword, language, country, scrapeLevels):
         seen_keywords.add(current_keyword.lower())
 
         if current_level < scrapeLevels:
-            for suggest in suggests:
+            for suggest in suggests + paa + related_searches:  # Inclure les PAA et les recherches associées dans les suggestions
                 if suggest.lower() not in seen_keywords:
                     queue.append((suggest, current_level + 1))
 
