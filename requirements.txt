@@ -16,4 +16,4 @@ seaborn
 lxml
 aiohttp
 selenium
-
+webdriver-manager
