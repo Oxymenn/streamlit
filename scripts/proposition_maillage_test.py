@@ -1,153 +1,114 @@
 import streamlit as st
-import os
-import requests
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options as ChromeOptions
+import pandas as pd
+from seleniumwire import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
+import requests
 import time
 import random
-import pandas as pd
+import openpyxl
 
-# Fonction pour installer chromedriver et configurer Chrome
-@st.cache_resource
-def install_chromedriver():
-    os.system('sbase install chromedriver')
-    os.system('ln -s /home/appuser/venv/lib/python3.7/site-packages/seleniumbase/drivers/chromedriver /home/appuser/venv/bin/chromedriver')
-
-_ = install_chromedriver()
-
-# Configuration de Selenium pour utiliser Chrome avec l'option headless
-def init_driver():
-    options = ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument(f"user-agent={random.choice(USER_AGENTS)}")
+def setup_driver():
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument("user-agent=Mozilla/5.0")
+    options.add_argument("--window-size=1366,768")
     return webdriver.Chrome(options=options)
 
-# Liste d'exemples de User-Agents
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
-    "Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0"
-]
-
-# Fonction pour récupérer les Google Suggest
-def get_google_suggests(keyword, language, country):
+def get_suggest(keyword, language='fr', country='fr'):
     url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, 'html.parser')
     return [sugg['data'] for sugg in soup.find_all('suggestion')]
 
-# Fonction pour scraper les résultats de recherche
-def scrape_serp(driver, keyword, language, country):
-    url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
+def scrape_serp(driver, keyword, language='fr', country='fr'):
+    url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}"
     driver.get(url)
-    time.sleep(random.uniform(1, 2))  # Attente pour éviter de déclencher les captchas
-
-    paa = []
-    related_searches = []
-
+    
+    time.sleep(random.uniform(1, 3))
+    
+    results = {
+        'PAA': [],
+        'related_searches': [],
+        'suggest': get_suggest(keyword, language, country)
+    }
+    
+    # Scrape PAA
     try:
-        # Scraping des People Also Ask (PAA)
-        paa_elements = driver.find_elements(By.CSS_SELECTOR, "[class='xpc']")
-        for elem in paa_elements:
-            paa.append(elem.text.strip())
+        paa_elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "[class='xpc']"))
+        )
+        for paa in paa_elements:
+            results['PAA'].append(paa.text.strip())
+    except TimeoutException:
+        pass
+    
+    # Scrape related searches
+    try:
+        related_searches = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".Q71vJc"))
+        )
+        for search in related_searches:
+            results['related_searches'].append(search.text.strip())
+    except TimeoutException:
+        pass
+    
+    return results
 
-        # Scraping des recherches associées
-        related_searches_elements = driver.find_elements(By.CSS_SELECTOR, ".Q71vJc")
-        for elem in related_searches_elements:
-            related_searches.append(elem.text.strip())
-    except Exception as e:
-        st.write(f"Erreur lors du scraping: {e}")
+def recursive_scrape(driver, keyword, depth, max_depth):
+    if depth > max_depth:
+        return {}
+    
+    results = scrape_serp(driver, keyword)
+    
+    if depth < max_depth:
+        for suggest in results['suggest']:
+            suggest_results = recursive_scrape(driver, suggest, depth + 1, max_depth)
+            for key in suggest_results:
+                results[key].extend(suggest_results[key])
+    
+    return results
 
-    suggests = get_google_suggests(keyword, language, country)
-
-    return paa, related_searches, suggests
-
-# Fonction pour gérer la boucle de scraping à plusieurs niveaux
-def scrape_loop(driver, keyword, language, country, scrapeLevels):
-    all_suggests = []
-    all_paa = []
-    all_related_searches = []
-    queue = [(keyword, 0)]
-    seen_keywords = set()
-
-    while queue:
-        current_keyword, current_level = queue.pop(0)
-        if current_keyword.lower() in seen_keywords:
-            continue
-
-        st.write(f"Scraping: {current_keyword} at level {current_level}")
-        paa, related_searches, suggests = scrape_serp(driver, current_keyword, language, country)
+def main():
+    st.title("Google SERP Scraper")
+    
+    keywords = st.text_area("Enter keywords (one per line):")
+    depth = st.slider("Select depth", 1, 10, 1)
+    
+    if st.button("Start Scraping"):
+        driver = setup_driver()
         
-        if current_level > 0:  # Ne pas ajouter le mot-clé de départ
-            all_suggests.append(current_keyword)
-            all_paa.extend(paa)
-            all_related_searches.extend(related_searches)
-
-        seen_keywords.add(current_keyword.lower())
-
-        if current_level < scrapeLevels:
-            for suggest in suggests + paa + related_searches:  # Inclure les PAA et les recherches associées dans les suggestions
-                if suggest.lower() not in seen_keywords:
-                    queue.append((suggest, current_level + 1))
-
-        # Arrêter si la queue devient trop longue
-        if len(queue) > 100:  # Limite arbitraire pour éviter les boucles infinies
-            break
-
-    return all_suggests, all_paa, all_related_searches
-
-# Fonction principale pour Streamlit
-def app():
-    st.title("Google SERP Scraper Avancé")
-
-    language = st.selectbox("Sélectionnez la langue pour le scraping", options=["fr", "en", "es", "de", "it", "pt"])
-    country = st.selectbox("Sélectionnez le pays pour le scraping", options=["fr", "us", "es", "de", "it", "pt"])
-    scrapeLevels = st.slider("Niveaux de scraping (scrapeLevels)", 1, 5, 3)
-
-    st.write("Collez vos mots-clés (un par ligne) dans la zone de texte ci-dessous :")
-    keywords_input = st.text_area("Mots-clés", height=200)
-    keywords = [k.strip() for k in keywords_input.splitlines() if k.strip()]
-
-    st.write(f"Nombre de mots-clés copiés : {len(keywords)}")
-
-    if st.button("Scraper les données"):
-        driver = init_driver()
-
-        data = []
-        for keyword in keywords:
-            all_suggests, all_paa, all_related_searches = scrape_loop(driver, keyword, language, country, scrapeLevels)
-            data.append({
-                "keyword": keyword,
-                "suggests": "\n".join(all_suggests),
-                "paa": "\n".join(all_paa),
-                "related_searches": "\n".join(all_related_searches)
-            })
+        results = {}
+        keywords_list = keywords.split('\n')
+        
+        progress_bar = st.progress(0)
+        
+        for i, keyword in enumerate(keywords_list):
+            keyword = keyword.strip()
+            if keyword:
+                results[keyword] = recursive_scrape(driver, keyword, 1, depth)
+            progress_bar.progress((i + 1) / len(keywords_list))
         
         driver.quit()
+        
+        # Create DataFrame
+        df = pd.DataFrame(index=keywords_list, columns=['PAA', 'Related Searches', 'Suggest'])
+        
+        for keyword in results:
+            df.at[keyword, 'PAA'] = ', '.join(results[keyword]['PAA'])
+            df.at[keyword, 'Related Searches'] = ', '.join(results[keyword]['related_searches'])
+            df.at[keyword, 'Suggest'] = ', '.join(results[keyword]['suggest'])
+        
+        # Save to Excel
+        df.to_excel("serp_results.xlsx")
+        
+        st.success("Scraping completed! Results saved to 'serp_results.xlsx'")
+        st.dataframe(df)
 
-        if data:
-            df = pd.DataFrame(data)
-            file_name = "serp_data.xlsx"
-            df.to_excel(file_name, index=False, engine='openpyxl')
-
-            st.download_button(
-                label="Télécharger le fichier Excel",
-                data=open(file_name, "rb"),
-                file_name=file_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-            st.success("Scraping terminé et fichier Excel généré avec succès.")
-        else:
-            st.warning("Aucune donnée n'a été récupérée. Veuillez vérifier les paramètres et réessayer.")
-
-# Exécution de l'application
 if __name__ == "__main__":
-    app()
+    main()
