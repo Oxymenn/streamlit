@@ -74,7 +74,7 @@ def recursive_scrape(keyword, depth, max_depth):
 def scrape_keyword(keyword, max_depth):
     return recursive_scrape(keyword, 1, max_depth)
 
-def main():
+def app():
     st.title("Google SERP Scraper")
     
     keywords = st.text_area("Enter keywords (one per line):")
