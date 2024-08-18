@@ -3,7 +3,6 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import random
-import time
 
 # Liste d'agents utilisateurs
 USER_AGENTS = [
@@ -34,7 +33,8 @@ def scrape_serp(keyword, language='fr', country='fr'):
     results = {
         'PAA': [],
         'related_searches': [],
-        'suggest': []
+        'suggest': get_soup(f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}')
+                    .find_all('suggestion')
     }
     
     # Scraper les PAA
@@ -47,11 +47,6 @@ def scrape_serp(keyword, language='fr', country='fr'):
     for search in related_searches_elements:
         results['related_searches'].append(search.text.strip())
     
-    # Scraper les Google Suggest
-    suggest_url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
-    suggest_soup = get_soup(suggest_url)
-    results['suggest'] = [sugg['data'] for sugg in suggest_soup.find_all('suggestion')]
-    
     return results
 
 def app():
@@ -60,24 +55,22 @@ def app():
     keywords = st.text_area("Entrez les mots-clés (un par ligne) :")
     if st.button("Lancer le scraping"):
         keywords_list = [kw.strip() for kw in keywords.split('\n') if kw.strip()]
-        results = {}
+        results = []
         
         for keyword in keywords_list:
-            results[keyword] = scrape_serp(keyword)
+            result = scrape_serp(keyword)
+            results.append({
+                'Keyword': keyword,
+                'PAA': ', '.join(result['PAA']),
+                'Recherches associées': ', '.join(result['related_searches']),
+                'Google Suggest': ', '.join(result['suggest'])
+            })
         
         # Créer un DataFrame
-        df = pd.DataFrame(columns=['Keyword', 'PAA', 'Recherches associées', 'Google Suggest'])
-        
-        for keyword in results:
-            df = df.append({
-                'Keyword': keyword,
-                'PAA': ', '.join(results[keyword]['PAA']),
-                'Recherches associées': ', '.join(results[keyword]['related_searches']),
-                'Google Suggest': ', '.join(results[keyword]['suggest'])
-            }, ignore_index=True)
+        df = pd.DataFrame(results)
         
         # Enregistrer dans un fichier Excel
-        df.to_excel("serp_results.xlsx")
+        df.to_excel("serp_results.xlsx", index=False)
         
         st.success("Scraping terminé ! Résultats enregistrés dans 'serp_results.xlsx'")
         st.dataframe(df)
