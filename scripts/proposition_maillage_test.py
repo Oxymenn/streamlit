@@ -33,8 +33,7 @@ def scrape_serp(keyword, language='fr', country='fr'):
     results = {
         'PAA': [],
         'related_searches': [],
-        'suggest': get_soup(f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}')
-                    .find_all('suggestion')
+        'suggest': [sugg['data'] for sugg in get_soup(f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}').find_all('suggestion')]
     }
     
     # Scraper les PAA
