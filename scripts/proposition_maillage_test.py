@@ -1,78 +1,129 @@
 import streamlit as st
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+import pandas as pd
+from collections import Counter
+import time
 import random
+import re
+import spacy
+from spacy import displacy
+import openpyxl
 
-# Liste d'agents utilisateurs
-USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Safari/605.1.15',
-]
+# Fonction pour faire une requête Google
+def google_search(query, language='fr', country='fr'):
+    url = f"https://www.google.com/search?hl={language}&gl={country}&q={query}"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+    response = requests.get(url, headers=headers)
+    return response.text
 
-def get_random_header():
-    return {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-    }
+# Fonction pour extraire les suggestions Google
+def get_google_suggest(query, language='fr', country='fr'):
+    url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={query}'
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'xml')
+    suggestions = [suggestion['data'] for suggestion in soup.find_all('suggestion')]
+    return suggestions
 
-def get_soup(url):
-    response = requests.get(url, headers=get_random_header())
-    return BeautifulSoup(response.text, 'html.parser')
+# Fonction pour extraire les "People Also Ask" (PAA)
+def extract_paa(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    paa_elements = soup.select('div.related-question-pair')
+    paa = [element.text.strip() for element in paa_elements]
+    return paa
 
-def scrape_serp(keyword, language='fr', country='fr'):
-    url = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}"
-    soup = get_soup(url)
-    
-    results = {
-        'PAA': [],
-        'related_searches': [],
-        'suggest': [sugg['data'] for sugg in get_soup(f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}').find_all('suggestion')]
-    }
-    
-    # Scraper les PAA
-    paa_elements = soup.select("div.related-question-pair")
-    for paa in paa_elements:
-        results['PAA'].append(paa.text.strip())
-    
-    # Scraper les recherches associées
-    related_searches_elements = soup.select("a.BVG0Nb")
-    for search in related_searches_elements:
-        results['related_searches'].append(search.text.strip())
-    
+# Fonction pour extraire les recherches associées
+def extract_related_searches(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    related_searches = soup.select('div.brs_col p.nVcaUb a')
+    return [search.text for search in related_searches]
+
+# Fonction pour extraire les 10 premiers résultats
+def extract_search_results(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    results = []
+    for result in soup.select('div.g')[:10]:
+        title = result.select_one('h3')
+        if title:
+            title = title.text
+            link = result.select_one('a')['href']
+            snippet = result.select_one('div.VwiC3b')
+            if snippet:
+                snippet = snippet.text
+            else:
+                snippet = ""
+            results.append({'title': title, 'url': link, 'description': snippet})
     return results
+
+# Fonction pour extraire les termes sémantiques
+def extract_semantic_terms(text, nlp):
+    doc = nlp(text)
+    nouns = [token.text for token in doc if token.pos_ == "NOUN"]
+    adj = [token.text for token in doc if token.pos_ == "ADJ"]
+    verbs = [token.lemma_ for token in doc if token.pos_ == "VERB"]
+    return list(set(nouns + adj + verbs))
+
+# Fonction principale pour scraper les SERP
+def scrape_serp(query, language='fr', country='fr'):
+    html = google_search(query, language, country)
+    suggestions = get_google_suggest(query, language, country)
+    paa = extract_paa(html)
+    related_searches = extract_related_searches(html)
+    search_results = extract_search_results(html)
+    
+    # Extraction des termes sémantiques
+    nlp = spacy.load(f"{language}_core_news_sm")
+    all_text = ' '.join([result['title'] + ' ' + result['description'] for result in search_results])
+    semantic_terms = extract_semantic_terms(all_text, nlp)
+    
+    return {
+        'suggestions': suggestions,
+        'paa': paa,
+        'related_searches': related_searches,
+        'search_results': search_results,
+        'semantic_terms': semantic_terms
+    }
 
 def app():
     st.title("Google SERP Scraper")
-    
-    keywords = st.text_area("Entrez les mots-clés (un par ligne) :")
-    if st.button("Lancer le scraping"):
-        keywords_list = [kw.strip() for kw in keywords.split('\n') if kw.strip()]
-        results = []
-        
-        for keyword in keywords_list:
-            result = scrape_serp(keyword)
-            results.append({
-                'Keyword': keyword,
-                'PAA': ', '.join(result['PAA']),
-                'Recherches associées': ', '.join(result['related_searches']),
-                'Google Suggest': ', '.join(result['suggest'])
-            })
-        
-        # Créer un DataFrame
-        df = pd.DataFrame(results)
-        
-        # Enregistrer dans un fichier Excel
-        df.to_excel("serp_results.xlsx", index=False)
-        
-        st.success("Scraping terminé ! Résultats enregistrés dans 'serp_results.xlsx'")
-        st.dataframe(df)
+
+    # Zone de texte pour les mots-clés
+    keywords = st.text_area("Entrez vos mots-clés (un par ligne):")
+
+    if st.button("Exécuter"):
+        if keywords:
+            keywords_list = keywords.split('\n')
+            all_results = []
+
+            progress_bar = st.progress(0)
+            for i, keyword in enumerate(keywords_list):
+                results = scrape_serp(keyword.strip())
+                all_results.append({'keyword': keyword, **results})
+                progress_bar.progress((i + 1) / len(keywords_list))
+                time.sleep(random.uniform(1, 3))  # Pause aléatoire pour éviter la détection
+
+            # Création du DataFrame
+            df = pd.DataFrame(all_results)
+
+            # Affichage des résultats dans Streamlit
+            st.write("Résultats:")
+            st.dataframe(df)
+
+            # Création du fichier Excel
+            excel_file = openpyxl.Workbook()
+            writer = pd.ExcelWriter(excel_file, engine='openpyxl')
+            df.to_excel(writer, index=False)
+            writer.save()
+
+            # Bouton de téléchargement
+            st.download_button(
+                label="Télécharger les résultats (Excel)",
+                data=excel_file,
+                file_name="resultats_serp.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.warning("Veuillez entrer au moins un mot-clé.")
 
 if __name__ == "__main__":
     app()
