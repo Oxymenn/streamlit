@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import time
 import random
-import openpyxl
+import io
 
 # Fonction pour faire une requête Google
 def google_search(query, language='fr', country='fr'):
@@ -60,10 +60,10 @@ def scrape_serp(query, language='fr', country='fr'):
     search_results = extract_search_results(html)
     
     return {
-        'suggestions': suggestions,
-        'paa': paa,
-        'related_searches': related_searches,
-        'search_results': search_results
+        'suggestions': ', '.join(suggestions),
+        'paa': ', '.join(paa),
+        'related_searches': ', '.join(related_searches),
+        'search_results': ', '.join([f"{r['title']} ({r['url']})" for r in search_results])
     }
 
 def app():
@@ -92,15 +92,14 @@ def app():
             st.dataframe(df)
 
             # Création du fichier Excel
-            excel_file = openpyxl.Workbook()
-            writer = pd.ExcelWriter(excel_file, engine='openpyxl')
-            df.to_excel(writer, index=False)
-            writer.save()
-
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False)
+            
             # Bouton de téléchargement
             st.download_button(
                 label="Télécharger les résultats (Excel)",
-                data=excel_file,
+                data=buffer.getvalue(),
                 file_name="resultats_serp.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
