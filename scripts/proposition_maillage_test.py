@@ -2,12 +2,8 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-from collections import Counter
 import time
 import random
-import re
-import spacy
-from spacy import displacy
 import openpyxl
 
 # Fonction pour faire une requête Google
@@ -55,14 +51,6 @@ def extract_search_results(html):
             results.append({'title': title, 'url': link, 'description': snippet})
     return results
 
-# Fonction pour extraire les termes sémantiques
-def extract_semantic_terms(text, nlp):
-    doc = nlp(text)
-    nouns = [token.text for token in doc if token.pos_ == "NOUN"]
-    adj = [token.text for token in doc if token.pos_ == "ADJ"]
-    verbs = [token.lemma_ for token in doc if token.pos_ == "VERB"]
-    return list(set(nouns + adj + verbs))
-
 # Fonction principale pour scraper les SERP
 def scrape_serp(query, language='fr', country='fr'):
     html = google_search(query, language, country)
@@ -71,17 +59,11 @@ def scrape_serp(query, language='fr', country='fr'):
     related_searches = extract_related_searches(html)
     search_results = extract_search_results(html)
     
-    # Extraction des termes sémantiques
-    nlp = spacy.load(f"{language}_core_news_sm")
-    all_text = ' '.join([result['title'] + ' ' + result['description'] for result in search_results])
-    semantic_terms = extract_semantic_terms(all_text, nlp)
-    
     return {
         'suggestions': suggestions,
         'paa': paa,
         'related_searches': related_searches,
-        'search_results': search_results,
-        'semantic_terms': semantic_terms
+        'search_results': search_results
     }
 
 def app():
