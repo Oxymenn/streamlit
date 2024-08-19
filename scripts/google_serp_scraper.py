@@ -28,12 +28,6 @@ def extract_paa(html):
     paa = [element.text.strip() for element in paa_elements]
     return paa
 
-# Fonction pour extraire les recherches associées
-def extract_related_searches(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    related_searches = soup.select('div.brs_col p.nVcaUb a')
-    return [search.text for search in related_searches]
-
 # Fonction pour extraire les 10 premiers résultats (titre et meta description)
 def extract_search_results(html):
     soup = BeautifulSoup(html, 'html.parser')
@@ -55,15 +49,13 @@ def scrape_serp(query, language='fr', country='fr'):
     html = google_search(query, language, country)
     suggestions = get_google_suggest(query, language, country)
     paa = extract_paa(html)
-    related_searches = extract_related_searches(html)
     search_results = extract_search_results(html)
     
     return {
         'suggestions': ', '.join(suggestions),
         'paa': ', '.join(paa),
-        'related_searches': ', '.join(related_searches),
-        'search_results_titles': ', '.join([r['title'] for r in search_results]),
-        'search_results_descriptions': ', '.join([r['description'] for r in search_results])
+        'search_results_titles': ' '.join([f"[{r['title']}]" for r in search_results]),
+        'search_results_descriptions': ' '.join([f"[{r['description']}]" for r in search_results])
     }
 
 def app():
