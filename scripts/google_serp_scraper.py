@@ -52,7 +52,7 @@ def scrape_serp(query, language='fr', country='fr'):
     search_results = extract_search_results(html)
     
     return {
-        'suggestions': ', '.join(suggestions),
+        'suggestions': ' '.join([f"[{s}]" for s in suggestions]),
         'paa': ', '.join(paa),
         'search_results_titles': ' '.join([f"[{r['title']}]" for r in search_results]),
         'search_results_descriptions': ' '.join([f"[{r['description']}]" for r in search_results])
@@ -64,7 +64,7 @@ def app():
     # Zone de texte pour les mots-clés
     keywords = st.text_area("Entrez vos mots-clés (un par ligne):")
 
-    if st.button("Scrape le WEEEEB"):
+    if st.button("Exécuter"):
         if keywords:
             keywords_list = keywords.split('\n')
             all_results = []
