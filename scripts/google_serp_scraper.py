@@ -64,7 +64,7 @@ def app():
     # Zone de texte pour les mots-clés
     keywords = st.text_area("Entrez vos mots-clés (un par ligne):")
 
-    if st.button("Exécuter"):
+    if st.button("Scrape le WEEEEB"):
         if keywords:
             keywords_list = keywords.split('\n')
             all_results = []
