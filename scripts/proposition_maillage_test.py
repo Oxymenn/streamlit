@@ -34,7 +34,7 @@ def extract_related_searches(html):
     related_searches = soup.select('div.brs_col p.nVcaUb a')
     return [search.text for search in related_searches]
 
-# Fonction pour extraire les 10 premiers résultats
+# Fonction pour extraire les 10 premiers résultats (titre et meta description)
 def extract_search_results(html):
     soup = BeautifulSoup(html, 'html.parser')
     results = []
@@ -42,13 +42,12 @@ def extract_search_results(html):
         title = result.select_one('h3')
         if title:
             title = title.text
-            link = result.select_one('a')['href']
             snippet = result.select_one('div.VwiC3b')
             if snippet:
                 snippet = snippet.text
             else:
                 snippet = ""
-            results.append({'title': title, 'url': link, 'description': snippet})
+            results.append({'title': title, 'description': snippet})
     return results
 
 # Fonction principale pour scraper les SERP
@@ -63,7 +62,8 @@ def scrape_serp(query, language='fr', country='fr'):
         'suggestions': ', '.join(suggestions),
         'paa': ', '.join(paa),
         'related_searches': ', '.join(related_searches),
-        'search_results': ', '.join([f"{r['title']} ({r['url']})" for r in search_results])
+        'search_results_titles': ', '.join([r['title'] for r in search_results]),
+        'search_results_descriptions': ', '.join([r['description'] for r in search_results])
     }
 
 def app():
