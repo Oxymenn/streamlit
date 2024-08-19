@@ -6,13 +6,9 @@ import time
 import random
 import io
 from sentence_transformers import SentenceTransformer, util
-import nltk
-from nltk.corpus import stopwords
-from collections import Counter
-from nltk import ngrams
 
-# Téléchargement des stopwords
-nltk.download('stopwords')
+# Liste prédéfinie de stopwords en français
+STOPWORDS = set(['au','aux','avec','ce','ces','dans','de','des','du','elle','en','et','eux','il','je','la','le','leur','lui','ma','mais','me','même','mes','moi','mon','ne','nos','notre','nous','on','ou','par','pas','pour','qu','que','qui','sa','se','ses','son','sur','ta','te','tes','toi','ton','tu','un','une','vos','votre','vous','c','d','j','l','à','m','n','s','t','y','été','étée','étées','étés','étant','étante','étants','étantes','suis','es','est','sommes','êtes','sont','serai','seras','sera','serons','serez','seront','serais','serait','serions','seriez','seraient','étais','était','étions','étiez','étaient','fus','fut','fûmes','fûtes','furent','sois','soit','soyons','soyez','soient','fusse','fusses','fût','fussions','fussiez','fussent','ayant','ayante','ayantes','ayants','eu','eue','eues','eus','ai','as','avons','avez','ont','aurai','auras','aura','aurons','aurez','auront','aurais','aurait','aurions','auriez','auraient','avais','avait','avions','aviez','avaient','eut','eûmes','eûtes','eurent','aie','aies','ait','ayons','ayez','aient','eusse','eusses','eût','eussions','eussiez','eussent'])
 
 # Fonction pour faire une requête Google
 def google_search(query, language='fr', country='fr'):
@@ -47,12 +43,12 @@ class Encodings:
 
 # Fonction pour nettoyer le texte
 def clean_text(text):
-    return ' '.join([word for word in text.lower().split() if word not in stopwords.words('french')])
+    return ' '.join([word for word in text.lower().split() if word not in STOPWORDS])
 
 # Fonction pour obtenir les n-grams
 def get_ngrams(text, n):
     words = text.split()
-    ngrams_list = list(ngrams(words, n))
+    ngrams_list = [words[i:i+n] for i in range(len(words)-n+1)]
     return [' '.join(gram) for gram in ngrams_list]
 
 # Fonction principale pour scraper les SERP
@@ -77,15 +73,15 @@ def scrape_serp(query, language='fr', country='fr', optional_headers=['h1', 'h2'
     
     # Analyse des mots fréquents
     all_text = clean_text(' '.join([header[1] for header in headers]))
-    unigrams = Counter(all_text.split()).most_common(20)
-    bigrams = Counter(get_ngrams(all_text, 2)).most_common(20)
-    trigrams = Counter(get_ngrams(all_text, 3)).most_common(20)
+    unigrams = pd.Series(all_text.split()).value_counts().head(20).to_dict()
+    bigrams = pd.Series(get_ngrams(all_text, 2)).value_counts().head(20).to_dict()
+    trigrams = pd.Series(get_ngrams(all_text, 3)).value_counts().head(20).to_dict()
     
     return {
         'headers': headers,
-        'unigrams': unigrams,
-        'bigrams': bigrams,
-        'trigrams': trigrams
+        'unigrams': list(unigrams.items()),
+        'bigrams': list(bigrams.items()),
+        'trigrams': list(trigrams.items())
     }
 
 def app():
