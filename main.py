@@ -7,7 +7,7 @@ from scripts import cannibalisation_serp_gratuit
 from scripts import images_bulk
 from scripts import post_article_wp
 from scripts import audit_on_page
-from scripts import proposition_maillage_test
+from scripts import google_serp_scraper
 
 # Configuration des pages
 PAGES = {
@@ -19,7 +19,7 @@ PAGES = {
     "Images Bulk": images_bulk,
     "Post Article WP": post_article_wp,
     "Audit SEO On-page": audit_on_page,
-    "Proposition Maillage TEST": proposition_maillage_test
+    "Google SERP Scraper": google_serp_scraper
 
 }
 
