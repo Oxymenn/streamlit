@@ -5,6 +5,14 @@ import pandas as pd
 import time
 import random
 import io
+from sentence_transformers import SentenceTransformer, util
+import nltk
+from nltk.corpus import stopwords
+from collections import Counter
+from nltk import ngrams
+
+# Téléchargement des stopwords
+nltk.download('stopwords')
 
 # Fonction pour faire une requête Google
 def google_search(query, language='fr', country='fr'):
@@ -13,64 +21,85 @@ def google_search(query, language='fr', country='fr'):
     response = requests.get(url, headers=headers)
     return response.text
 
-# Fonction pour extraire les suggestions Google
-def get_google_suggest(query, language='fr', country='fr'):
-    url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={query}'
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'xml')
-    suggestions = [suggestion['data'] for suggestion in soup.find_all('suggestion')]
-    return suggestions
-
-# Fonction pour extraire les "People Also Ask" (PAA)
-def extract_paa(html):
+# Fonction pour extraire les en-têtes
+def extract_headers(html, optional_headers=['h1', 'h2', 'h3']):
     soup = BeautifulSoup(html, 'html.parser')
-    paa_elements = soup.select('div.related-question-pair')
-    paa = [element.text.strip() for element in paa_elements]
-    return paa
+    headers = []
+    for i, result in enumerate(soup.select('div.g')[:10], start=1):
+        result_headers = []
+        for j, header in enumerate(result.find_all(optional_headers), start=1):
+            result_headers.append([header.name, header.text.strip(), i, j])
+        headers.extend(result_headers)
+    return headers
 
-# Fonction pour extraire les recherches associées
-def extract_related_searches(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    related_searches = soup.select('div.brs_col p.nVcaUb a')
-    return [search.text.strip() for search in related_searches]
+# Classe pour gérer les encodages et les similitudes
+class Encodings:
+    def __init__(self, lista, model):
+        self.lista = list(set([x.lower() for x in lista]))
+        self.model = model
+        self.embeddings = self.model.encode(self.lista, batch_size=64, show_progress_bar=True, convert_to_tensor=True)
+    
+    def calculate_similarity(self, key):
+        query_emb = self.model.encode(key)
+        scores = util.cos_sim(query_emb, self.embeddings)[0].cpu().tolist()
+        doc_score_pairs = sorted(list(zip(self.lista, [round(x,2) for x in scores])), key=lambda x: x[1], reverse=True)
+        return doc_score_pairs
 
-# Fonction pour extraire les 10 premiers résultats (titre et meta description)
-def extract_search_results(html):
-    soup = BeautifulSoup(html, 'html.parser')
-    results = []
-    for result in soup.select('div.g')[:10]:
-        title = result.select_one('h3')
-        if title:
-            title = title.text
-            snippet = result.select_one('div.VwiC3b')
-            if snippet:
-                snippet = snippet.text
-            else:
-                snippet = ""
-            results.append({'title': title, 'description': snippet})
-    return results
+# Fonction pour nettoyer le texte
+def clean_text(text):
+    return ' '.join([word for word in text.lower().split() if word not in stopwords.words('french')])
+
+# Fonction pour obtenir les n-grams
+def get_ngrams(text, n):
+    words = text.split()
+    ngrams_list = list(ngrams(words, n))
+    return [' '.join(gram) for gram in ngrams_list]
 
 # Fonction principale pour scraper les SERP
-def scrape_serp(query, language='fr', country='fr'):
+def scrape_serp(query, language='fr', country='fr', optional_headers=['h1', 'h2', 'h3']):
     html = google_search(query, language, country)
-    suggestions = get_google_suggest(query, language, country)
-    paa = extract_paa(html)
-    search_results = extract_search_results(html)
-    related_searches = extract_related_searches(html)
+    headers = extract_headers(html, optional_headers)
+    
+    # Chargement du modèle de similarité sémantique
+    model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
+    
+    # Calcul des similitudes
+    header_texts = [header[1] for header in headers]
+    encodings = Encodings(header_texts, model)
+    similarities = encodings.calculate_similarity(query)
+    
+    # Ajout des scores aux en-têtes
+    for header in headers:
+        header.append(next(score for text, score in similarities if text == header[1].lower()))
+    
+    # Tri des en-têtes par score
+    headers.sort(key=lambda x: x[4], reverse=True)
+    
+    # Analyse des mots fréquents
+    all_text = clean_text(' '.join([header[1] for header in headers]))
+    unigrams = Counter(all_text.split()).most_common(20)
+    bigrams = Counter(get_ngrams(all_text, 2)).most_common(20)
+    trigrams = Counter(get_ngrams(all_text, 3)).most_common(20)
     
     return {
-        'suggestions': ' '.join([f"[{s}]" for s in suggestions]),
-        'paa': ', '.join(paa),
-        'search_results_titles': ' '.join([f"[{r['title']}]" for r in search_results]),
-        'search_results_descriptions': ' '.join([f"[{r['description']}]" for r in search_results]),
-        'related_searches': ' '.join([f"[{s}]" for s in related_searches])
+        'headers': headers,
+        'unigrams': unigrams,
+        'bigrams': bigrams,
+        'trigrams': trigrams
     }
 
 def app():
-    st.title("Google SERP Scraper")
+    st.title("Google SERP Scraper et Analyseur d'En-têtes")
 
     # Zone de texte pour les mots-clés
     keywords = st.text_area("Entrez vos mots-clés (un par ligne):")
+    
+    # Sélection de la langue et du pays
+    language = st.selectbox("Langue", ['fr', 'en', 'es', 'de', 'it'])
+    country = st.selectbox("Pays", ['fr', 'us', 'uk', 'es', 'de', 'it'])
+    
+    # Sélection des en-têtes à extraire
+    optional_headers = st.multiselect("En-têtes à extraire", ['h1', 'h2', 'h3', 'h4'], default=['h1', 'h2', 'h3'])
 
     if st.button("Exécuter"):
         if keywords:
@@ -79,28 +108,48 @@ def app():
 
             progress_bar = st.progress(0)
             for i, keyword in enumerate(keywords_list):
-                results = scrape_serp(keyword.strip())
+                results = scrape_serp(keyword.strip(), language, country, optional_headers)
                 all_results.append({'keyword': keyword, **results})
                 progress_bar.progress((i + 1) / len(keywords_list))
                 time.sleep(random.uniform(1, 3))  # Pause aléatoire pour éviter la détection
 
-            # Création du DataFrame
-            df = pd.DataFrame(all_results)
-
-            # Affichage des résultats dans Streamlit
-            st.write("Résultats:")
-            st.dataframe(df)
+            # Affichage des résultats
+            for result in all_results:
+                st.write(f"Résultats pour '{result['keyword']}':")
+                
+                # Affichage des en-têtes
+                headers_df = pd.DataFrame(result['headers'], columns=['Type', 'Texte', 'Position SERP', 'Position En-tête', 'Score'])
+                st.write("En-têtes les plus pertinents:")
+                st.dataframe(headers_df)
+                
+                # Affichage des mots fréquents
+                st.write("Mots les plus fréquents:")
+                words_df = pd.DataFrame(
+                    result['unigrams'] + result['bigrams'] + result['trigrams'], 
+                    columns=['Mot(s)', 'Fréquence']
+                )
+                words_df['Nombre de mots'] = words_df['Mot(s)'].apply(lambda x: len(x.split()))
+                st.dataframe(words_df)
 
             # Création du fichier Excel
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False)
+                for i, result in enumerate(all_results):
+                    headers_df = pd.DataFrame(result['headers'], columns=['Type', 'Texte', 'Position SERP', 'Position En-tête', 'Score'])
+                    words_df = pd.DataFrame(
+                        result['unigrams'] + result['bigrams'] + result['trigrams'], 
+                        columns=['Mot(s)', 'Fréquence']
+                    )
+                    words_df['Nombre de mots'] = words_df['Mot(s)'].apply(lambda x: len(x.split()))
+                    
+                    headers_df.to_excel(writer, sheet_name=f'Keyword_{i+1}_Headers', index=False)
+                    words_df.to_excel(writer, sheet_name=f'Keyword_{i+1}_Words', index=False)
             
             # Bouton de téléchargement
             st.download_button(
                 label="Télécharger les résultats (Excel)",
                 data=buffer.getvalue(),
-                file_name="resultats_serp.xlsx",
+                file_name="resultats_serp_headers.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         else:
