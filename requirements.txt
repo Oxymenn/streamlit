@@ -15,4 +15,3 @@ seaborn
 lxml
 aiohttp
 numpy
-nltk
