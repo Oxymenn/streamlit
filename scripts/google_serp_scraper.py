@@ -1,21 +1,58 @@
 import streamlit as st
-import requests
+import asyncio
+from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 import pandas as pd
-import time
 import random
 import io
+import logging
 from sentence_transformers import SentenceTransformer, util
+from itertools import cycle
+
+# Configuration de la journalisation
+logging.basicConfig(level=logging.INFO)
 
 # Liste prédéfinie de stopwords en français
-STOPWORDS = set(['au','aux','avec','ce','ces','dans','de','des','du','elle','en','et','eux','il','je','la','le','leur','lui','ma','mais','me','même','mes','moi','mon','ne','nos','notre','nous','on','ou','par','pas','pour','qu','que','qui','sa','se','ses','son','sur','ta','te','tes','toi','ton','tu','un','une','vos','votre','vous','c','d','j','l','à','m','n','s','t','y','été','étée','étées','étés','étant','étante','étants','étantes','suis','es','est','sommes','êtes','sont','serai','seras','sera','serons','serez','seront','serais','serait','serions','seriez','seraient','étais','était','étions','étiez','étaient','fus','fut','fûmes','fûtes','furent','sois','soit','soyons','soyez','soient','fusse','fusses','fût','fussions','fussiez','fussent','ayant','ayante','ayantes','ayants','eu','eue','eues','eus','ai','as','avons','avez','ont','aurai','auras','aura','aurons','aurez','auront','aurais','aurait','aurions','auriez','auraient','avais','avait','avions','aviez','avaient','eut','eûmes','eûtes','eurent','aie','aies','ait','ayons','ayez','aient','eusse','eusses','eût','eussions','eussiez','eussent'])
+STOPWORDS = set([
+    'au','aux', 'avec', 'ce', 'ces', 'dans', 'de', 'des', 'du', 
+    'elle', 'en', 'et', 'eux', 'il', 'je', 'la', 'le', 'leur', 
+    'lui', 'ma', 'mais', 'me', 'même', 'mes', 'moi', 'mon', 
+    'ne', 'nos', 'notre', 'nous', 'on', 'ou', 'par', 'pas', 
+    'pour', 'qu', 'que', 'qui', 'sa', 'se', 'ses', 'son', 
+    'sur', 'ta', 'te', 'tes', 'toi', 'ton', 'tu', 'un', 
+    'une', 'vos', 'votre', 'vous', 'c', 'd', 'j', 'l', 'à',
+    'm', 'n', 's', 't', 'y', 'été', 'étée', 'étées', 
+    'étés', 'étant', 'étante', 'étants', 'étantes', 'suis', 
+    'es', 'est', 'sommes', 'êtes', 'sont', 'serai', 
+    'seras', 'sera', 'serons', 'serez', 'seront', 'serais', 
+    'serait', 'serions', 'seriez', 'seraient', 'étais', 
+    'était', 'étions', 'étiez', 'étaient', 'fus', 'fut', 
+    'fûmes', 'fûtes', 'furent', 'sois', 'soit', 'soyons', 
+    'soyez', 'soient', 'fusse', 'fusses', 'fût', 'fussions', 
+    'fussiez', 'fussent', 'ayant', 'ayante', 'ayantes', 
+    'ayants', 'eu', 'eue', 'eues', 'eus', 'ai', 'as', 
+    'avons', 'avez', 'ont', 'aurai', 'auras', 'aura', 
+    'aurons', 'aurez', 'auront', 'aurais', 'aurait', 
+    'aurions', 'auriez', 'auraient', 'avais', 'avait', 
+    'avions', 'aviez', 'avaient', 'eut', 'eûmes', 'eûtes', 
+    'eurent', 'aie', 'aies', 'ait', 'ayons', 'ayez', 
+    'aient', 'eusse', 'eusses', 'eût', 'eussions', 
+    'eussiez', 'eussent'
+])
 
-# Fonction pour faire une requête Google
-def google_search(query, language='fr', country='fr'):
+# Liste des User-Agents pour les requêtes
+USER_AGENTS = cycle([
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:85.0) Gecko/20100101 Firefox/85.0"
+])
+
+# Fonction asynchrone pour faire une requête Google
+async def google_search(session, query, language='fr', country='fr'):
     url = f"https://www.google.com/search?hl={language}&gl={country}&q={query}"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
-    response = requests.get(url, headers=headers)
-    return response.text
+    headers = {"User-Agent": next(USER_AGENTS)}  # Vary User-Agent
+    async with session.get(url, headers=headers) as response:
+        return await response.text()
 
 # Fonction pour extraire les en-têtes
 def extract_headers(html, optional_headers=['h1', 'h2', 'h3']):
@@ -36,9 +73,9 @@ class Encodings:
         self.embeddings = self.model.encode(self.lista, batch_size=64, show_progress_bar=True, convert_to_tensor=True)
     
     def calculate_similarity(self, key):
-        query_emb = self.model.encode(key)
+        query_emb = self.model.encode(key, convert_to_tensor=True)
         scores = util.cos_sim(query_emb, self.embeddings)[0].cpu().tolist()
-        doc_score_pairs = sorted(list(zip(self.lista, [round(x,2) for x in scores])), key=lambda x: x[1], reverse=True)
+        doc_score_pairs = sorted(list(zip(self.lista, [round(x, 2) for x in scores])), key=lambda x: x[1], reverse=True)
         return doc_score_pairs
 
 # Fonction pour nettoyer le texte
@@ -52,12 +89,9 @@ def get_ngrams(text, n):
     return [' '.join(gram) for gram in ngrams_list]
 
 # Fonction principale pour scraper les SERP
-def scrape_serp(query, language='fr', country='fr', optional_headers=['h1', 'h2', 'h3']):
-    html = google_search(query, language, country)
+async def scrape_serp(session, query, language='fr', country='fr', optional_headers=['h1', 'h2', 'h3'], model=None):
+    html = await google_search(session, query, language, country)
     headers = extract_headers(html, optional_headers)
-    
-    # Chargement du modèle de similarité sémantique
-    model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
     
     # Calcul des similitudes
     header_texts = [header[1] for header in headers]
@@ -84,6 +118,16 @@ def scrape_serp(query, language='fr', country='fr', optional_headers=['h1', 'h2'
         'trigrams': list(trigrams.items())
     }
 
+async def main(keywords_list, language, country, optional_headers):
+    model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
+    async with ClientSession() as session:
+        tasks = []
+        for keyword in keywords_list:
+            tasks.append(scrape_serp(session, keyword.strip(), language, country, optional_headers, model))
+        
+        all_results = await asyncio.gather(*tasks)
+        return all_results
+    
 def app():
     st.title("Google SERP Scraper et Analyseur d'En-têtes")
 
@@ -99,19 +143,18 @@ def app():
 
     if st.button("Exécuter"):
         if keywords:
-            keywords_list = keywords.split('\n')
-            all_results = []
+            keywords_list = keywords.strip().split('\n')
+            st.info("Scraping en cours, veuillez patienter...")
+            start_time = time.time()
 
-            progress_bar = st.progress(0)
-            for i, keyword in enumerate(keywords_list):
-                results = scrape_serp(keyword.strip(), language, country, optional_headers)
-                all_results.append({'keyword': keyword, **results})
-                progress_bar.progress((i + 1) / len(keywords_list))
-                time.sleep(random.uniform(1, 3))  # Pause aléatoire pour éviter la détection
-
+            # Lancer la boucle d'événements pour exécuter les requêtes asynchrones
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            all_results = loop.run_until_complete(main(keywords_list, language, country, optional_headers))
+            
             # Affichage des résultats
             for result in all_results:
-                st.write(f"Résultats pour '{result['keyword']}':")
+                st.write(f"Résultats pour '{result['headers'][0][1] if result['headers'] else 'Mot-clé inconnu'}':")
                 
                 # Affichage des en-têtes
                 headers_df = pd.DataFrame(result['headers'], columns=['Type', 'Texte', 'Position SERP', 'Position En-tête', 'Score'])
@@ -148,6 +191,9 @@ def app():
                 file_name="resultats_serp_headers.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+            end_time = time.time()
+            logging.info(f"Temps total pour l'exécution : {end_time - start_time} secondes")
         else:
             st.warning("Veuillez entrer au moins un mot-clé.")
 
