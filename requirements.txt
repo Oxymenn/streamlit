@@ -15,3 +15,9 @@ seaborn
 lxml
 aiohttp
 numpy
+justext
+wikipedia-api
+selenium
+selenium-wire
+treelib
+spacy
