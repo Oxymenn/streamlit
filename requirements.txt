@@ -17,8 +17,6 @@ aiohttp
 numpy
 justext
 wikipedia-api
-selenium
 treelib
 spacy
 blinker
-webdriver_manager
