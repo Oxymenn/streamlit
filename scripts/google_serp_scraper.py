@@ -1,40 +1,21 @@
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
 import requests
 from bs4 import BeautifulSoup
 from collections import Counter
 from treelib import Tree
 import pandas as pd
-import time
-import random
 import re
 
 def app():
-    # Configurations for the scraping process
+    # Configuration for the scraping process
     st.title('Google SERP Analysis')
     keyword = st.text_input('Enter Keyword for SERP Analysis', 'SERP analysis')
     language = st.selectbox('Select Language', ['en', 'es', 'fr', 'de', 'it', 'pt'])
     country = st.selectbox('Select Country', ['us', 'uk', 'es', 'fr', 'de', 'it'])
     search_entities = st.checkbox('Search for Entities?', value=True)
-    scrape_levels = 2
-    loop_paa = False
-
-    # Set the path to the Chromium executable
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('--headless')
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--disable-gpu')  # Optional: may solve some issues
-    chrome_options.add_argument(f"user-agent=Mozilla/5.0")
-    chrome_options.add_argument("--window-size=1366,768")
-
-    # Add this line to specify the location of the Chromium executable
-    chrome_options.binary_location = '/usr/bin/chromium'
-
-    # Start WebDriver using the Chromium binary and chromedriver
-    wd = webdriver.Chrome(service=Service('/usr/lib/chromium/chromedriver'), options=chrome_options)
+    
+    # Prepare the Google search URL
+    url_initial = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
 
     # Stopwords directly embedded in the code
     stopwords = {
@@ -53,76 +34,64 @@ def app():
         text = " ".join([word for word in text.split() if word not in stopwords[lang]])
         return text
 
-    def parse_serp(url, level):
+    def parse_serp(url):
         try:
-            wd.get(url)
-            time.sleep(random.uniform(0.1, 0.5))  # Wait to simulate human interaction
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+            response = requests.get(url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
 
             tree = Tree()
-            
+
             # Extract "People Also Ask" questions
-            paa_elems = wd.find_elements(By.CSS_SELECTOR, ".xpc")
+            paa_elems = soup.select(".related-question-pair")
+            paa_questions = []
             if paa_elems:
                 tree.create_node("People Also Ask", "PAA")
                 for elem in paa_elems:
-                    question = elem.text.strip().lower()
-                    if question not in paa_questions and question:
-                        link = elem.find_element(By.TAG_NAME, 'a').get_attribute('href')
-                        paa_questions.append((question, link))
+                    question = elem.get_text().strip().lower()
+                    if question and question not in paa_questions:
+                        paa_questions.append((question, url))
                         tree.create_node(question, question, parent='PAA')
-            
+
             # Extract Related Searches
-            related_elems = wd.find_elements(By.CSS_SELECTOR, ".Q71vJc")
+            related_elems = soup.select(".k8XOCe a")
+            related_searches = []
             if related_elems:
                 tree.create_node("Related Searches", "Related")
                 for elem in related_elems:
-                    related_search = elem.text.strip().lower()
-                    if related_search not in related_searches:
+                    related_search = elem.get_text().strip().lower()
+                    if related_search and related_search not in related_searches:
                         related_searches.append(related_search)
-                        link = elem.get_attribute('href')
                         tree.create_node(related_search, related_search, parent='Related')
-            
+
             # Extract Google Suggestions
-            suggestions_url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
-            suggestions_resp = requests.get(suggestions_url)
-            suggestions_soup = BeautifulSoup(suggestions_resp.content, 'html.parser')
-            suggestions = [suggestion['data'].lower() for suggestion in suggestions_soup.find_all('suggestion')]
-            if suggestions:
+            suggestions = []
+            suggestion_elems = soup.select(".s75CSd")
+            if suggestion_elems:
                 tree.create_node("Google Suggestions", "Suggest")
-                for suggestion in suggestions:
-                    if suggestion not in google_suggest:
-                        google_suggest.append(suggestion)
+                for elem in suggestion_elems:
+                    suggestion = elem.get_text().strip().lower()
+                    if suggestion and suggestion not in suggestions:
+                        suggestions.append(suggestion)
                         tree.create_node(suggestion, suggestion, parent='Suggest')
-            
+
             if len(tree) > 1:
                 st.write(f"Results for Keyword: {keyword}")
                 tree.show(key=False)
 
-            if loop_paa:
-                return paa_questions
-            return related_searches
+            return related_searches, paa_questions, suggestions
 
         except Exception as e:
             st.write(f"Exception: {e}")
-            return []
+            return [], [], []
 
-    def scrape_serp_results(busquedas, level):
-        if level > scrape_levels:
-            return
-        
-        sub_searches = []
-        for search in busquedas:
-            sub_searches.extend(parse_serp(search[1], level + 1))
-        
-        if sub_searches:
-            scrape_serp_results(sub_searches, level + 1)
+    def scrape_serp_results():
+        related_searches, paa_questions, google_suggest = parse_serp(url_initial)
+        return related_searches, paa_questions, google_suggest
 
-    # Scrape at different levels
-    url_ini = [keyword, url_initial]
-    scrape_serp_results([url_ini], 0)
-
-    # Clean up and shut down the driver
-    wd.quit()
+    related_searches, paa_questions, google_suggest = scrape_serp_results()
 
     # Displaying Gathered Data
     st.write("**Related Searches**")
