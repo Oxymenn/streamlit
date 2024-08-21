@@ -17,7 +17,7 @@ aiohttp
 numpy
 justext
 wikipedia-api
-selenium
-selenium-wire
+seleniumwire
 treelib
 spacy
+blinker
