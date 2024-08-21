@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import random
 import io
-import time  # Ajout de l'import du module time
+import time
 import logging
 from sentence_transformers import SentenceTransformer, util
 from itertools import cycle
@@ -55,16 +55,27 @@ async def google_search(session, query, language='fr', country='fr'):
     async with session.get(url, headers=headers) as response:
         return await response.text()
 
-# Fonction pour extraire les en-têtes
-def extract_headers(html, optional_headers=['h1', 'h2', 'h3']):
+# Fonction pour extraire les données des résultats de recherche
+def extract_data(html, optional_headers=['h1', 'h2', 'h3']):
     soup = BeautifulSoup(html, 'html.parser')
-    headers = []
+    results = []
     for i, result in enumerate(soup.select('div.g')[:10], start=1):
-        result_headers = []
-        for j, header in enumerate(result.find_all(optional_headers), start=1):
-            result_headers.append([header.name, header.text.strip(), i, j])
-        headers.extend(result_headers)
-    return headers
+        title = result.find('h3')
+        meta_desc = result.find('span', {'class': 'aCOpRe'})
+        titles = title.text if title else 'N/A'
+        descriptions = meta_desc.text if meta_desc else 'N/A'
+        
+        headers = {tag: [] for tag in optional_headers}
+        
+        for header in result.find_all(optional_headers):
+            headers[header.name].append(header.text.strip())
+        
+        results.append({
+            'title': titles,
+            'meta_desc': descriptions,
+            'headers': headers
+        })
+    return results
 
 # Classe pour gérer les encodages et les similitudes
 class Encodings:
@@ -92,32 +103,18 @@ def get_ngrams(text, n):
 # Fonction principale pour scraper les SERP
 async def scrape_serp(session, query, language='fr', country='fr', optional_headers=['h1', 'h2', 'h3'], model=None):
     html = await google_search(session, query, language, country)
-    headers = extract_headers(html, optional_headers)
+    results = extract_data(html, optional_headers)
     
-    # Calcul des similitudes
-    header_texts = [header[1] for header in headers]
-    encodings = Encodings(header_texts, model)
-    similarities = encodings.calculate_similarity(query)
+    # Calcul des similitudes pour les en-têtes <h2> et <h3>
+    for result in results:
+        header_texts = [header for key in result['headers'].keys() for header in result['headers'][key]]
+        encodings = Encodings(header_texts, model)
+        similarities = encodings.calculate_similarity(query)
+        
+        for key in result['headers'].keys():
+            result['headers'][key] = sorted(result['headers'][key], key=lambda x: next(score for text, score in similarities if text == x.lower()), reverse=True)
     
-    # Ajout des scores aux en-têtes
-    for header in headers:
-        header.append(next(score for text, score in similarities if text == header[1].lower()))
-    
-    # Tri des en-têtes par score
-    headers.sort(key=lambda x: x[4], reverse=True)
-    
-    # Analyse des mots fréquents
-    all_text = clean_text(' '.join([header[1] for header in headers]))
-    unigrams = pd.Series(all_text.split()).value_counts().head(20).to_dict()
-    bigrams = pd.Series(get_ngrams(all_text, 2)).value_counts().head(20).to_dict()
-    trigrams = pd.Series(get_ngrams(all_text, 3)).value_counts().head(20).to_dict()
-    
-    return {
-        'headers': headers,
-        'unigrams': list(unigrams.items()),
-        'bigrams': list(bigrams.items()),
-        'trigrams': list(trigrams.items())
-    }
+    return results
 
 async def main(keywords_list, language, country, optional_headers):
     model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
@@ -153,37 +150,28 @@ def app():
             asyncio.set_event_loop(loop)
             all_results = loop.run_until_complete(main(keywords_list, language, country, optional_headers))
             
-            # Affichage des résultats
-            for result in all_results:
-                st.write(f"Résultats pour '{result['headers'][0][1] if result['headers'] else 'Mot-clé inconnu'}':")
-                
-                # Affichage des en-têtes
-                headers_df = pd.DataFrame(result['headers'], columns=['Type', 'Texte', 'Position SERP', 'Position En-tête', 'Score'])
-                st.write("En-têtes les plus pertinents:")
-                st.dataframe(headers_df)
-                
-                # Affichage des mots fréquents
-                st.write("Mots les plus fréquents:")
-                words_df = pd.DataFrame(
-                    result['unigrams'] + result['bigrams'] + result['trigrams'], 
-                    columns=['Mot(s)', 'Fréquence']
-                )
-                words_df['Nombre de mots'] = words_df['Mot(s)'].apply(lambda x: len(x.split()))
-                st.dataframe(words_df)
-
             # Création du fichier Excel
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                for i, result in enumerate(all_results):
-                    headers_df = pd.DataFrame(result['headers'], columns=['Type', 'Texte', 'Position SERP', 'Position En-tête', 'Score'])
-                    words_df = pd.DataFrame(
-                        result['unigrams'] + result['bigrams'] + result['trigrams'], 
-                        columns=['Mot(s)', 'Fréquence']
-                    )
-                    words_df['Nombre de mots'] = words_df['Mot(s)'].apply(lambda x: len(x.split()))
+                for i, keyword in enumerate(keywords_list):
+                    results = all_results[i]
                     
-                    headers_df.to_excel(writer, sheet_name=f'Keyword_{i+1}_Headers', index=False)
-                    words_df.to_excel(writer, sheet_name=f'Keyword_{i+1}_Words', index=False)
+                    # Collecter les titres et méta-descriptions
+                    titles = '[]'.join([res['title'] for res in results])
+                    meta_descs = '[]'.join([res['meta_desc'] for res in results])
+                    
+                    data = {
+                        'Keyword': [keyword],
+                        'Titles': [titles],
+                        'Meta Descriptions': [meta_descs]
+                    }
+                    
+                    # Ajouter les en-têtes
+                    for header in optional_headers:
+                        data[f'{header.upper()} Headers'] = ['[]'.join([item for res in results for item in res['headers'].get(header, [])])]
+                    
+                    df = pd.DataFrame(data)
+                    df.to_excel(writer, sheet_name=f'Keyword_{i+1}', index=False)
             
             # Bouton de téléchargement
             st.download_button(
