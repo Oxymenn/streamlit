@@ -80,11 +80,13 @@ def extract_data(html, optional_headers=['h1', 'h2', 'h3']):
 # Classe pour gérer les encodages et les similitudes
 class Encodings:
     def __init__(self, lista, model):
-        self.lista = list(set([x.lower() for x in lista]))
+        self.lista = list(set([x.lower() for x in lista if x]))
         self.model = model
         self.embeddings = self.model.encode(self.lista, batch_size=64, show_progress_bar=True, convert_to_tensor=True)
     
     def calculate_similarity(self, key):
+        if not self.lista:  # Vérification pour éviter les listes vides
+            return []
         query_emb = self.model.encode(key, convert_to_tensor=True)
         scores = util.cos_sim(query_emb, self.embeddings)[0].cpu().tolist()
         doc_score_pairs = sorted(list(zip(self.lista, [round(x, 2) for x in scores])), key=lambda x: x[1], reverse=True)
@@ -107,12 +109,12 @@ async def scrape_serp(session, query, language='fr', country='fr', optional_head
     
     # Calcul des similitudes pour les en-têtes <h2> et <h3>
     for result in results:
-        header_texts = [header for key in result['headers'].keys() for header in result['headers'][key]]
+        header_texts = [header for key in result['headers'].keys() for header in result['headers'][key] if header]
         encodings = Encodings(header_texts, model)
         similarities = encodings.calculate_similarity(query)
         
         for key in result['headers'].keys():
-            result['headers'][key] = sorted(result['headers'][key], key=lambda x: next(score for text, score in similarities if text == x.lower()), reverse=True)
+            result['headers'][key] = sorted(result['headers'][key], key=lambda x: next((score for text, score in similarities if text == x.lower()), 0), reverse=True)
     
     return results
 
