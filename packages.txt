@@ -1,1 +1,2 @@
-chromimum
+chromium
+chromium-driver
