@@ -1,7 +1,6 @@
 import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 import requests
 from bs4 import BeautifulSoup
@@ -12,7 +11,6 @@ import time
 import random
 import re
 
-# Ajout de la fonction app
 def app():
     # Configurations for the scraping process
     st.title('Google SERP Analysis')
@@ -23,25 +21,20 @@ def app():
     scrape_levels = 2
     loop_paa = False
 
-    # Selenium settings
-    url_initial = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
-    scrape_done = set()
-    related_searches = []
-    paa_questions = []
-    google_suggest = []
-    heading_tags = []
-
-    user_agent = "Mozilla/5.0"
+    # Set the path to the Chromium executable
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')  # Optional: may solve some issues
-    chrome_options.add_argument(f"user-agent={user_agent}")
+    chrome_options.add_argument(f"user-agent=Mozilla/5.0")
     chrome_options.add_argument("--window-size=1366,768")
 
-    # Start WebDriver with ChromeDriverManager
-    wd = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    # Add this line to specify the location of the Chromium executable
+    chrome_options.binary_location = '/usr/bin/chromium'
+
+    # Start WebDriver using the Chromium binary and chromedriver
+    wd = webdriver.Chrome(service=Service('/usr/lib/chromium/chromedriver'), options=chrome_options)
 
     # Stopwords directly embedded in the code
     stopwords = {
@@ -183,3 +176,6 @@ def app():
         
         st.write("**Entities Identified**")
         st.table(entity_results)
+
+# Call the app function
+app()
