@@ -1,5 +1,5 @@
 import streamlit as st
-from seleniumwire import webdriver
+from selenium import webdriver
 from selenium.webdriver.common.by import By
 import requests
 from bs4 import BeautifulSoup
@@ -180,4 +180,3 @@ def app():
         
         st.write("**Entities Identified**")
         st.table(entity_results)
-
