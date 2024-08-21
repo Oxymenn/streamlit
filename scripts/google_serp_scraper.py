@@ -1,192 +1,185 @@
 import streamlit as st
-import asyncio
-from aiohttp import ClientSession
+from seleniumwire import webdriver
+from selenium.webdriver.common.by import By
+import requests
 from bs4 import BeautifulSoup
+from collections import Counter
+from treelib import Tree
 import pandas as pd
-import random
-import io
 import time
-import logging
-from sentence_transformers import SentenceTransformer, util
-from itertools import cycle
+import random
+import re
 
-# Configuration de la journalisation
-logging.basicConfig(level=logging.INFO)
+# Configurations for the scraping process
+st.title('Google SERP Analysis')
+keyword = st.text_input('Enter Keyword for SERP Analysis', 'SERP analysis')
+language = st.selectbox('Select Language', ['en', 'es', 'fr', 'de', 'it', 'pt'])
+country = st.selectbox('Select Country', ['us', 'uk', 'es', 'fr', 'de', 'it'])
+search_entities = st.checkbox('Search for Entities?', value=True)
+scrape_levels = 2
+loop_paa = False
 
-# Liste prédéfinie de stopwords en français
-STOPWORDS = set([
-    'au','aux', 'avec', 'ce', 'ces', 'dans', 'de', 'des', 'du', 
-    'elle', 'en', 'et', 'eux', 'il', 'je', 'la', 'le', 'leur', 
-    'lui', 'ma', 'mais', 'me', 'même', 'mes', 'moi', 'mon', 
-    'ne', 'nos', 'notre', 'nous', 'on', 'ou', 'par', 'pas', 
-    'pour', 'qu', 'que', 'qui', 'sa', 'se', 'ses', 'son', 
-    'sur', 'ta', 'te', 'tes', 'toi', 'ton', 'tu', 'un', 
-    'une', 'vos', 'votre', 'vous', 'c', 'd', 'j', 'l', 'à',
-    'm', 'n', 's', 't', 'y', 'été', 'étée', 'étées', 
-    'étés', 'étant', 'étante', 'étants', 'étantes', 'suis', 
-    'es', 'est', 'sommes', 'êtes', 'sont', 'serai', 
-    'seras', 'sera', 'serons', 'serez', 'seront', 'serais', 
-    'serait', 'serions', 'seriez', 'seraient', 'étais', 
-    'était', 'étions', 'étiez', 'étaient', 'fus', 'fut', 
-    'fûmes', 'fûtes', 'furent', 'sois', 'soit', 'soyons', 
-    'soyez', 'soient', 'fusse', 'fusses', 'fût', 'fussions', 
-    'fussiez', 'fussent', 'ayant', 'ayante', 'ayantes', 
-    'ayants', 'eu', 'eue', 'eues', 'eus', 'ai', 'as', 
-    'avons', 'avez', 'ont', 'aurai', 'auras', 'aura', 
-    'aurons', 'aurez', 'auront', 'aurais', 'aurait', 
-    'aurions', 'auriez', 'auraient', 'avais', 'avait', 
-    'avions', 'aviez', 'avaient', 'eut', 'eûmes', 'eûtes', 
-    'eurent', 'aie', 'aies', 'ait', 'ayons', 'ayez', 
-    'aient', 'eusse', 'eusses', 'eût', 'eussions', 
-    'eussiez', 'eussent'
-])
+# Selenium settings
+url_initial = f"https://www.google.com/search?hl={language}&gl={country}&q={keyword}&oq={keyword}"
+scrape_done = set()
+related_searches = []
+paa_questions = []
+google_suggest = []
+heading_tags = []
 
-# Liste des User-Agents pour les requêtes
-USER_AGENTS = cycle([
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:85.0) Gecko/20100101 Firefox/85.0"
-])
+user_agent = "Mozilla/5.0"
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument('--headless')
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--disable-dev-shm-usage')
+chrome_options.add_argument(f"user-agent={user_agent}")
+chrome_options.add_argument("--window-size=1366,768")
 
-# Fonction asynchrone pour faire une requête Google
-async def google_search(session, query, language='fr', country='fr'):
-    url = f"https://www.google.com/search?hl={language}&gl={country}&q={query}"
-    headers = {"User-Agent": next(USER_AGENTS)}  # Vary User-Agent
-    async with session.get(url, headers=headers) as response:
-        return await response.text()
+# Start WebDriver
+wd = webdriver.Chrome(options=chrome_options)
 
-# Fonction pour extraire les données des résultats de recherche
-def extract_data(html, optional_headers=['h1', 'h2', 'h3']):
-    soup = BeautifulSoup(html, 'html.parser')
-    results = []
-    for i, result in enumerate(soup.select('div.g')[:10], start=1):
-        title = result.find('h3')
-        meta_desc = result.find('span', {'class': 'aCOpRe'})
-        titles = title.text if title else 'N/A'
-        descriptions = meta_desc.text if meta_desc else 'N/A'
+# Stopwords directly embedded in the code
+stopwords = {
+    'en': set("i me my myself we our ours ourselves you your yours yourself yourselves he him his himself she her hers herself it its itself they them their theirs themselves what which who whom this that these those am is are was were be been being have has had having do does did doing a an the and but if or because as until while of at by for with about against between into through during before after above below to from up down in out on off over under again further then once here there when where why how all any both each few more most other some such no nor not only own same so than too very can will just don should now".split()),
+    'es': set("de la que el en y a los del se las por un para con no una su al lo como más pero sus le ya o este sí porque esta entre cuando muy sin sobre también me hasta hay donde quien desde todo nos durante todos uno les ni contra otros ese eso había ante ellos e esto mí antes algunos qué unos yo otro otras otra él tanto esa estos mucho quienes nada muchos cual poco ella estar estas algunas algo nosotros mi mis tú te ti tu tus ellas nosotras vosotres vosotras os míos mía míos mías tuyos tuyo tuya tuyas suyo suyos suya suyas nuestros nuestras vuestro vuestra vuestros vuestras esos esas estoy estás está estamos estáis están mía tuya suya nuestros vuestras".split()),
+    'fr': set("au aux avec ce cetteces dans de des du elle en et eux il je la le leur lui ma mais me même mes moi mon ne nos notre nous on ou par pas pour qu que qui sa se ses son sur ta te tes toi ton tu un une vos votre vous c d j l à m n s t y été étée étées étés étant étante étants étant de le la les en l était étais était étions étiez étaient suis est es sommes sont êtes sont avais avait avions aviez avaient aurions aurait auriez auraient avons aie aies ait ayons ayez aient fus fut furent soit soyons soyez soient fusse fusses fût fussions fussiez fussent ayant eu étant étant eu une une".split()),
+    'de': set("aber alle allem allen alles als also am an ander andere anderem anderen anderer anderes anderm andern anderr anderrs auch auf aus bei bin bis bist da damit dann der den des dem die das dass dein deine deinem deinen deiner deines derer deses deines da da da sie den die das die sie des dem den die sie sie dieser demselben diese dieselben dieses dieselbe sie sie das darüber danach unter darüber dabei danach ebenfalls einmal erstmals unverzüglich so so darauf dazu dabei darin darüber dabei das da deshalb dabei darüber dazu die der die die".split()),
+    'it': set("di a da in con su per tra fra il lo la gli le un uno una unostante nel nelle sù tra trent' ontro sono ho ha anche può".split()),
+    'pt': set("a o e do da em um para é com não uma os no se na por mais as dos como mas foi ao ser de tem já está estávamos mais ou menos eras sou tua seu sua sua sua suas estáŃăo estivemos estariam muito coisa coisa nós".split())
+}
+
+
+def clean_text(text, lang):
+    text = text.lower()
+    text = re.sub(r'\b\w{1,2}\b', '', text)  # remove short words
+    text = re.sub(r'[^\w\s]', '', text)  # remove punctuation
+    text = " ".join([word for word in text.split() if word not in stopwords[lang]])
+    return text
+
+
+def parse_serp(url, level):
+    try:
+        wd.get(url)
+        time.sleep(random.uniform(0.1, 0.5))  # Wait to simulate human interaction
+
+        tree = Tree()
         
-        headers = {tag: [] for tag in optional_headers}
+        # Extract "People Also Ask" questions
+        paa_elems = wd.find_elements(By.CSS_SELECTOR, ".xpc")
+        if paa_elems:
+            tree.create_node("People Also Ask", "PAA")
+            for elem in paa_elems:
+                question = elem.text.strip().lower()
+                if question not in paa_questions and question:
+                    link = elem.find_element(By.TAG_NAME, 'a').get_attribute('href')
+                    paa_questions.append((question, link))
+                    tree.create_node(question, question, parent='PAA')
         
-        for header in result.find_all(optional_headers):
-            headers[header.name].append(header.text.strip())
+        # Extract Related Searches
+        related_elems = wd.find_elements(By.CSS_SELECTOR, ".Q71vJc")
+        if related_elems:
+            tree.create_node("Related Searches", "Related")
+            for elem in related_elems:
+                related_search = elem.text.strip().lower()
+                if related_search not in related_searches:
+                    related_searches.append(related_search)
+                    link = elem.get_attribute('href')
+                    tree.create_node(related_search, related_search, parent='Related')
         
-        results.append({
-            'title': titles,
-            'meta_desc': descriptions,
-            'headers': headers
-        })
-    return results
-
-# Classe pour gérer les encodages et les similitudes
-class Encodings:
-    def __init__(self, lista, model):
-        self.lista = list(set([x.lower() for x in lista if x]))
-        self.model = model
-        self.embeddings = self.model.encode(self.lista, batch_size=64, show_progress_bar=True, convert_to_tensor=True)
-    
-    def calculate_similarity(self, key):
-        if not self.lista:  # Vérification pour éviter les listes vides
-            return []
-        query_emb = self.model.encode(key, convert_to_tensor=True)
-        scores = util.cos_sim(query_emb, self.embeddings)[0].cpu().tolist()
-        doc_score_pairs = sorted(list(zip(self.lista, [round(x, 2) for x in scores])), key=lambda x: x[1], reverse=True)
-        return doc_score_pairs
-
-# Fonction pour nettoyer le texte
-def clean_text(text):
-    return ' '.join([word for word in text.lower().split() if word not in STOPWORDS])
-
-# Fonction pour obtenir les n-grams
-def get_ngrams(text, n):
-    words = text.split()
-    ngrams_list = [words[i:i+n] for i in range(len(words)-n+1)]
-    return [' '.join(gram) for gram in ngrams_list]
-
-# Fonction principale pour scraper les SERP
-async def scrape_serp(session, query, language='fr', country='fr', optional_headers=['h1', 'h2', 'h3'], model=None):
-    html = await google_search(session, query, language, country)
-    results = extract_data(html, optional_headers)
-    
-    # Calcul des similitudes pour les en-têtes <h2> et <h3>
-    for result in results:
-        header_texts = [header for key in result['headers'].keys() for header in result['headers'][key] if header]
-        encodings = Encodings(header_texts, model)
-        similarities = encodings.calculate_similarity(query)
+        # Extract Google Suggestions
+        suggestions_url = f'http://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&gl={country}&q={keyword}'
+        suggestions_resp = requests.get(suggestions_url)
+        suggestions_soup = BeautifulSoup(suggestions_resp.content, 'html.parser')
+        suggestions = [suggestion['data'].lower() for suggestion in suggestions_soup.find_all('suggestion')]
+        if suggestions:
+            tree.create_node("Google Suggestions", "Suggest")
+            for suggestion in suggestions:
+                if suggestion not in google_suggest:
+                    google_suggest.append(suggestion)
+                    tree.create_node(suggestion, suggestion, parent='Suggest')
         
-        for key in result['headers'].keys():
-            result['headers'][key] = sorted(result['headers'][key], key=lambda x: next((score for text, score in similarities if text == x.lower()), 0), reverse=True)
-    
-    return results
+        if len(tree) > 1:
+            st.write(f"Results for Keyword: {keyword}")
+            tree.show(key=False)
 
-async def main(keywords_list, language, country, optional_headers):
-    model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
-    async with ClientSession() as session:
-        tasks = []
-        for keyword in keywords_list:
-            tasks.append(scrape_serp(session, keyword.strip(), language, country, optional_headers, model))
+        if loop_paa:
+            return paa_questions
+        return related_searches
+
+    except Exception as e:
+        st.write(f"Exception: {e}")
+        return []
+
+
+def scrape_serp_results(busquedas, level):
+    if level > scrape_levels:
+        return
+    
+    sub_searches = []
+    for search in busquedas:
+        sub_searches.extend(parse_serp(search[1], level + 1))
+    
+    if sub_searches:
+        scrape_serp_results(sub_searches, level + 1)
+
+
+# Scrape at different levels
+url_ini = [keyword, url_initial]
+scrape_serp_results([url_ini], 0)
+
+# Clean up and shut down the driver
+wd.quit()
+
+# Displaying Gathered Data
+st.write("**Related Searches**")
+st.table(related_searches)
+
+st.write("**People Also Ask**")
+st.table(paa_questions)
+
+st.write("**Google Suggestions**")
+st.table(google_suggest)
+
+# Analysis on extracted headings, titles, meta descriptions
+def analyze_textual_data(data, lang):
+    text = " ".join(data).lower()
+    text_cleaned = clean_text(text, lang)
+
+    word_freq = Counter(text_cleaned.split()).most_common()
+    df = pd.DataFrame(word_freq, columns=['Term', 'Frequency'])
+
+    return df
+
+
+# Combine all data into a single text block for analysis
+combined_text = related_searches + [q[0] for q in paa_questions] + google_suggest
+if len(combined_text) > 0:
+    df_terms = analyze_textual_data(combined_text, language)
+    st.write("**Frequent Terms on SERP**")
+    st.dataframe(df_terms)
+
+    # Option to download the data as CSV
+    csv = df_terms.to_csv(index=False).encode('utf-8')
+    st.download_button("Download CSV", data=csv, file_name=f'serp_frequent_terms_{keyword}.csv', mime='text/csv')
+
+# Entity analysis using Wikipedia API
+if search_entities:
+    st.write("**Entity Analysis** (Approx 3-5 Minutes)")
+    import wikipedia
+    wikipedia.set_lang(language)
+
+    def find_entities(text):
+        try:
+            entities = wikipedia.search(text)
+            if entities:
+                st.write(f"Entities Found: {entities[:3]}")
+        except Exception as e:
+            st.write(f"Error fetching entities for: {text}. Exception: {e}")
+
+    entity_results = []
+    for text in related_searches + google_suggest + paa_questions:
+        text_content = text[0] if isinstance(text, tuple) else text
+        find_entities(text_content)
         
-        all_results = await asyncio.gather(*tasks)
-        return all_results
-    
-def app():
-    st.title("Google SERP Scraper et Analyseur d'En-têtes")
-
-    # Zone de texte pour les mots-clés
-    keywords = st.text_area("Entrez vos mots-clés (un par ligne):")
-    
-    # Sélection de la langue et du pays
-    language = st.selectbox("Langue", ['fr', 'en', 'es', 'de', 'it'])
-    country = st.selectbox("Pays", ['fr', 'us', 'uk', 'es', 'de', 'it'])
-    
-    # Sélection des en-têtes à extraire
-    optional_headers = st.multiselect("En-têtes à extraire", ['h1', 'h2', 'h3', 'h4'], default=['h1', 'h2', 'h3'])
-
-    if st.button("Exécuter"):
-        if keywords:
-            keywords_list = keywords.strip().split('\n')
-            st.info("Scraping en cours, veuillez patienter...")
-            start_time = time.time()
-
-            # Lancer la boucle d'événements pour exécuter les requêtes asynchrones
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            all_results = loop.run_until_complete(main(keywords_list, language, country, optional_headers))
-            
-            # Création du fichier Excel
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                for i, keyword in enumerate(keywords_list):
-                    results = all_results[i]
-                    
-                    # Collecter les titres et méta-descriptions
-                    titles = '[]'.join([res['title'] for res in results])
-                    meta_descs = '[]'.join([res['meta_desc'] for res in results])
-                    
-                    data = {
-                        'Keyword': [keyword],
-                        'Titles': [titles],
-                        'Meta Descriptions': [meta_descs]
-                    }
-                    
-                    # Ajouter les en-têtes
-                    for header in optional_headers:
-                        data[f'{header.upper()} Headers'] = ['[]'.join([item for res in results for item in res['headers'].get(header, [])])]
-                    
-                    df = pd.DataFrame(data)
-                    df.to_excel(writer, sheet_name=f'Keyword_{i+1}', index=False)
-            
-            # Bouton de téléchargement
-            st.download_button(
-                label="Télécharger les résultats (Excel)",
-                data=buffer.getvalue(),
-                file_name="resultats_serp_headers.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-            end_time = time.time()
-            logging.info(f"Temps total pour l'exécution : {end_time - start_time} secondes")
-        else:
-            st.warning("Veuillez entrer au moins un mot-clé.")
-
-if __name__ == "__main__":
-    app()
+    st.write("**Entities Identified**")
+    st.table(entity_results)
