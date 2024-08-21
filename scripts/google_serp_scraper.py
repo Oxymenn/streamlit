@@ -177,5 +177,5 @@ def app():
         st.write("**Entities Identified**")
         st.table(entity_results)
 
-# Call the app function
-app()
+if __name__ == "__main__":
+    app()
