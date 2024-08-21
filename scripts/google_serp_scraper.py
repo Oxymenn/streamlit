@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import random
 import io
+import time  # Ajout de l'import du module time
 import logging
 from sentence_transformers import SentenceTransformer, util
 from itertools import cycle
