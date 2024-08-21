@@ -21,3 +21,4 @@ selenium
 treelib
 spacy
 blinker
+webdriver_manager
