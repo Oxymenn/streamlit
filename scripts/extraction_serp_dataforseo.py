@@ -37,6 +37,8 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
     response = requests.post(url, headers=headers, json=tasks)
 
     if response.status_code == 200:
+        st.write("Réponse de l'API reçue avec succès :")
+        st.json(response.json())  # Afficher la réponse JSON dans Streamlit pour débogage
         return response.json()
     else:
         st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
@@ -88,33 +90,43 @@ def app():
             result = extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth)
 
             if result:
-                # Créer un DataFrame avec les résultats
                 serp_data = []
+
+                # Itération sur les tâches
                 for task in result.get("tasks", []):
-                    for res in task.get("result", []):
-                        for item in res.get("items", []):
-                            serp_data.append({
-                                "Keyword": res.get("keyword"),
-                                "Position": item.get("rank_absolute"),
-                                "URL": item.get("url"),
-                                "Domain": item.get("domain"),
-                                "Title": item.get("title")
-                            })
+                    status_code = task.get("status_code", None)
+                    if status_code == 20000:
+                        # La tâche s'est exécutée avec succès, traitement des résultats
+                        for res in task.get("result", []):
+                            for item in res.get("items", []):
+                                serp_data.append({
+                                    "Keyword": res.get("keyword"),
+                                    "Position": item.get("rank_absolute"),
+                                    "URL": item.get("url"),
+                                    "Domain": item.get("domain"),
+                                    "Title": item.get("title")
+                                })
+                    else:
+                        # Message d'erreur si la tâche a échoué
+                        st.warning(f"Tâche échouée avec le statut : {status_code}")
 
-                # Créer un DataFrame pandas
-                df = pd.DataFrame(serp_data)
+                if serp_data:
+                    # Créer un DataFrame pandas
+                    df = pd.DataFrame(serp_data)
 
-                # Afficher les résultats sous forme de tableau dans l'interface
-                st.dataframe(df)
+                    # Afficher les résultats sous forme de tableau dans l'interface
+                    st.dataframe(df)
 
-                # Télécharger les résultats au format CSV
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Télécharger les résultats en CSV",
-                    data=csv,
-                    file_name="serp_results.csv",
-                    mime="text/csv",
-                )
+                    # Télécharger les résultats au format CSV
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Télécharger les résultats en CSV",
+                        data=csv,
+                        file_name="serp_results.csv",
+                        mime="text/csv",
+                    )
+                else:
+                    st.info("Aucun résultat à afficher.")
         else:
             st.warning("Veuillez entrer au moins un mot-clé.")
 
