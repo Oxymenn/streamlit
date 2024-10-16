@@ -4,8 +4,8 @@ import base64
 import pandas as pd
 
 # Identifiants DataForSEO directement inclus
-login = "mepiden597@hraifi.com"  # Remplace par ton login DataForSEO
-password = "8590a4d1b01fd481"  # Remplace par ton mot de passe DataForSEO
+login = "julesbrault.pro@gmail.com"  # Remplace par ton login DataForSEO
+password = "fa670025004519a1"  # Remplace par ton mot de passe DataForSEO
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
 def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
