@@ -1,11 +1,12 @@
 import streamlit as st
 import requests
 import base64
+import json
 import pandas as pd
 
 # Identifiants DataForSEO
-login = "julesbrault.pro@gmail.com"  # Remplace par ton login DataForSEO
-password = "fa670025004519a1"  # Remplace par ton mot de passe DataForSEO
+login = "your_login"  # Remplace par ton login DataForSEO
+password = "your_password"  # Remplace par ton mot de passe DataForSEO
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
 def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
@@ -44,6 +45,27 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
         st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
         return None
 
+# Fonction pour récupérer les résultats d'une tâche par ID
+def get_serp_results(task_id, result_type="regular"):
+    # Encodage des identifiants API en Base64
+    credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
+
+    # URL de l'API DataForSEO pour récupérer les résultats
+    url = f"https://api.dataforseo.com/v3/serp/google/organic/task_get/{result_type}/{task_id}"
+
+    headers = {
+        "Authorization": f"Basic {credentials}"
+    }
+
+    # Envoi de la requête GET
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Erreur lors de la récupération des résultats: {response.status_code} {response.text}")
+        return None
+
 # Fonction principale de l'application Streamlit
 def app():
     st.title("Extraction SERP - DataForSEO")
@@ -79,6 +101,9 @@ def app():
     # Nombre de résultats à extraire (par tranches de 10)
     depth = st.slider("Nombre de résultats", 10, 100, 10)
 
+    # Choix du type de résultat
+    result_type = st.selectbox("Type de résultat", ["regular", "advanced"])
+
     # Validation des mots-clés
     if st.button("Lancer l'extraction"):
         # Séparer les mots-clés par ligne
@@ -92,40 +117,35 @@ def app():
             if result:
                 serp_data = []
 
-                # Itération sur les tâches
+                # Itération sur les tâches pour récupérer les résultats
                 for task in result.get("tasks", []):
-                    status_code = task.get("status_code", None)
-                    if status_code == 20000:
-                        # La tâche s'est exécutée avec succès, traitement des résultats
-                        for res in task.get("result", []):
-                            for item in res.get("items", []):
-                                serp_data.append({
-                                    "Keyword": res.get("keyword"),
-                                    "Position": item.get("rank_absolute"),
-                                    "URL": item.get("url"),
-                                    "Domain": item.get("domain"),
-                                    "Title": item.get("title")
-                                })
-                    elif status_code == 40201:
-                        st.error("Votre compte DataForSEO est bloqué pour une activité suspecte. Veuillez contacter leur support.")
+                    task_id = task.get("id")
+                    task_status_code = task.get("status_code", None)
+
+                    if task_status_code == 20100:  # Tâche créée avec succès
+                        st.write(f"Tâche créée avec succès. ID de la tâche : {task_id}")
+
+                        # Récupérer les résultats de la tâche en fonction du type (regular ou advanced)
+                        serp_result = get_serp_results(task_id, result_type)
+
+                        if serp_result:
+                            # Ajouter les résultats à serp_data
+                            serp_data.append(serp_result)
                     else:
-                        # Message d'erreur si la tâche a échoué
-                        st.warning(f"Tâche échouée avec le statut : {status_code}")
+                        st.warning(f"Tâche échouée avec le statut : {task_status_code}")
 
                 if serp_data:
-                    # Créer un DataFrame pandas
-                    df = pd.DataFrame(serp_data)
+                    # Afficher les résultats en JSON
+                    st.write("Résultats des tâches :")
+                    st.json(serp_data)
 
-                    # Afficher les résultats sous forme de tableau dans l'interface
-                    st.dataframe(df)
-
-                    # Télécharger les résultats au format CSV
-                    csv = df.to_csv(index=False).encode('utf-8')
+                    # Télécharger les résultats en JSON
+                    json_data = json.dumps(serp_data, indent=4).encode('utf-8')
                     st.download_button(
-                        label="Télécharger les résultats en CSV",
-                        data=csv,
-                        file_name="serp_results.csv",
-                        mime="text/csv",
+                        label="Télécharger les résultats en JSON",
+                        data=json_data,
+                        file_name="serp_results.json",
+                        mime="application/json",
                     )
                 else:
                     st.info("Aucun résultat à afficher.")
