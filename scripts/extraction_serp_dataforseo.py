@@ -39,9 +39,7 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
     response = requests.post(url, headers=headers, json=tasks)
 
     if response.status_code == 200:
-        st.write("Réponse de l'API reçue avec succès :")
-        st.json(response.json())  # Afficher la réponse JSON dans Streamlit pour débogage
-        return response.json()
+        return response.json()  # Return the task creation result silently
     else:
         st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
         return None
@@ -120,21 +118,26 @@ def app():
 
         # Vérifier si des mots-clés ont été fournis
         if keywords:
+            total_keywords = len(keywords)
+            serp_data = []
+            start_time = time.time()
+
+            # Barre de progression
+            progress_bar = st.progress(0)
+            timer_placeholder = st.empty()
+            processed_keywords = 0
+
             # Extraction des résultats
             result = extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth)
 
             if result:
-                serp_data = []
-
                 # Itération sur les tâches pour récupérer les résultats
                 for task in result.get("tasks", []):
                     task_id = task.get("id")
                     task_status_code = task.get("status_code", None)
 
                     if task_status_code == 20100:  # Tâche créée avec succès
-                        st.write(f"Tâche créée avec succès. ID de la tâche : {task_id}")
-
-                        # Attendre que la tâche soit terminée (polling)
+                        # Polling pour vérifier l'état de la tâche
                         while True:
                             serp_result = get_serp_results(task_id)
 
@@ -143,21 +146,33 @@ def app():
                                 # Si les résultats sont prêts, on arrête la boucle
                                 break
                             else:
-                                st.info("Tâche en cours d'exécution, veuillez patienter...")
-                                time.sleep(5)  # Attente avant de vérifier à nouveau
+                                # Mettre à jour le timer et attendre avant de vérifier à nouveau
+                                elapsed_time = time.time() - start_time
+                                timer_placeholder.write(f"Temps écoulé : {int(elapsed_time // 3600):02d}:{int((elapsed_time % 3600) // 60):02d}:{int(elapsed_time % 60):02d}")
+                                time.sleep(5)
 
                         # Ajouter les résultats à serp_data
                         for res in serp_result.get("tasks", []):
                             if "result" in res:
                                 for item in res["result"]:
+                                    # Ajuster les positions pour que le premier résultat organique soit 1
                                     for entry in item["items"]:
-                                        serp_data.append({
-                                            "Keyword": item.get("keyword"),
-                                            "Position": entry.get("rank_absolute"),
-                                            "URL": entry.get("url"),
-                                            "Domain": entry.get("domain"),
-                                            "Title": entry.get("title")
-                                        })
+                                        rank = entry.get("rank_absolute", None)
+                                        if rank and entry.get("type") == "organic":
+                                            adjusted_rank = 1 if rank == 0 else rank - 1
+                                            serp_data.append({
+                                                "Keyword": item.get("keyword"),
+                                                "Position": adjusted_rank,
+                                                "URL": entry.get("url"),
+                                                "Domain": entry.get("domain"),
+                                                "Title": entry.get("title")
+                                            })
+
+                        # Mettre à jour la barre de progression et le nombre de mots-clés traités
+                        processed_keywords += 1
+                        progress_bar.progress(processed_keywords / total_keywords)
+                        st.write(f"Mots-clés traités : {processed_keywords}/{total_keywords}")
+
                     else:
                         st.warning(f"Tâche échouée avec le statut : {task_status_code}")
 
