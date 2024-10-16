@@ -49,7 +49,7 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
     response = requests.post(url, headers=headers, json=tasks)
 
     if response.status_code == 200:
-        return response.json()
+        return response.json()  # Retourne la réponse JSON complète
     else:
         st.error(f"Erreur lors de l'extraction des données SERP : {response.status_code}")
         return None
@@ -92,34 +92,49 @@ def app():
         result = extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth)
 
         if result:
+            st.write("Données brutes de l'API (débogage) :")  # Pour déboguer, affichons les données brutes
+            st.json(result)  # Affiche la réponse JSON complète
+
             # Créer un DataFrame avec les résultats
             serp_data = []
-            for task in result.get("tasks", []):
-                for res in task.get("result", []):
-                    for item in res.get("items", []):
-                        serp_data.append({
-                            "Keyword": res.get("keyword"),
-                            "Position": item.get("rank_absolute"),
-                            "URL": item.get("url"),
-                            "Domain": item.get("domain"),
-                            "Title": item.get("title")
-                        })
 
-            # Créer un DataFrame pandas
-            df = pd.DataFrame(serp_data)
+            # On vérifie la structure des tâches avant de traiter les résultats
+            if "tasks" in result:
+                for task in result["tasks"]:
+                    if "result" in task:
+                        for res in task["result"]:
+                            if "items" in res:  # On vérifie aussi si 'items' existe
+                                for item in res["items"]:
+                                    serp_data.append({
+                                        "Keyword": res.get("keyword"),
+                                        "Position": item.get("rank_absolute"),
+                                        "URL": item.get("url"),
+                                        "Domain": item.get("domain"),
+                                        "Title": item.get("title")
+                                    })
+                            else:
+                                st.warning(f"Pas d'items trouvés pour la tâche : {task}")
+                    else:
+                        st.warning(f"Pas de résultats trouvés pour la tâche : {task}")
+            else:
+                st.error("Aucune tâche trouvée dans la réponse API.")
 
-            # Afficher les résultats sous forme de tableau dans l'interface
-            st.dataframe(df)
+            if serp_data:
+                # Créer un DataFrame pandas
+                df = pd.DataFrame(serp_data)
 
-            # Télécharger les résultats au format CSV
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Télécharger les résultats en CSV",
-                data=csv,
-                file_name="serp_results.csv",
-                mime="text/csv",
-            )
+                # Afficher les résultats sous forme de tableau dans l'interface
+                st.dataframe(df)
 
-# Ajout du bloc if __name__ == "__main__"
-if __name__ == "__main__":
-    app()
+                # Télécharger les résultats au format CSV
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Télécharger les résultats en CSV",
+                    data=csv,
+                    file_name="serp_results.csv",
+                    mime="text/csv",
+                )
+            else:
+                st.error("Aucune donnée SERP trouvée.")
+        else:
+            st.error("Erreur lors de l'extraction des données.")
