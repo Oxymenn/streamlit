@@ -38,8 +38,6 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
     response = requests.post(url, headers=headers, json=tasks)
 
     if response.status_code == 200:
-        st.write("Réponse de l'API reçue avec succès :")
-        st.json(response.json())  # Afficher la réponse JSON dans Streamlit pour débogage
         return response.json()
     else:
         st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
@@ -76,33 +74,38 @@ def app():
     # Zone de texte pour les mots-clés (un mot clé par ligne)
     keywords_input = st.text_area("Entrez les mots-clés (un par ligne)")
 
-    # Sélection de la langue
-    language_code = st.selectbox("Choisissez la langue", ["en", "fr", "es", "de", "it"])
+    # Disposition sur une ligne pour la langue, le pays et l'appareil
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        language_code = st.selectbox("Langue", ["en", "fr", "es", "de", "it"])
+    with col2:
+        countries = {
+            "États-Unis": 2840,
+            "France": 2250,
+            "Allemagne": 2158,
+            "Espagne": 2392
+        }
+        country_name = st.selectbox("Pays", list(countries.keys()))
+        location_code = countries[country_name]
+    with col3:
+        device = st.selectbox("Appareil", ["desktop", "mobile"])
 
-    # Sélection du pays avec des noms lisibles pour l'utilisateur
-    countries = {
-        "États-Unis": 2840,
-        "France": 2250,
-        "Allemagne": 2158,
-        "Espagne": 2392
-    }
-    country_name = st.selectbox("Choisissez le pays", list(countries.keys()))
-    location_code = countries[country_name]
-
-    # Sélection du type d'appareil
-    device = st.radio("Choisissez l'appareil", ["desktop", "mobile"])
-
-    # Choix entre mode Live et Standard
-    search_type = st.radio("Méthode d'exécution", ["organic", "live"])
-
-    # Priorité de la tâche
-    priority = st.selectbox("Priorité d'exécution", [1, 2])
+    # Disposition sur une ligne pour la méthode et la priorité
+    col4, col5 = st.columns([1, 1])
+    with col4:
+        search_type = st.selectbox("Méthode d'exécution", ["organic", "live"])
+    with col5:
+        priority = st.selectbox("Priorité d'exécution", [1, 2])
 
     # Nombre de résultats à extraire (par tranches de 10)
     depth = st.slider("Nombre de résultats", 10, 100, 10)
 
     # Choix du type de résultat
     result_type = st.selectbox("Type de résultat", ["regular", "advanced"])
+
+    # Initialisation des variables pour maintenir les résultats
+    if "serp_data" not in st.session_state:
+        st.session_state["serp_data"] = []
 
     # Validation des mots-clés
     if st.button("Lancer l'extraction"):
@@ -131,11 +134,10 @@ def app():
 
                             # Vérifier si la tâche est terminée
                             if serp_result and serp_result["tasks"][0]["status_code"] == 20000:
-                                # Si les résultats sont prêts, on arrête la boucle
-                                break
+                                break  # Sortir de la boucle lorsque les résultats sont prêts
                             else:
                                 st.info("Tâche en cours d'exécution, veuillez patienter...")
-                                time.sleep(5)  # Attente avant de vérifier à nouveau
+                                time.sleep(5)  # Attendre avant de vérifier à nouveau
 
                         # Ajouter les résultats à serp_data
                         for res in serp_result.get("tasks", []):
@@ -149,37 +151,37 @@ def app():
                                             "Domain": entry.get("domain"),
                                             "Title": entry.get("title")
                                         })
-                    else:
-                        st.warning(f"Tâche échouée avec le statut : {task_status_code}")
 
-                if serp_data:
-                    # Créer un DataFrame pandas
-                    df = pd.DataFrame(serp_data)
+                # Ajouter les données dans l'état session
+                st.session_state["serp_data"].extend(serp_data)
 
-                    # Afficher les résultats sous forme de tableau dans l'interface
-                    st.dataframe(df)
+    # Si des résultats sont disponibles, les afficher et permettre de les télécharger
+    if st.session_state["serp_data"]:
+        # Créer un DataFrame pandas
+        df = pd.DataFrame(st.session_state["serp_data"])
 
-                    # Télécharger les résultats au format CSV
-                    csv = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="Télécharger les résultats en CSV",
-                        data=csv,
-                        file_name="serp_results.csv",
-                        mime="text/csv",
-                    )
+        # Afficher les résultats sous forme de tableau dans l'interface
+        st.dataframe(df)
 
-                    # Télécharger les résultats au format Excel
-                    excel_file = df.to_excel(index=False).encode('utf-8')
-                    st.download_button(
-                        label="Télécharger les résultats en Excel",
-                        data=excel_file,
-                        file_name="serp_results.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                else:
-                    st.info("Aucun résultat à afficher.")
-        else:
-            st.warning("Veuillez entrer au moins un mot-clé.")
+        # Télécharger les résultats au format CSV
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Télécharger les résultats en CSV",
+            data=csv,
+            file_name="serp_results.csv",
+            mime="text/csv",
+        )
+
+        # Télécharger les résultats au format Excel
+        excel_file = df.to_excel(index=False).encode('utf-8')
+        st.download_button(
+            label="Télécharger les résultats en Excel",
+            data=excel_file,
+            file_name="serp_results.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        st.info("Aucun résultat disponible.")
 
 # Si ce fichier est exécuté directement, on appelle la fonction app()
 if __name__ == "__main__":
