@@ -5,14 +5,18 @@ import pandas as pd
 import time
 
 # Identifiants DataForSEO
-login = "julesbrault.pro@gmail.com"
-password = "fa670025004519a1"
+login = "julesbrault.pro@gmail.com"  # Remplace par ton login DataForSEO
+password = "fa670025004519a1"  # Remplace par ton mot de passe DataForSEO
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
-def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
+def extract_serp_data(keywords, language_code, location_code, device, priority, queue_mode, depth):
     credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
-    url = f"https://api.dataforseo.com/v3/serp/google/{search_type}/task_post"
     
+    if queue_mode == "live":
+        url = f"https://api.dataforseo.com/v3/serp/google/live/task_post"
+    else:
+        url = f"https://api.dataforseo.com/v3/serp/google/{queue_mode}/task_post"
+
     tasks = [
         {
             "language_code": language_code,
@@ -86,12 +90,15 @@ def app():
     with col5:
         priority = st.selectbox("Priorité", [1, 2], label_visibility="collapsed")
 
+    # Ajout du choix entre Standard Queue, Priority Queue ou Live Mode
+    queue_mode = st.selectbox("Mode de file d'attente", ["standard", "priority", "live"], label_visibility="collapsed")
+    
     depth = st.slider("Nombre de résultats", 10, 100, 10)
 
     if st.button("Lancer l'extraction"):
         keywords = keywords_input.splitlines()
         if keywords:
-            result = extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth)
+            result = extract_serp_data(keywords, language_code, location_code, device, priority, queue_mode, depth)
 
             if result:
                 serp_data = []
@@ -112,21 +119,27 @@ def app():
                     completed_tasks += 1
                     display_timer_and_progress(start_time, completed_tasks, total_keywords)
 
-                    # Ajouter les résultats à serp_data
+                    # Ajouter les résultats à serp_data en excluant les annonces payantes
                     for res in serp_result.get("tasks", []):
                         if "result" in res:
                             for item in res["result"]:
+                                position = 1
                                 for entry in item["items"]:
-                                    rank = entry.get("rank_absolute")
-                                    if rank is not None:
-                                        rank = max(1, rank) if entry["type"] == "organic" else 0
-                                    serp_data.append({
-                                        "Keyword": item.get("keyword"),
-                                        "Position": rank,
-                                        "URL": entry.get("url"),
-                                        "Domain": entry.get("domain"),
-                                        "Title": entry.get("title")
-                                    })
+                                    if entry["type"] == "organic" or entry["type"] == "featured_snippet":
+                                        rank = entry.get("rank_absolute")
+                                        if entry["type"] == "featured_snippet":
+                                            rank = 0  # Si featured snippet, position 0
+                                        else:
+                                            rank = position
+                                            position += 1  # Incrémenter la position pour chaque résultat organique
+
+                                        serp_data.append({
+                                            "Keyword": item.get("keyword"),
+                                            "Position": rank,
+                                            "URL": entry.get("url"),
+                                            "Domain": entry.get("domain"),
+                                            "Title": entry.get("title")
+                                        })
 
                 if serp_data:
                     df = pd.DataFrame(serp_data)
