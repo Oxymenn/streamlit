@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import base64
 import pandas as pd
-import os
 
 # Gestion des secrets
 if "dataforseo_login" not in st.secrets or "dataforseo_password" not in st.secrets:
@@ -110,4 +109,3 @@ else:
                     file_name="serp_results.csv",
                     mime="text/csv",
                 )
-
