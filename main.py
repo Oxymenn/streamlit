@@ -9,12 +9,15 @@ from scripts import post_article_wp
 from scripts import audit_on_page
 from scripts import google_serp_scraper
 from scripts import testmaillage
+from scripts import extraction_serp_dataforseo
+
 
 
 # Configuration des pages
 PAGES = {
     "Analyse + Proposition Maillage": analyse_proposition_maillage,
     "Proposition Maillage": proposition_maillage,
+    "Extraction SERP - DataForSEO": extraction_serp_dataforseo,
     "Tri + Nettoyage de mots-clés": tri_keywords,
     "Analyse Cannibalisation SERP (2€30 pour 1000 mots)": cannibalisation_serp_payant,
     "Analyse Cannibalisation SERP (gratuit)": cannibalisation_serp_gratuit,
