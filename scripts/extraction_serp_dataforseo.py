@@ -109,3 +109,6 @@ else:
                     file_name="serp_results.csv",
                     mime="text/csv",
                 )
+
+if __name__ == "__main__":
+    app()
