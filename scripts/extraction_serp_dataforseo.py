@@ -4,8 +4,20 @@ import base64
 import pandas as pd
 
 # Identifiants DataForSEO directement dans le script
-login = "mepiden597@hraifi.com"  # Remplacez par votre login
-password = "8590a4d1b01fd481"  # Remplacez par votre mot de passe
+login = "votre_login_dataforseo"  # Remplacez par votre login
+password = "votre_password_dataforseo"  # Remplacez par votre mot de passe
+
+# Dictionnaire des pays et leurs location_code correspondants
+country_mapping = {
+    "États-Unis": 2840,
+    "France": 2158,
+    "Espagne": 2250,
+    "Allemagne": 2005,
+    "Royaume-Uni": 2826,
+    "Italie": 2380,
+    "Canada": 2124,
+    "Australie": 2036,
+}
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
 def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
@@ -55,8 +67,9 @@ def app():
     # Sélection de la langue
     language_code = st.selectbox("Choisissez la langue", ["en", "fr", "es", "de", "it"])
 
-    # Sélection du pays
-    location_code = st.selectbox("Choisissez le pays", [2840, 2158, 2250, 2392])  # Exemple : US, France, Espagne, Allemagne
+    # Sélection du pays via les noms
+    country = st.selectbox("Choisissez le pays", list(country_mapping.keys()))
+    location_code = country_mapping[country]  # Récupère le code du pays sélectionné
 
     # Sélection du type d'appareil
     device = st.radio("Choisissez l'appareil", ["desktop", "mobile"])
