@@ -17,7 +17,6 @@ from scripts import extraction_serp_dataforseo
 PAGES = {
     "Analyse + Proposition Maillage": analyse_proposition_maillage,
     "Proposition Maillage": proposition_maillage,
-    "Extraction SERP - DataForSEO": extraction_serp_dataforseo,
     "Tri + Nettoyage de mots-clés": tri_keywords,
     "Analyse Cannibalisation SERP (2€30 pour 1000 mots)": cannibalisation_serp_payant,
     "Analyse Cannibalisation SERP (gratuit)": cannibalisation_serp_gratuit,
@@ -25,7 +24,8 @@ PAGES = {
     "Post Article WP": post_article_wp,
     "Audit SEO On-page": audit_on_page,
     "Google SERP Scraper": google_serp_scraper,
-    "Maillage TEST": testmaillage
+    "Maillage TEST": testmaillage,
+    "Extraction SERP - DataForSEO": extraction_serp_dataforseo
 
 }
 
