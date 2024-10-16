@@ -4,8 +4,8 @@ import time
 import streamlit as st
 
 # Identifiants API
-login = "votre_login_dataforseo"
-password = "votre_password_dataforseo"
+login = "mepiden597@hraifi.com"
+password = "8590a4d1b01fd481"
 
 # Fonction pour créer une tâche SERP
 def create_serp_task(keyword, language_code, location_code, device, priority, search_type, depth):
