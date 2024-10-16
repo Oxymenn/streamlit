@@ -5,8 +5,8 @@ import json
 import pandas as pd
 
 # Identifiants DataForSEO
-login = "your_login"  # Remplace par ton login DataForSEO
-password = "your_password"  # Remplace par ton mot de passe DataForSEO
+login = "julesbrault.pro@gmail.com"  # Remplace par ton login DataForSEO
+password = "fa670025004519a1"  # Remplace par ton mot de passe DataForSEO
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
 def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
