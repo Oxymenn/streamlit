@@ -4,8 +4,8 @@ import base64
 import pandas as pd
 
 # Identifiants DataForSEO directement dans le script
-login = "votre_login_dataforseo"  # Remplacez par votre login
-password = "votre_password_dataforseo"  # Remplacez par votre mot de passe
+login = "mepiden597@hraifi.com"  # Remplacez par votre login
+password = "8590a4d1b01fd481"  # Remplacez par votre mot de passe
 
 # Dictionnaire des pays et leurs location_code correspondants
 country_mapping = {
