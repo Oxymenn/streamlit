@@ -3,7 +3,7 @@ import requests
 import base64
 import pandas as pd
 
-# Identifiants DataForSEO directement inclus
+# Identifiants DataForSEO
 login = "julesbrault.pro@gmail.com"  # Remplace par ton login DataForSEO
 password = "fa670025004519a1"  # Remplace par ton mot de passe DataForSEO
 
