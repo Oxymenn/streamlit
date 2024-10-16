@@ -5,8 +5,8 @@ import pandas as pd
 import os
 
 # Utilisation des secrets pour récupérer le login et password
-login = st.secrets["login"]
-password = st.secrets["password"]
+login = st.secrets["dataforseo_login"]
+password = st.secrets["dataforseo_password"]
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
 def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
