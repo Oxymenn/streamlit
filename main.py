@@ -33,12 +33,9 @@ st.sidebar.title("PirateSEO")
 st.sidebar.subheader("Les scripts")
 selection = st.sidebar.radio("", list(PAGES.keys()), index=0)
 
-# Affichage du script sélectionné
-if hasattr(PAGES[selection], "app"):
-    page = PAGES[selection]
+# Affichage du script sélectionné avec vérification de la fonction 'app'
+page = PAGES[selection]
+if hasattr(page, 'app'):
     page.app()
 else:
-    st.error(f"Le module {selection} n'a pas de fonction 'app'. Veuillez vérifier le fichier correspondant.")
-
-# Copyright
-st.sidebar.markdown("© 2024 | by PirateSEO")
+    st.error(f"Le module sélectionné ({selection}) ne contient pas de fonction 'app'.")
