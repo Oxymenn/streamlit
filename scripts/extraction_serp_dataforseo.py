@@ -109,3 +109,7 @@ else:
                     file_name="serp_results.csv",
                     mime="text/csv",
                 )
+
+# Ajout du bloc if __name__ == "__main__"
+if __name__ == "__main__":
+    app()
