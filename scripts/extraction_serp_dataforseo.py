@@ -106,6 +106,8 @@ def app():
                                     "Domain": item.get("domain"),
                                     "Title": item.get("title")
                                 })
+                    elif status_code == 40201:
+                        st.error("Votre compte DataForSEO est bloqué pour une activité suspecte. Veuillez contacter leur support.")
                     else:
                         # Message d'erreur si la tâche a échoué
                         st.warning(f"Tâche échouée avec le statut : {status_code}")
