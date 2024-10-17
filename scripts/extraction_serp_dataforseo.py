@@ -5,18 +5,14 @@ import pandas as pd
 import time
 
 # Identifiants DataForSEO
-login = "julesbrault.pro@gmail.com"  # Remplacez par votre login DataForSEO
-password = "fa670025004519a1"  # Remplacez par votre mot de passe DataForSEO
+login = "julesbrault.pro@gmail.com"
+password = "fa670025004519a1"
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
-def extract_serp_data(keywords, language_code, location_code, device, priority, queue_mode, depth):
+def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
     credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
-
-    if queue_mode == "live":
-        url = f"https://api.dataforseo.com/v3/serp/google/live/task_post"
-    else:
-        url = f"https://api.dataforseo.com/v3/serp/google/{queue_mode}/task_post"
-
+    url = f"https://api.dataforseo.com/v3/serp/google/{search_type}/task_post"
+    
     tasks = [
         {
             "language_code": language_code,
@@ -34,13 +30,12 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
         "Content-Type": "application/json"
     }
 
-    # Envoi de la requête
-    try:
-        response = requests.post(url, headers=headers, json=tasks)
-        response.raise_for_status()
+    response = requests.post(url, headers=headers, json=tasks)
+
+    if response.status_code == 200:
         return response.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de la création de la tâche : {e}")
+    else:
+        st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
         return None
 
 # Fonction pour récupérer les résultats d'une tâche par ID
@@ -49,13 +44,12 @@ def get_serp_results(task_id):
     url = f"https://api.dataforseo.com/v3/serp/google/organic/task_get/regular/{task_id}"
     
     headers = {"Authorization": f"Basic {credentials}"}
-    
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
         return response.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de la récupération des résultats : {e}")
+    else:
+        st.error(f"Erreur lors de la récupération des résultats: {response.status_code} {response.text}")
         return None
 
 # Fonction pour afficher le timer et la progression
@@ -92,15 +86,12 @@ def app():
     with col5:
         priority = st.selectbox("Priorité", [1, 2], label_visibility="collapsed")
 
-    # Ajout du choix entre Standard Queue, Priority Queue ou Live Mode
-    queue_mode = st.selectbox("Mode de file d'attente", ["standard", "priority", "live"], label_visibility="collapsed")
-    
     depth = st.slider("Nombre de résultats", 10, 100, 10)
 
     if st.button("Lancer l'extraction"):
         keywords = keywords_input.splitlines()
         if keywords:
-            result = extract_serp_data(keywords, language_code, location_code, device, priority, queue_mode, depth)
+            result = extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth)
 
             if result:
                 serp_data = []
@@ -108,7 +99,6 @@ def app():
                 start_time = time.time()
                 completed_tasks = 0
 
-                # Traitement des tâches et résultats
                 for task in result.get("tasks", []):
                     task_id = task.get("id")
 
@@ -122,27 +112,21 @@ def app():
                     completed_tasks += 1
                     display_timer_and_progress(start_time, completed_tasks, total_keywords)
 
-                    # Ajouter les résultats à serp_data en excluant les annonces payantes
+                    # Ajouter les résultats à serp_data
                     for res in serp_result.get("tasks", []):
                         if "result" in res:
                             for item in res["result"]:
-                                position = 1
                                 for entry in item["items"]:
-                                    if entry["type"] == "organic" or entry["type"] == "featured_snippet":
-                                        rank = entry.get("rank_absolute")
-                                        if entry["type"] == "featured_snippet":
-                                            rank = 0  # Si featured snippet, position 0
-                                        else:
-                                            rank = position
-                                            position += 1  # Incrémenter la position pour chaque résultat organique
-
-                                        serp_data.append({
-                                            "Keyword": item.get("keyword"),
-                                            "Position": rank,
-                                            "URL": entry.get("url"),
-                                            "Domain": entry.get("domain"),
-                                            "Title": entry.get("title")
-                                        })
+                                    rank = entry.get("rank_absolute")
+                                    if rank is not None:
+                                        rank = max(1, rank) if entry["type"] == "organic" else 0
+                                    serp_data.append({
+                                        "Keyword": item.get("keyword"),
+                                        "Position": rank,
+                                        "URL": entry.get("url"),
+                                        "Domain": entry.get("domain"),
+                                        "Title": entry.get("title")
+                                    })
 
                 if serp_data:
                     df = pd.DataFrame(serp_data)
