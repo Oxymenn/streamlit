@@ -5,14 +5,18 @@ import pandas as pd
 import time
 
 # Identifiants DataForSEO
-login = "julesbrault.pro@gmail.com"
-password = "fa670025004519a1"
+login = "julesbrault.pro@gmail.com"  # Remplace par ton login DataForSEO
+password = "fa670025004519a1"  # Remplace par ton mot de passe DataForSEO
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
 def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
+    # Encodage des identifiants API en Base64
     credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
+
+    # URL de l'API DataForSEO
     url = f"https://api.dataforseo.com/v3/serp/google/{search_type}/task_post"
-    
+
+    # Préparation des données de la requête
     tasks = [
         {
             "language_code": language_code,
@@ -30,20 +34,28 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
         "Content-Type": "application/json"
     }
 
+    # Envoi de la requête
     response = requests.post(url, headers=headers, json=tasks)
 
     if response.status_code == 200:
-        return response.json()
+        return response.json()  # On ne l'affiche plus, mais on retourne la réponse
     else:
         st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
         return None
 
 # Fonction pour récupérer les résultats d'une tâche par ID
-def get_serp_results(task_id):
+def get_serp_results(task_id, result_type="regular"):
+    # Encodage des identifiants API en Base64
     credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
-    url = f"https://api.dataforseo.com/v3/serp/google/organic/task_get/regular/{task_id}"
-    
-    headers = {"Authorization": f"Basic {credentials}"}
+
+    # URL de l'API DataForSEO pour récupérer les résultats
+    url = f"https://api.dataforseo.com/v3/serp/google/organic/task_get/{result_type}/{task_id}"
+
+    headers = {
+        "Authorization": f"Basic {credentials}"
+    }
+
+    # Envoi de la requête GET
     response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
@@ -52,8 +64,8 @@ def get_serp_results(task_id):
         st.error(f"Erreur lors de la récupération des résultats: {response.status_code} {response.text}")
         return None
 
-# Fonction pour afficher le timer et la progression
-def display_timer_and_progress(start_time, completed_tasks, total_tasks):
+# Fonction pour afficher un timer
+def display_timer(start_time, completed_tasks, total_tasks):
     elapsed_time = int(time.time() - start_time)
     hours, remainder = divmod(elapsed_time, 3600)
     minutes, seconds = divmod(remainder, 60)
@@ -65,29 +77,46 @@ def display_timer_and_progress(start_time, completed_tasks, total_tasks):
 def app():
     st.title("Extraction SERP - DataForSEO")
 
-    # Interface utilisateur améliorée
+    # Interface utilisateur
     st.write("Configurez les paramètres d'extraction SERP :")
 
+    # Zone de texte pour les mots-clés (un mot clé par ligne)
     keywords_input = st.text_area("Entrez les mots-clés (un par ligne)")
 
+    # Interface utilisateur sur une seule ligne pour le choix langue, pays, et device
     col1, col2, col3 = st.columns(3)
+
+    # Sélection de la langue
     with col1:
         language_code = st.selectbox("Langue", ["en", "fr", "es", "de", "it"], label_visibility="collapsed")
+
+    # Sélection du pays
     with col2:
-        countries = {"États-Unis": 2840, "France": 2250, "Allemagne": 2158, "Espagne": 2392}
+        countries = {
+            "États-Unis": 2840,
+            "France": 2250,
+            "Allemagne": 2158,
+            "Espagne": 2392
+        }
         country_name = st.selectbox("Pays", list(countries.keys()), label_visibility="collapsed")
         location_code = countries[country_name]
+
+    # Sélection du type d'appareil
     with col3:
         device = st.selectbox("Appareil", ["desktop", "mobile"], label_visibility="collapsed")
 
+    # Méthode et priorité sur une ligne
     col4, col5 = st.columns(2)
+
     with col4:
         search_type = st.selectbox("Méthode d'exécution", ["organic", "live"], label_visibility="collapsed")
     with col5:
         priority = st.selectbox("Priorité", [1, 2], label_visibility="collapsed")
 
+    # Nombre de résultats à extraire (par tranches de 10)
     depth = st.slider("Nombre de résultats", 10, 100, 10)
 
+    # Validation des mots-clés
     if st.button("Lancer l'extraction"):
         keywords = keywords_input.splitlines()
         if keywords:
@@ -105,12 +134,14 @@ def app():
                     # Polling pour vérifier l'état des tâches
                     while True:
                         serp_result = get_serp_results(task_id)
+
+                        # Vérification si la tâche est terminée
                         if serp_result and serp_result["tasks"][0]["status_code"] == 20000:
                             break
-                        time.sleep(5)
+                        time.sleep(5)  # Attente avant de vérifier à nouveau
 
                     completed_tasks += 1
-                    display_timer_and_progress(start_time, completed_tasks, total_keywords)
+                    display_timer(start_time, completed_tasks, total_keywords)
 
                     # Ajouter les résultats à serp_data
                     for res in serp_result.get("tasks", []):
@@ -118,6 +149,7 @@ def app():
                             for item in res["result"]:
                                 for entry in item["items"]:
                                     rank = entry.get("rank_absolute")
+                                    # Corriger les positions organiques à partir de 1
                                     if rank is not None:
                                         rank = max(1, rank) if entry["type"] == "organic" else 0
                                     serp_data.append({
@@ -145,5 +177,6 @@ def app():
         else:
             st.warning("Veuillez entrer au moins un mot-clé.")
 
+# Si ce fichier est exécuté directement, on appelle la fonction app()
 if __name__ == "__main__":
     app()
