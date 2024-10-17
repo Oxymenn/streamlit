@@ -5,13 +5,13 @@ import pandas as pd
 import time
 
 # Identifiants DataForSEO
-login = "julesbrault.pro@gmail.com"  # Remplace par ton login DataForSEO
-password = "fa670025004519a1"  # Remplace par ton mot de passe DataForSEO
+login = "julesbrault.pro@gmail.com"  # Remplacez par votre login DataForSEO
+password = "fa670025004519a1"  # Remplacez par votre mot de passe DataForSEO
 
 # Fonction pour créer une requête d'extraction SERP avec DataForSEO
 def extract_serp_data(keywords, language_code, location_code, device, priority, queue_mode, depth):
     credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
-    
+
     if queue_mode == "live":
         url = f"https://api.dataforseo.com/v3/serp/google/live/task_post"
     else:
@@ -34,12 +34,13 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
         "Content-Type": "application/json"
     }
 
-    response = requests.post(url, headers=headers, json=tasks)
-
-    if response.status_code == 200:
+    # Envoi de la requête
+    try:
+        response = requests.post(url, headers=headers, json=tasks)
+        response.raise_for_status()
         return response.json()
-    else:
-        st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erreur lors de la création de la tâche : {e}")
         return None
 
 # Fonction pour récupérer les résultats d'une tâche par ID
@@ -48,12 +49,13 @@ def get_serp_results(task_id):
     url = f"https://api.dataforseo.com/v3/serp/google/organic/task_get/regular/{task_id}"
     
     headers = {"Authorization": f"Basic {credentials}"}
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
         return response.json()
-    else:
-        st.error(f"Erreur lors de la récupération des résultats: {response.status_code} {response.text}")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erreur lors de la récupération des résultats : {e}")
         return None
 
 # Fonction pour afficher le timer et la progression
@@ -106,6 +108,7 @@ def app():
                 start_time = time.time()
                 completed_tasks = 0
 
+                # Traitement des tâches et résultats
                 for task in result.get("tasks", []):
                     task_id = task.get("id")
 
