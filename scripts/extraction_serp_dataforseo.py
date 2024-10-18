@@ -38,6 +38,7 @@ def extract_serp_data(keywords, language_code, location_code, device, priority, 
     response = requests.post(url, headers=headers, json=tasks)
 
     if response.status_code == 200:
+        st.info("Tâche créée avec succès")
         return response.json()  # On ne l'affiche plus, mais on retourne la réponse
     else:
         st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
@@ -147,16 +148,26 @@ def app():
 
                 serp_data = []
 
+                # Délai maximum pour chaque tâche (en secondes)
+                max_wait_time = 300  # 5 minutes par tâche
+
                 # Traitement des résultats
                 for task in result.get("tasks", []):
                     task_id = task.get("id")
+                    task_start_time = time.time()
 
                     # Polling pour vérifier l'état des tâches
                     while True:
                         serp_result = get_serp_results(task_id)
 
                         if serp_result and serp_result["tasks"][0]["status_code"] == 20000:
+                            st.info(f"Tâche {task_id} terminée.")
                             break
+
+                        if time.time() - task_start_time > max_wait_time:
+                            st.error(f"Tâche {task_id} a expiré après {max_wait_time} secondes.")
+                            break
+
                         time.sleep(5)
 
                     completed_tasks += 1
