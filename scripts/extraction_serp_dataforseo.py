@@ -17,33 +17,73 @@ def get_serp_results(task_id, result_type="regular"):
         "Authorization": f"Basic {credentials}"
     }
 
+    st.write(f"Récupération des résultats pour la tâche {task_id}...")
     response = requests.get(url, headers=headers)
-    
+
+    st.write(f"Code réponse lors de la récupération des résultats : {response.status_code}")
+    st.write(f"Réponse brute lors de la récupération : {response.text}")
+
     if response.status_code == 200:
         return response.json()
     else:
         st.error(f"Erreur lors de la récupération des résultats: {response.status_code} {response.text}")
         return None
 
-# Fonction pour poller l'état d'une tâche jusqu'à ce qu'elle soit terminée
-def poll_task(task_id, timeout=300):
-    start_time = time.time()
+# Fonction pour créer une requête d'extraction SERP avec DataForSEO
+def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
+    credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
+    url = f"https://api.dataforseo.com/v3/serp/google/{search_type}/task_post"
 
-    while time.time() - start_time < timeout:
-        # Récupérer les résultats de la tâche
-        result = get_serp_results(task_id)
+    tasks = [
+        {
+            "language_code": language_code,
+            "location_code": location_code,
+            "keyword": keyword,
+            "device": device,
+            "priority": priority,
+            "depth": depth
+        }
+        for keyword in keywords
+    ]
 
-        # Vérifier si la tâche est terminée
-        if result and result["tasks"][0]["status_code"] == 20000:
-            return result
-        else:
-            st.info(f"Tâche en cours... (ID : {task_id})")
-        
-        # Attendre avant de vérifier à nouveau
-        time.sleep(10)
+    headers = {
+        "Authorization": f"Basic {credentials}",
+        "Content-Type": "application/json"
+    }
 
-    st.error(f"Temps d'attente dépassé pour la tâche {task_id}")
-    return None
+    st.write("Données envoyées à l'API pour la création de tâche :")
+    st.write(tasks)
+
+    # Envoi de la requête
+    response = requests.post(url, headers=headers, json=tasks)
+    st.write(f"Code réponse lors de la création de la tâche : {response.status_code}")
+    st.write(f"Réponse brute lors de la création : {response.text}")
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
+        return None
+
+# Fonction pour vérifier manuellement le statut de la tâche
+def check_task_status(task_id):
+    credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
+    url = f"https://api.dataforseo.com/v3/serp/google/organic/task_get/regular/{task_id}"
+
+    headers = {
+        "Authorization": f"Basic {credentials}"
+    }
+
+    st.write(f"Vérification du statut pour la tâche {task_id}...")
+    response = requests.get(url, headers=headers)
+    st.write(f"Code réponse statut : {response.status_code}")
+    st.write(f"Réponse brute statut : {response.text}")
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Erreur lors de la vérification du statut: {response.status_code} {response.text}")
+        return None
 
 # Fonction principale de l'application Streamlit
 def app():
@@ -88,82 +128,12 @@ def app():
                 task_id = result["tasks"][0]["id"]
                 st.info(f"Tâche créée avec succès, ID : {task_id}")
 
-                # Polling pour vérifier l'état de la tâche et récupérer les résultats
-                serp_result = poll_task(task_id)
+                # Vérifier manuellement l'état de la tâche
+                if st.button(f"Vérifier l'état de la tâche {task_id}"):
+                    check_task_status(task_id)
 
-                if serp_result:
-                    # Traiter les résultats et les afficher
-                    serp_data = process_serp_results(serp_result)
-                    if serp_data:
-                        df = pd.DataFrame(serp_data)
-                        st.dataframe(df)
-
-                        # Télécharger les résultats au format CSV
-                        csv = df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="Télécharger les résultats en CSV",
-                            data=csv,
-                            file_name="serp_results.csv",
-                            mime="text/csv",
-                        )
-                    else:
-                        st.info("Aucun résultat à afficher.")
         else:
             st.warning("Veuillez entrer au moins un mot-clé.")
-
-# Fonction pour créer une requête d'extraction SERP avec DataForSEO
-def extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth):
-    credentials = base64.b64encode(f"{login}:{password}".encode()).decode()
-    url = f"https://api.dataforseo.com/v3/serp/google/{search_type}/task_post"
-
-    tasks = [
-        {
-            "language_code": language_code,
-            "location_code": location_code,
-            "keyword": keyword,
-            "device": device,
-            "priority": priority,
-            "depth": depth
-        }
-        for keyword in keywords
-    ]
-
-    headers = {
-        "Authorization": f"Basic {credentials}",
-        "Content-Type": "application/json"
-    }
-
-    response = requests.post(url, headers=headers, json=tasks)
-    
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"Erreur lors de la création de la tâche: {response.status_code} {response.text}")
-        return None
-
-# Fonction pour ajuster les positions des résultats et créer le dataframe final
-def process_serp_results(serp_result):
-    serp_data = []
-    for res in serp_result.get("tasks", []):
-        if "result" in res:
-            for item in res["result"]:
-                for entry in item["items"]:
-                    rank = entry.get("rank_absolute")
-
-                    if entry["type"] == "featured_snippet":
-                        rank = 0
-                    elif entry["type"] == "organic":
-                        rank = max(1, rank)
-
-                    serp_data.append({
-                        "Keyword": item.get("keyword"),
-                        "Type": entry.get("type"),
-                        "Position": rank,
-                        "URL": entry.get("url"),
-                        "Domain": entry.get("domain"),
-                        "Title": entry.get("title")
-                    })
-    return serp_data
 
 # Si ce fichier est exécuté directement, on appelle la fonction app()
 if __name__ == "__main__":
