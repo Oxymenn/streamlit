@@ -73,6 +73,34 @@ def display_timer(start_time, completed_tasks, total_tasks):
     st.write(f"Mots-clés traités : {completed_tasks}/{total_tasks}")
     st.progress(completed_tasks / total_tasks)
 
+# Fonction pour ajuster les positions des résultats et créer le dataframe final
+def process_serp_results(serp_result):
+    serp_data = []
+
+    for res in serp_result.get("tasks", []):
+        if "result" in res:
+            for item in res["result"]:
+                for entry in item["items"]:
+                    rank = entry.get("rank_absolute")
+
+                    # Si c'est un featured snippet, on attribue la position 0
+                    if entry["type"] == "featured_snippet":
+                        rank = 0
+                    elif entry["type"] == "organic":
+                        # Les résultats organiques doivent commencer à 1
+                        rank = max(1, rank)
+
+                    # Construction des données pour chaque résultat
+                    serp_data.append({
+                        "Keyword": item.get("keyword"),
+                        "Type": entry.get("type"),  # Type du résultat (organic, featured_snippet, etc.)
+                        "Position": rank,
+                        "URL": entry.get("url"),
+                        "Domain": entry.get("domain"),
+                        "Title": entry.get("title")
+                    })
+    return serp_data
+
 # Fonction principale de l'application Streamlit
 def app():
     st.title("Extraction SERP - DataForSEO")
@@ -80,17 +108,12 @@ def app():
     # Interface utilisateur
     st.write("Configurez les paramètres d'extraction SERP :")
 
-    # Zone de texte pour les mots-clés (un mot clé par ligne)
     keywords_input = st.text_area("Entrez les mots-clés (un par ligne)")
-
-    # Interface utilisateur sur une seule ligne pour le choix langue, pays, et device
     col1, col2, col3 = st.columns(3)
 
-    # Sélection de la langue
     with col1:
         language_code = st.selectbox("Langue", ["en", "fr", "es", "de", "it"], label_visibility="collapsed")
 
-    # Sélection du pays
     with col2:
         countries = {
             "États-Unis": 2840,
@@ -101,33 +124,30 @@ def app():
         country_name = st.selectbox("Pays", list(countries.keys()), label_visibility="collapsed")
         location_code = countries[country_name]
 
-    # Sélection du type d'appareil
     with col3:
         device = st.selectbox("Appareil", ["desktop", "mobile"], label_visibility="collapsed")
 
-    # Méthode et priorité sur une ligne
     col4, col5 = st.columns(2)
-
     with col4:
         search_type = st.selectbox("Méthode d'exécution", ["organic", "live"], label_visibility="collapsed")
     with col5:
         priority = st.selectbox("Priorité", [1, 2], label_visibility="collapsed")
 
-    # Nombre de résultats à extraire (par tranches de 10)
     depth = st.slider("Nombre de résultats", 10, 100, 10)
 
-    # Validation des mots-clés
     if st.button("Lancer l'extraction"):
         keywords = keywords_input.splitlines()
         if keywords:
             result = extract_serp_data(keywords, language_code, location_code, device, priority, search_type, depth)
 
             if result:
-                serp_data = []
                 total_keywords = len(keywords)
                 start_time = time.time()
                 completed_tasks = 0
 
+                serp_data = []
+
+                # Traitement des résultats
                 for task in result.get("tasks", []):
                     task_id = task.get("id")
 
@@ -135,32 +155,18 @@ def app():
                     while True:
                         serp_result = get_serp_results(task_id)
 
-                        # Vérification si la tâche est terminée
                         if serp_result and serp_result["tasks"][0]["status_code"] == 20000:
                             break
-                        time.sleep(5)  # Attente avant de vérifier à nouveau
+                        time.sleep(5)
 
                     completed_tasks += 1
                     display_timer(start_time, completed_tasks, total_keywords)
 
-                    # Ajouter les résultats à serp_data
-                    for res in serp_result.get("tasks", []):
-                        if "result" in res:
-                            for item in res["result"]:
-                                for entry in item["items"]:
-                                    rank = entry.get("rank_absolute")
-                                    # Corriger les positions organiques à partir de 1
-                                    if rank is not None:
-                                        rank = max(1, rank) if entry["type"] == "organic" else 0
-                                    serp_data.append({
-                                        "Keyword": item.get("keyword"),
-                                        "Position": rank,
-                                        "URL": entry.get("url"),
-                                        "Domain": entry.get("domain"),
-                                        "Title": entry.get("title")
-                                    })
+                    # Traitement des résultats avec la nouvelle fonction
+                    serp_data.extend(process_serp_results(serp_result))
 
                 if serp_data:
+                    # Conversion en dataframe
                     df = pd.DataFrame(serp_data)
                     st.dataframe(df)
 
